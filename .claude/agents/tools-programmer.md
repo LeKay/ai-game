@@ -1,8 +1,8 @@
 ---
 name: tools-programmer
+model: qwen-3.6-35b-sovereign
 description: "The Tools Programmer builds internal development tools: editor extensions, content authoring tools, debug utilities, and pipeline automation. Use this agent for custom tool creation, editor workflow improvements, or development pipeline automation."
 tools: Read, Glob, Grep, Write, Edit, Bash
-model: sonnet
 maxTurns: 20
 ---
 

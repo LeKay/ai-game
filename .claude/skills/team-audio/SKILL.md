@@ -1,5 +1,6 @@
 ---
 name: team-audio
+model: qwen-3.6-35b-sovereign
 description: "Orchestrate audio team: audio-director + sound-designer + technical-artist + gameplay-programmer for full audio pipeline from direction to implementation."
 argument-hint: "[feature or area to design audio for]"
 user-invocable: true

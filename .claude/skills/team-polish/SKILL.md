@@ -1,5 +1,6 @@
 ---
 name: team-polish
+model: qwen-3.6-35b-sovereign
 description: "Orchestrate the polish team: coordinates performance-analyst, technical-artist, sound-designer, and qa-tester to optimize, polish, and harden a feature or area for release quality."
 argument-hint: "[feature or area to polish]"
 user-invocable: true

@@ -1,6 +1,6 @@
 # Godot — Breaking Changes
 
-Last verified: 2026-02-12
+Last verified: 2026-05-13
 
 Changes between Godot versions, focused on post-LLM-cutoff changes (4.4+).
 

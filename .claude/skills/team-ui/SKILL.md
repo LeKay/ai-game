@@ -1,5 +1,6 @@
 ---
 name: team-ui
+model: qwen-3.6-35b-sovereign
 description: "Orchestrate the UI team through the full UX pipeline: from UX spec authoring through visual design, implementation, review, and polish. Integrates with /ux-design, /ux-review, and studio UX templates."
 argument-hint: "[UI feature description]"
 user-invocable: true

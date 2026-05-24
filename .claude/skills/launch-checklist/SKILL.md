@@ -1,5 +1,6 @@
 ---
 name: launch-checklist
+model: qwen-3.6-35b-sovereign
 description: "Complete launch readiness validation covering every department: code, content, store, marketing, community, infrastructure, legal, and go/no-go sign-offs."
 argument-hint: "[launch-date or 'dry-run']"
 user-invocable: true

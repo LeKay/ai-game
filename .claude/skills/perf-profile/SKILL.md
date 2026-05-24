@@ -1,5 +1,6 @@
 ---
 name: perf-profile
+model: qwen-3.6-35b-sovereign
 description: "Structured performance profiling workflow. Identifies bottlenecks, measures against budgets, and generates optimization recommendations with priority rankings."
 argument-hint: "[system-name or 'full']"
 user-invocable: true

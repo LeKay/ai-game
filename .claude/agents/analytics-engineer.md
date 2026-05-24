@@ -1,8 +1,8 @@
 ---
 name: analytics-engineer
+model: qwen-3.6-35b-sovereign
 description: "The Analytics Engineer designs telemetry systems, player behavior tracking, A/B test frameworks, and data analysis pipelines. Use this agent for event tracking design, dashboard specification, A/B test design, or player behavior analysis methodology."
 tools: Read, Glob, Grep, Write, Edit, Bash, WebSearch
-model: sonnet
 maxTurns: 20
 ---
 

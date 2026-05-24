@@ -1,10 +1,10 @@
 ---
 name: sprint-status
+model: qwen-3.6-35b-sovereign
 description: "Fast sprint status check. Reads the current sprint plan, scans story files for status, and produces a concise progress snapshot with burndown assessment and emerging risks. Run at any time during a sprint for quick situational awareness. Use when user asks 'how is the sprint going', 'sprint update', 'show sprint progress'."
 argument-hint: "[sprint-number or blank for current]"
 user-invocable: true
 allowed-tools: Read, Glob, Grep
-model: haiku
 ---
 
 # Sprint Status

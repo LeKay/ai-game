@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites id="2026-05-23" name="report_52" tests="42" failures="0" skipped="0" flaky="0" time="0.000">
+	<testsuite id="0" name="manual_advancement_test" package="tests/unit/tick" timestamp="2026-05-23T20:21:59" hostname="localhost" tests="10" failures="0" errors="0" skipped="0" flaky="0" time="0.427">
+		<testcase name="test_initial_current_day" classname="manual_advancement_test" time="0.035">
+		</testcase>
+		<testcase name="test_initial_speed_multiplier" classname="manual_advancement_test" time="0.019">
+		</testcase>
+		<testcase name="test_manual_advancement_while_paused" classname="manual_advancement_test" time="0.018">
+		</testcase>
+		<testcase name="test_pause_state_preserved_after_manual_action" classname="manual_advancement_test" time="0.031">
+		</testcase>
+		<testcase name="test_manual_action_respects_no_speed_multiplier" classname="manual_advancement_test" time="0.018">
+		</testcase>
+		<testcase name="test_multiple_manual_actions_accumulate" classname="manual_advancement_test" time="0.031">
+		</testcase>
+		<testcase name="test_manual_day_transition_on_overflow" classname="manual_advancement_test" time="0.017">
+		</testcase>
+		<testcase name="test_manual_multi_day_overflow_on_large_cost" classname="manual_advancement_test" time="0.031">
+		</testcase>
+		<testcase name="test_manual_overflow_from_near_end_of_day" classname="manual_advancement_test" time="0.017">
+		</testcase>
+		<testcase name="test_manual_negative_cost_ignored" classname="manual_advancement_test" time="0.032">
+		</testcase>
+	</testsuite>
+	<testsuite id="1" name="tick_accumulator_test" package="tests/unit/tick" timestamp="2026-05-23T20:21:59" hostname="localhost" tests="15" failures="0" errors="0" skipped="0" flaky="0" time="0.597">
+		<testcase name="test_tick_accumulator_hundred_seconds_thousand_ticks" classname="tick_accumulator_test" time="0.022">
+		</testcase>
+		<testcase name="test_tick_accumulator_frame_rate_independent_60fps" classname="tick_accumulator_test" time="0.024">
+		</testcase>
+		<testcase name="test_tick_accumulator_frame_rate_independent_144fps" classname="tick_accumulator_test" time="0.033">
+		</testcase>
+		<testcase name="test_tick_accumulator_frame_rate_independent_30fps" classname="tick_accumulator_test" time="0.032">
+		</testcase>
+		<testcase name="test_tick_accumulator_lag_spike_clamped_to_100" classname="tick_accumulator_test" time="0.031">
+		</testcase>
+		<testcase name="test_tick_accumulator_speed_2x_under_cap" classname="tick_accumulator_test" time="0.031">
+		</testcase>
+		<testcase name="test_tick_accumulator_zero_delta_no_ticks" classname="tick_accumulator_test" time="0.017">
+		</testcase>
+		<testcase name="test_tick_accumulator_negative_delta_treated_as_zero" classname="tick_accumulator_test" time="0.017">
+		</testcase>
+		<testcase name="test_tick_accumulator_nan_delta_treated_as_zero" classname="tick_accumulator_test" time="0.017">
+		</testcase>
+		<testcase name="test_tick_accumulator_speed_zero_produces_zero_ticks" classname="tick_accumulator_test" time="0.017">
+		</testcase>
+		<testcase name="test_tick_accumulator_signal_emits_correct_count" classname="tick_accumulator_test" time="0.017">
+		</testcase>
+		<testcase name="test_tick_accumulator_no_signal_on_zero_ticks" classname="tick_accumulator_test" time="0.017">
+		</testcase>
+		<testcase name="test_tick_accumulator_signal_emits_once_for_batched_ticks" classname="tick_accumulator_test" time="0.016">
+		</testcase>
+		<testcase name="test_tick_accumulator_remainder_carry_prevents_drift" classname="tick_accumulator_test" time="0.017">
+		</testcase>
+		<testcase name="test_tick_accumulator_remainder_high_value_carry" classname="tick_accumulator_test" time="0.018">
+		</testcase>
+	</testsuite>
+	<testsuite id="2" name="speed_pause_test" package="tests/unit/tick" timestamp="2026-05-23T20:22:00" hostname="localhost" tests="10" failures="0" errors="0" skipped="0" flaky="0" time="0.428">
+		<testcase name="test_pause_no_accumulation" classname="speed_pause_test" time="0.022">
+		</testcase>
+		<testcase name="test_speed_2x_50s_1000_ticks" classname="speed_pause_test" time="0.016">
+		</testcase>
+		<testcase name="test_speed_05x_200s_1000_ticks" classname="speed_pause_test" time="0.030">
+		</testcase>
+		<testcase name="test_no_duplicate_speed_signals" classname="speed_pause_test" time="0.017">
+		</testcase>
+		<testcase name="test_rapid_pause_toggle_stability" classname="speed_pause_test" time="0.030">
+		</testcase>
+		<testcase name="test_idempotent_set_pause_already_paused" classname="speed_pause_test" time="0.022">
+		</testcase>
+		<testcase name="test_invalid_speed_clamps_to_options" classname="speed_pause_test" time="0.028">
+		</testcase>
+		<testcase name="test_ticks_advanced_signal_emits_with_correct_delta" classname="speed_pause_test" time="0.027">
+		</testcase>
+		<testcase name="test_remainder_preserved_across_pause_unpause" classname="speed_pause_test" time="0.031">
+		</testcase>
+		<testcase name="test_set_pause_public_api" classname="speed_pause_test" time="0.017">
+		</testcase>
+	</testsuite>
+	<testsuite id="3" name="day_transition_test" package="tests/unit/tick" timestamp="2026-05-23T20:22:00" hostname="localhost" tests="7" failures="0" errors="0" skipped="0" flaky="0" time="0.303">
+		<testcase name="test_day_transition_at_boundary" classname="day_transition_test" time="0.024">
+		</testcase>
+		<testcase name="test_overflow_discarded_at_boundary" classname="day_transition_test" time="0.031">
+		</testcase>
+		<testcase name="test_manual_advance_triggers_day_transition" classname="day_transition_test" time="0.030">
+		</testcase>
+		<testcase name="test_no_accumulation_after_day_pause" classname="day_transition_test" time="0.016">
+		</testcase>
+		<testcase name="test_get_current_day_returns_incremented_value" classname="day_transition_test" time="0.030">
+		</testcase>
+		<testcase name="test_manual_advance_multi_day" classname="day_transition_test" time="0.017">
+		</testcase>
+		<testcase name="test_day_transition_before_ticks_advanced" classname="day_transition_test" time="0.031">
+		</testcase>
+	</testsuite>
+</testsuites>

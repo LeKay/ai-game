@@ -1,5 +1,6 @@
 ---
 name: release-checklist
+model: qwen-3.6-35b-sovereign
 description: "Generates a comprehensive pre-release validation checklist covering build verification, certification requirements, store metadata, and launch readiness."
 argument-hint: "[platform: pc|console|mobile|all]"
 user-invocable: true

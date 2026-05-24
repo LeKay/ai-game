@@ -1,0 +1,1164 @@
+# Building System
+
+> **Status**: In Design
+> **Author**: [user + agents]
+> **Last Updated**: 2026-05-11
+> **Implements Pillar**: [from context]
+
+## Overview
+
+The Building System is the player's primary interface with the game's spatial logic — where the village takes physical form on the map. Every building is a deliberate, earned investment: resources hauled across the map by the player's own hands, energy spent, time counted in ticks. A lumber camp isn't just a structure; it's the culmination of a production chain decision — "I chose to put the lumber camp here, near the forest and close to storage, because I've solved wood but need to free up my energy for stone." The Building System owns building placement validation, construction cost consumption, build-time progression, and building lifecycle (place, operate, demolish). It is a state machine per building instance — idle, under construction, producing, blocked, paused — and a spatial operation that respects the Grid/Map System's layers and the Inventory/Storage System's resource constraints. Without it, the player has a map but nothing to put on it.
+
+> **Design level note:** The Building System operates at the behavior/interaction layer. Implementation decisions (PackedScene architecture, TileMapLayer rendering, YSort depth ordering) are established in the Grid/Map System GDD and enforced by the Engine Architecture ADR. This GDD describes what the system does, not how Godot nodes are wired to do it.
+
+## Player Fantasy
+
+**The Spatial Chessboard.**
+
+Every building is a commitment that ripples outward. Place the storage near the forest, and every resource you gather costs less Energy. Place the lumber camp across the map, and your NPC will spend half its production cycle just walking. This is not a checklist of buildings — it is a map becoming an engine, and every placement is a move in a spatial puzzle where the pieces are timber, stone, and time.
+
+The building system rewards foresight. A smart placement creates positive feedback: close to resources, close to storage, close to housing means minimal transport and maximum output. A poor placement creates drag that compounds — the building produces, but slowly, because its NPC wastes time on the road. The map tells you if you got it right: idle tiles near the building show resource gaps, and the production rate drops to yellow.
+
+This fantasy anchors to the moment you see your first automated building complete its production cycle and notice — in the numbers — that your placement choice made a measurable difference. That moment is quiet. No fanfare. Just a faint click in your brain: "I see it. The distance between the camp and the storage is the bottleneck." The satisfaction comes from solving a puzzle you designed yourself.
+
+The building system is where the player stops playing the game and starts understanding it. Before placement, they react to the map. After placement, they author it. Every tile they choose becomes a sentence in the story of their village — and by the time the map is full, the village tells the story of their thinking: "Here I was solving wood, here I was planning for population growth, here I optimized for transport efficiency."
+
+**What it serves:** Pillar 1 (Earned Automation — every building is a deliberate investment, not an abstract toggle), Pillar 2 (Information Transparency — ghost overlay shows placement validity and cost before committing, production rates are visible), Pillar 3 (Optimization Over Expansion — compact, efficient layouts beat sprawling ones, and the building system makes spatial tradeoffs tangible through transport costs and resource proximity).
+
+## Detailed Design
+
+### Core Rules
+
+**1. Building Lifecycle**
+
+Every building follows a four-stage lifecycle:
+
+```
+PLACE → CONSTRUCT → OPERATE → (optional) DEMOLISH
+```
+
+Each stage has strict preconditions and transitions. A building cannot skip stages or reverse stages (except DEMOLISH, which exits the lifecycle entirely).
+
+**2. Placement**
+
+The player places a building by selecting it from the Building Menu UI and confirming on a tile. The Building System is the **sole system responsible for building placement** — this responsibility was removed from the Player Character System (PC System GDD, revision B8).
+
+Placement procedure:
+1. Building System queries the Grid System's `validate_placement(x, y, building_id)`.
+2. If result is `SUCCESS`, the Building System deducts build costs from storage, deducts placement energy from the player's energy pool (per Formula 7), marks the building as CONSTRUCTING, and spawns the visual PackedScene at the tile center.
+3. If result is `BLOCKED_BY_*`, the placement preview shows a red ghost with the blocking reason. No resources are deducted. Placement does NOT proceed.
+
+**Placement validation chain** (executed in order, short-circuit on first failure):
+
+```
+func validate_placement(x, y, building_id) -> PlacementResult:
+    if out_of_bounds(x, y):              return BLOCKED_BY_BOUNDS
+    if is_impassable(x, y):              return BLOCKED_BY_IMPASSABLE
+    if has_building(x, y):               return BLOCKED_BY_BUILDING
+    if resource_tile_exists(x, y):
+        if not resource_tile_is_clearable(x, y):
+            return BLOCKED_BY_RESOURCE_TILE
+    return SUCCESS
+```
+
+The Grid System GDD is the authoritative source for these rules. The Building System does NOT duplicate or reimplement validation logic — it delegates to the Grid System and displays the result.
+
+**Resource tile clearing:** When placement succeeds on a tile with a clearable resource (TREE, BERRY, GRASS), the Grid System removes the resource from ResourceLayer upon `place_building()`. Non-clearable resources (STONE, IRON) block placement entirely.
+
+**Pre-placement resource check:** Before confirming placement, the Building System queries the Inventory System to verify build costs are available in the designated storage container. If insufficient, the placement is blocked and the preview shows a red X with a tooltip listing missing resources. Resources are deducted atomically with the placement — either both succeed or both fail.
+
+**4. Construction**
+
+After placement succeeds, the building enters the CONSTRUCTING state. Construction is a tick-based process:
+
+- **Resource consumption:** Build costs are deducted from the player's storage at the moment construction starts. If insufficient resources are available, placement is blocked (see Rule 2).
+- **Tick accumulation:** Construction progress is measured in ticks. Construction advances only when time is RUNNING (not PAUSED). The player is **NOT** occupied during construction — they can perform other actions while buildings construct.
+- **Completion:** When accumulated ticks reach the building's build time threshold, the building enters the OPERATING state and becomes functional.
+
+**Construction time table (Vertical Slice):**
+
+| Building | Build Cost | Build Time |
+|----------|-----------|------------|
+| Storage Area | Free (0 resources) | 0 ticks (instant — no construct phase) |
+| Storage Building | 8 Wood + 2 Stone | 120 ticks |
+| Residential House | 10 Wood + 3 Stone | 150 ticks |
+| Lumber Camp | 15 Wood + 3 Stone | 200 ticks |
+
+**5. Operation**
+
+A building in OPERATING state is functional. Its behavior depends on building type:
+
+- **Storage types** (Storage Area, Storage Building): Passive — they provide capacity and do not produce. They have no operation cycle.
+- **Residential House**: Spawns 1 NPC immediately upon entering OPERATING. After 1 day (1000 ticks) in OPERATING state, spawns a 2nd NPC. Maximum capacity: 2 NPCs.
+- **Production buildings** (Lumber Camp): Enter a production cycle. At the start of each cycle, the building checks whether required inputs are available at the building's input buffer (delivered by an assigned input carrier). If all inputs are available, the cycle begins. When the production cycle completes, the building holds the output in its output buffer. An assigned output carrier collects the output and transports it to the assigned storage container. Input wares must be transported to the building by an input carrier; output wares must be transported away by an output carrier. Transportation is configured via the Transportation UI (see `design/ux/transportation.md`). A building with no carrier assigned for inputs or outputs enters BLOCKED state — production cannot start without inputs, and completed output cannot leave without an output carrier.
+
+**Production table (Vertical Slice):**
+
+| Building | Input | Output | Production Time | NPC Required | Tool Required |
+|----------|-------|--------|-----------------|--------------|---------------|
+| Lumber Camp | 1 Wood + tool (5.0 charge) | 5 Wood | 100 ticks | Yes (1) | Yes (tool, -5.0 charge/cycle, consumed from storage) |
+
+**6. NPC Assignment**
+
+Production buildings require an NPC to be assigned to operate. The building cannot start a production cycle without an NPC. NPC assignment is performed via the building's interaction UI (click the building → "Assign NPC" → select available NPC).
+
+NPC assignment is bidirectional: both the Building System and the NPC System track the assignment. The canonical record is in the NPC System (NPCs are the owned resource); the Building System stores the assignment as a reference. The Building System queries `get_available_npcs()` to show assignable NPCs and calls `assign_npc(npc_id, building_id)` to make the assignment.
+
+**7. Production Buildings: Blocked and Stalled**
+
+Production buildings have two distinct failure states:
+
+- **BLOCKED**: The building cannot START producing because it lacks a required input (resource not yet delivered to the building, no NPC assigned, tool depleted, or no carrier assigned). The building is idle but ready. Recovery: provide the missing condition (carrier delivers resources, assign NPC, assign carrier). The building automatically re-checks inputs on every `on_ticks_advanced()` event (not just at production cycle start) and resumes producing when conditions are met.
+- **STALLED**: The building successfully produced but the output buffer is full and the output carrier cannot collect (carrier not assigned, carrier in transit, or output buffer overflow). The building holds the output internally and waits indefinitely — output is **never discarded**. Recovery: assign an output carrier, or wait for the current carrier to return and collect. The building re-evaluates on its next tick cycle and clears when the carrier collects the output. See EC-L3.
+
+Visual distinction: BLOCKED = yellow indicator, tooltip shows what's missing ("Waiting for wood", "No NPC assigned", "No carrier assigned"). STALLED = red pulsing indicator, tooltip shows "No output carrier" or "Output buffer full."
+
+**Mid-cycle block rule:** If inputs become unavailable mid-cycle (e.g., storage demolished via EC-H5, or resource stack fully consumed by a second building), the current production cycle completes — the building already committed to work and has already consumed its inputs. The building enters BLOCKED on the *next* cycle start when it finds no inputs and cannot begin a new cycle. This prevents the "my building just stopped halfway" frustration and preserves player agency.
+
+**8. Demolition**
+
+The player may demolish a building via the building's interaction UI. Demolition procedure:
+
+1. The building transitions to DEMOLISHED from any state.
+2. The building's PackedScene is destroyed (`queue_free()`).
+3. The building is removed from the Grid System's BuildingLayer.
+4. **No resource refund.** All build costs are permanently lost.
+5. Any pending production cycles are cancelled. Unproduced inputs are not refunded.
+6. Any NPC assigned to the building returns to the global NPC pool (becomes unassigned).
+7. Resource tiles beneath the building remain cleared (they are not restored).
+
+**Rationale:** No refund reinforces "earned automation" — buildings are real investments. The player decides to demolish knowing the cost is sunk.
+
+**9. Multiple Buildings of the Same Type**
+
+The player may place multiple buildings of the same type (e.g., two Residential Houses, two Lumber Camps). Each building instance tracks its own state independently. Buildings do NOT share production queues or NPC pools — each Lumber Camp needs its own NPC and tool input, its own output, and its own production timer.
+
+**10. Building Representation**
+
+Each building is a `PackedScene` instantiated at the tile center position (`tile_coord * TILE_SIZE + TILE_SIZE / 2`) on the `MapRoot` node, which is a child of a `YSort` node for proper depth sorting. Buildings are NOT represented as TileMapLayer tiles. Each building instance has:
+
+- A visual sprite (the building's appearance)
+- A status indicator (idle/producing/blocked/stalled — shown as colored overlay)
+- A reference to its tile coordinates and building type
+
+**Data ownership:** The Building Registry (a centralized system) is the sole source of truth for all building state data. Building scene instances are pure visual targets — they do NOT own independent game state. The registry spawns the visual scene and syncs its visual state (sprite, overlay) on every state transition.
+
+**Authority boundary with NPC System:** The Building Registry is authoritative for building state (lifecycle, construction progress, production cycle, assigned storage). The NPC System is authoritative for NPC state (assignment, availability, hunger, position). On any discrepancy (e.g., Building Registry read returns different assignment than NPC System), NPC System is authoritative. The Building System must always validate assignment state against the NPC System before executing NPC-dependent operations (production cycle start, release on demolition).
+
+### States and Transitions
+
+Each building instance has its own state machine. The Building Registry tracks the state of every building on the map.
+
+**Building States:**
+
+| State | Description | Visual | Entering From | Exiting To |
+|-------|-------------|--------|---------------|------------|
+| **CONSTRUCTING** | Building placed, resources consumed, build timer running | Scaffolding overlay, hammer animation swings | Player confirms placement on valid tile (Grid validates) | OPERATING (timer complete) |
+| **OPERATING** | Building functional and ready to produce. Has two sub-phases: **IDLE** (waiting for inputs to start a cycle) and **PRODUCE** (inputs consumed, cycle actively running). | Normal sprite, green status indicator | CONSTRUCTING (timer complete) | OPERATING (cycle complete), BLOCKED (missing input, no NPC, or no carrier assigned), STALLED (output buffer full, no carrier collecting), DEMOLISHED (player action) |
+| **BLOCKED** | Building ready but missing required input (resource not delivered, NPC not assigned, tool depleted, or no carrier assigned) | Yellow indicator overlay, tooltip shows what's missing | OPERATING (input depleted mid-cycle or never had input or carrier) | OPERATING (condition resolved, auto-retry), DEMOLISHED (player action) |
+| **STALLED** | Building produced output but output buffer is full and no carrier is collecting | Red pulsing indicator, tooltip shows "No output carrier" or "Output buffer full" | OPERATING (output ready, carrier not available or not assigned) | OPERATING (carrier collects output), DEMOLISHED (player action) |
+| **DEMOLISHED** | Building removed from map | N/A (scene destroyed) | Any state | Terminal — no transitions out |
+
+**Placement validation (PLACE_VALIDATING) is a transient UI phase, not a building state.** The building does not exist as an entity until placement succeeds. PLACE_VALIDATING is initiated by player mouse input and transitions directly to CONSTRUCTING (on success) or stays in PLACE_VALIDATING (re-hovering).
+
+**State Transition Table:**
+
+| From | To | Trigger | Conditions |
+|------|-----|---------|------------|
+| *(creation)* | CONSTRUCTING | Player confirms placement | Grid `validate_placement()` returns SUCCESS, build costs deducted from storage |
+| CONSTRUCTING | OPERATING | Build timer reaches threshold | Accumulated ticks >= build_time |
+| CONSTRUCTING | CONSTRUCTING | Tick System `on_ticks_advanced()` | Pause — time does not advance, no progress, no new events. Pausing simply means ticks stop accumulating. |
+| OPERATING | BLOCKED | Missing required input | `try_consume()` fails (missing resource, NPC, or tool) OR no NPC assigned OR no input carrier assigned |
+| BLOCKED | OPERATING | Condition resolved | Building re-checks inputs next tick cycle. Input delivered by carrier, NPC assigned, carrier assigned. Auto-transition — no player action required. |
+| OPERATING | STALLED | Production completes but carrier cannot collect output | `production_output_ready` emitted, but output buffer is full or no output carrier is assigned. Building holds output internally. |
+| STALLED | OPERATING | Carrier collects output | Output carrier arrives and calls `collect_output()`. Buffer cleared. |
+| Any | DEMOLISHED | Player initiates demolition via building UI | Confirmed by player (no undo). Resources not refunded. |
+
+**Production buildings only:** The CONSTRUCTING, BLOCKED, and STALLED states apply to production buildings. Storage types (Storage Area, Storage Building) skip CONSTRUCTING → CONSTRUCTING → OPERATING instantly. Residential House transitions CONSTRUCTING → OPERATING → triggers NPC spawn.
+
+**STALLED is indefinite:** There is no discard timer. The building holds output until storage has room or it is demolished. Output is never silently lost.
+
+### Interactions with Other Systems
+
+**Grid/Map System:**
+
+| Direction | Interface | Purpose |
+|-----------|-----------|---------|
+| **Building → Grid** | `validate_placement(x, y, building_id) -> PlacementResult` | Pre-placement validation (bounds, impassable, existing building, resource tile clearability) |
+| **Building → Grid** | `place_building(x, y, building_id) -> PlacementResult` | Place building, update BuildingLayer, clear resource tile |
+| **Building → Grid** | `remove_building(x, y) -> bool` | Demolish building, update BuildingLayer |
+| **Grid → Building** | `get_tile_view(x, y) -> TileView` | Build preview tooltip (shown when hovering with ghost) |
+
+**Data contract:** The Grid System is the **sole owner** of the BuildingLayer. The Building System is the **sole writer** to the BuildingLayer. No other system may modify the BuildingLayer.
+
+**Inventory/Storage System:**
+
+| Direction | Interface | Purpose |
+|-----------|-----------|---------|
+| **Building → Inventory** | `try_consume(container_id, resource_id, quantity) -> {success, remaining_deficit}` | Deduct build costs at construction start; deduct whole-item production inputs at cycle start (inputs delivered to building by carrier, consumed from input buffer) |
+| **Building → Inventory** | `try_consume_charge(container_id, resource_id, charge_cost) -> {success, remaining_deficit}` | Deduct fractional charge from a slot at cycle start (for inputs with `charge_cost`) |
+| **Building → Inventory** | `get_resource(container_id, resource_id) -> {quantity_available}` | Build menu preview: "Have X, need Y" |
+| **Inventory → Building** | `on_container_removed(container_id)` | Notify dependent buildings when their assigned storage is demolished (see EC-H3) |
+
+**Note on output deposit:** Production output is no longer deposited directly by the Building System. When a production cycle completes, the Building System emits `production_output_ready(building_id, output)` and holds the output in an internal buffer. The Transportation System's output carrier NPC picks up the buffered output and calls `InventorySystem.try_deposit()` at the storage container. This separation keeps the Building System decoupled from storage transport logistics.
+
+**Transportation System:**
+
+| Direction | Interface | Purpose |
+|-----------|-----------|---------|
+| **Building → Transport** | `get_carrier_status(building_id) -> {input_carrier, output_carrier}` | Query which carriers are assigned to this building (for UI display) |
+| **Transport → Building** | `on_carrier_assigned(building_id, carrier_id, direction)` | Notify building when a carrier route is configured (direction: INPUT or OUTPUT) |
+| **Transport → Building** | `on_carrier_unassigned(building_id, carrier_id, direction)` | Notify building when a carrier route is removed — building enters BLOCKED if carrier was required |
+| **Transport → Building** | `collect_output(building_id) -> {success, output_items}` | Carrier NPC collects buffered output from building |
+| **Transport → Building** | `deliver_input(building_id, resource_id, quantity) -> {success}` | Carrier NPC delivers input wares to building's input buffer |
+
+**Data contract:** The Transportation System is the sole owner of carrier routing configuration. The Building System does NOT know the details of carrier schedules — it only knows whether a carrier is assigned (from signal) and whether its buffers are stocked (input) or need pickup (output). Full carrier configuration is done via the Transportation UI (`design/ux/transportation.md`).
+
+**Data contract:** Buildings never access tiles or player inventory directly. All resource operations flow through the Inventory/Storage System's API. First-fit stacking (Inventory System GDD, Formula 3) governs all deposits and withdrawals.
+
+**Recipe Database System:**
+
+| Direction | Interface | Purpose |
+|-----------|-----------|---------|
+| **Building → Recipe DB** | `get_recipe(building_id) -> RecipeDef` | Look up production recipe (inputs, outputs, tick_cost) for a building type |
+
+**Data contract:** The Building System owns the full production loop — lifecycle (place, construct, activate, demolish) AND recipe execution (input consumption, cycle timing, output deposit). The Recipe Database is a pure data source; the Building System reads from it and executes the cycle internally. There is no separate Production System.
+
+**Tick System:**
+
+| Direction | Interface | Purpose |
+|-----------|-----------|---------|
+| **Tick → Building** | `on_ticks_advanced(delta_ticks)` | Decrement build timers and production cycle timers |
+| **Tick → Building** | `on_day_transition(days_elapsed)` | Residential House NPC spawn timer (1 day after construction complete) |
+
+**Data contract:** Building timers are driven exclusively by Tick System events. The Building Registry subscribes to `on_ticks_advanced` and iterates all buildings in a single loop (no per-scene `_process()` for tick logic).
+
+**NPC System:**
+
+| Direction | Interface | Purpose |
+|-----------|-----------|---------|
+| **Building → NPC** | `assign_npc(npc_id, building_id)` | Assign an NPC to this building |
+| **Building → NPC** | `release_npc(npc_id)` | Release NPC when building is demolished or BLOCKED |
+| **NPC → Building** | `get_available_npcs(building_id) -> Array[NPC]` | Building UI shows assignable NPCs |
+| **NPC → Building** | `get_assigned_building(npc_id) -> building_id?` | Validate assignment (prevent double-assignment) |
+
+**Data contract:** Assignment is bidirectional — both systems track it. Canonical record: NPC System (NPCs are the owned resource). Building System stores reference.
+
+**Player Character System:**
+
+| Direction | Interface | Purpose |
+|-----------|-----------|---------|
+| **PC → Building** | `initiate_build(building_id, x, y)` | Player selects building type + clicks tile → triggers placement flow |
+| **Building → PC** | `on_construction_complete(building_id, x, y)` | Notify player when construction finishes |
+
+**Note:** Building placement was moved from PC System to the Building System (PC System GDD, revision B8). The PC System initiates the placement flow but does NOT execute the placement itself. The Building System owns all placement, construction, and operation logic.
+
+**Resource System:**
+
+| Direction | Interface | Purpose |
+|-----------|-----------|---------|
+| **Building → Resource** | `get_resource(resource_id) -> ResourceDef` | Read resource attributes (stack_limit, max_charge, category) for build cost validation and production definitions |
+
+**Data contract:** The Building System only **reads** from the Resource System. It does not modify resource definitions.
+
+## Formulas
+
+All formulas below use the Tick System as their time source (1 tick = 1 game tick; see Tick System GDD for tick rate and pause behavior). All integer outputs are truncated toward zero (floor for positive values).
+
+---
+
+### Formula 1: Build Cost Validation
+
+Determines whether the player's storage containers contain sufficient resources to begin construction. This is a boolean check — no calculation, just comparison against each building type's cost table.
+
+The `build_cost_valid` formula is defined as:
+
+`build_cost_valid = (∀ i : storage_qty(resource_i) ≥ build_qty(resource_i))`
+
+**Variables:**
+| Variable | Symbol | Type | Range | Description |
+|----------|--------|------|-------|-------------|
+| Storage resource quantity | `storage_qty(r)` | int | 0–∞ | Current count of resource `r` across all storage containers. Read via `Inventory.get_resource(container_id, resource_id)`. |
+| Build cost quantity | `build_qty(r)` | int | 1–∞ | Number of units of resource `r` required to build this building type. Looked up from the build cost table. |
+| Number of distinct resources | `n` | int | 0–3 | Number of distinct resource types in the build cost. Storage Area has n=0. Storage Building has n=2. Residential House has n=2. Lumber Camp has n=2. |
+| Universal quantifier | `∀` | bool logic | — | "For all" — every resource in the cost table must satisfy the inequality. |
+
+**Output Range:** `true` or `false` (boolean)
+
+**Degeneracy checks:**
+- `n = 0` (Storage Area): All-zero cost. Formula returns `true` trivially — the universal quantifier over an empty set is vacuously true. Construction is instant.
+- `storage_qty(r) = build_qty(r)`: Exactly sufficient. Returns `true`. The full amount is consumed; storage_qty becomes 0.
+- `storage_qty(r) < build_qty(r)` for any `r`: Returns `false`. Placement is blocked. The UI must show which specific resource is insufficient.
+
+**Example:** Player has 7 Wood in storage. Building a Storage Building which costs 8 Wood + 2 Stone.
+- `storage_qty(Wood) = 7`, `build_qty(Wood) = 8` → `7 ≥ 8` is **false**
+- Short-circuit: the universal quantifier fails at the first resource.
+- Result: `build_cost_valid = false`. Placement blocked. UI tooltip: "Need 1 more Wood."
+
+---
+
+### Formula 2: Construction Time Lookup
+
+Construction time is not calculated from variables — it is a direct lookup from the building type's cost table. The formula formalizes the lookup and enforces a sanity bound.
+
+The `construction_time` formula is defined as:
+
+`construction_time(building_type) = lookup(build_time_table, building_type)`
+
+**Variables:**
+| Variable | Symbol | Type | Range | Description |
+|----------|--------|------|-------|-------------|
+| Building type enum | `building_type` | enum | {STORAGE_AREA, STORAGE_BUILDING, RESIDENTIAL_HOUSE, LUMBER_CAMP, ...} | The building being constructed. Matches the row key in the build time table. |
+| Construction time | `construction_time(bt)` | int | 0–∞ | Number of ticks required for this building to complete construction. 0 means instant (no construction phase). |
+| Build time table | `build_time_table` | map | — | Static lookup table. See table below. |
+
+**Build time table (Vertical Slice):**
+| Building Type | `building_type` | Construction Time (`ticks`) |
+|---------------|-----------------|----------------------------|
+| Storage Area | `STORAGE_AREA` | 0 (instant) |
+| Storage Building | `STORAGE_BUILDING` | 120 |
+| Residential House | `RESIDENTIAL_HOUSE` | 150 |
+| Lumber Camp | `LUMBER_CAMP` | 200 |
+
+**Output Range:** `0` to `∞` (int), though practical maximum in Vertical Slice is 200 ticks.
+
+**Degeneracy checks:**
+- `construction_time = 0`: Building has no construction phase. Transitions directly from PLACE_VALIDATING → OPERATING upon successful placement. Resource costs are still deducted (if any; Storage Area costs 0).
+- Unknown `building_type`: Returns `null`. This is a data error — the Building Registry should never attempt construction with an unknown type. The engine should crash or log a hard error.
+
+**Example:** Player places a Lumber Camp. `construction_time(LUMBER_CAMP) = 200`. The building enters CONSTRUCTING with 200 ticks of progress required. Ticks accumulate via `Tick.on_ticks_advanced()` until 200 is reached, then the building transitions to OPERATING.
+
+---
+
+### Formula 3: Carrier Travel Time
+
+Calculates how many ticks a carrier NPC requires to travel between a production building and its assigned storage container. This replaces the old distance-modifier output penalty: distance no longer reduces output quantity but instead determines the carrier's round-trip schedule. A building far from storage will have longer carrier round trips, reducing effective throughput if the output buffer fills before the carrier returns.
+
+The `carrier_travel_ticks` formula is defined as:
+
+`carrier_travel_ticks = floor(distance × ticks_per_tile)`
+
+**Variables:**
+| Variable | Symbol | Type | Range | Description |
+|----------|--------|------|-------|-------------|
+| Manhattan distance | `distance` | int | 0–∞ | Number of tiles between the production building and its assigned storage container, measured in Manhattan (grid) distance. `distance = |x_building - x_storage| + |y_building - y_storage|`. Calculated by querying the Grid/Map System. |
+| Ticks per tile | `ticks_per_tile` | float | 1.0–10.0 | Number of ticks a carrier spends traversing one tile. Default: 3.0. Shared with NPC movement constant (see NPC System GDD). Tuning knob — see Tuning Knobs section. |
+
+**Output Range:** `0` to `∞` (int). A distance of 0 means carrier is at the building immediately (same tile). No upper clamp — at extreme distances, round trips take proportionally longer.
+
+**Degeneracy checks:**
+- `distance = 0`: `floor(0 × 3.0) = 0`. Carrier arrives and departs instantly — no travel overhead. Ideal placement.
+- `distance = 10`, `ticks_per_tile = 3.0`: `floor(10 × 3.0) = 30`. Carrier takes 30 ticks one-way; 60 ticks for a full pick-up + return round trip.
+- `distance = 25`: `floor(25 × 3.0) = 75`. Long one-way trip. If base_cycle_ticks = 100, carrier may not return before the next cycle completes — output buffer accumulates. Player must account for this in transport planning.
+
+**Example:** Lumber Camp at (3, 7), assigned Storage Building at (8, 2). Distance = |3-8| + |7-2| = 10 tiles.
+`carrier_travel_ticks = floor(10 × 3.0) = 30` ticks one-way.
+The carrier departs the building with output, takes 30 ticks to reach storage, deposits, and takes 30 ticks to return — 60 total per round trip.
+
+**Cross-reference:** Distance is calculated using Manhattan distance from the Grid/Map System. The Transportation System calls `Grid.get_manhattan_distance(building_x, building_y, storage_x, storage_y)`. Full carrier scheduling (round-trip timing, multiple carriers, buffer overflow) is defined in the Transportation System spec (`design/ux/transportation.md`).
+
+**Design note — Why this replaces the old output modifier:** The old Formula 3 penalized output quantity to create a spatial incentive for compact layouts. The new transport system creates the same incentive through **carrier round-trip time**: a building placed far from storage must either accept lower effective throughput (output piles up while waiting for the carrier) or assign more carriers to compensate. The spatial puzzle is preserved; the mechanism is honest (real transport delay, not phantom output loss).
+
+---
+
+### Formula 4: Production Output
+
+Calculates the actual amount of resources produced by a building per production cycle. With the carrier transport model, distance no longer reduces output — the full base output is always produced and held at the building for carrier collection.
+
+The `production_output` formula is defined as:
+
+`production_output = base_output`
+
+**Variables:**
+| Variable | Symbol | Type | Range | Description |
+|----------|--------|------|-------|-------------|
+| Base production quantity | `base_output` | int | 1–∞ | The building type's standard output per cycle. Looked up from the production table. For Lumber Camp: 5 Wood per cycle. |
+
+**Output Range:** `base_output` (int). Always the full recipe quantity — no distance modifier. The carrier is responsible for physically moving the output; the building always produces the full amount.
+
+**Degeneracy checks:**
+- `base_output = 5`: Always produces 5, regardless of distance. Full output deposited into the output buffer each cycle.
+- `base_output = 1`: Always produces 1. Even at extreme distances, the building produces its full quantity.
+
+**Example:** Lumber Camp completes a production cycle. `production_output = 5` Wood placed in output buffer, regardless of distance to storage.
+
+**Design note:** Distance no longer causes output loss. A Lumber Camp at distance 10 and distance 1 both produce 5 Wood per cycle. The difference is how fast the carrier can deliver it to storage — which affects effective throughput if the output buffer is limited.
+
+---
+
+### Formula 5: Production Cycle Duration
+
+Calculates how many ticks a production cycle takes. With the carrier transport model, the operator NPC stays at the building and works at a fixed rate — distance no longer extends the production cycle. The NPC no longer travels to storage; that role belongs to the carrier.
+
+The `production_cycle_duration` formula is defined as:
+
+`production_cycle_duration = base_cycle_ticks`
+
+**Variables:**
+| Variable | Symbol | Type | Range | Description |
+|----------|--------|------|-------|-------------|
+| Base cycle time | `base_cycle_ticks` | int | 1–∞ | The building type's standard production cycle time. Looked up from the production table. For Lumber Camp: 100 ticks. |
+
+**Output Range:** `base_cycle_ticks` (int). Always the base production time — no distance modifier.
+
+**Degeneracy checks:**
+- `distance = 0` or `distance = 25`: Both produce cycles of exactly `base_cycle_ticks`. Distance has no effect on the operator's work cycle.
+- `base_cycle_ticks = 100`: Lumber Camp always runs 100-tick cycles, regardless of storage location.
+
+**Example:** Lumber Camp. `production_cycle_duration = 100` ticks, always. The operator NPC works at full speed at the building. The carrier handles output transport on its own independent schedule.
+
+**Design note — Why this replaces the old cycle extension:** The old Formula 5 added travel overhead to the production cycle because the operator NPC had to run to storage and back. With dedicated carrier NPCs, the operator never leaves the building — production is purely the work cycle. Transport time is now an independent system variable, not a production cycle modifier.
+
+---
+
+### Formula 6: Demolition Refund
+
+Calculates the resource refund when a player demolishes a building. Currently set to 0.00 — no refund — but formalized as a formula so it can be changed (e.g., for a "guilt-free trial" mode or different game modes).
+
+The `demolition_refund` formula is defined as:
+
+`demolition_refund(resource) = floor(build_cost(resource) × refund_rate)`
+
+**Variables:**
+| Variable | Symbol | Type | Range | Description |
+|----------|--------|------|-------|-------------|
+| Build cost of resource | `build_cost(r)` | int | 0–∞ | Number of units of resource `r` that were spent to build this structure. Stored in the building registry at construction time. |
+| Refund rate | `refund_rate` | float | 0.00–1.00 | Fraction of build cost refunded on demolition. Default: 0.00 (no refund). Tuning knob — see Tuning Knobs section. |
+
+**Output Range:** `0` to `build_cost(resource)` (int). Floor-rounded. Minimum is 0.
+
+**Degeneracy checks:**
+- `refund_rate = 0.00` (default): `floor(0 × 0.00) = 0` for all resources. Zero refund — consistent with current design.
+- `refund_rate = 1.00` (full refund): `floor(build_cost × 1.00) = build_cost`. Full refund.
+- `refund_rate = 0.50` (half refund): `floor(build_cost × 0.50)`. Partial refund. E.g., `floor(15 × 0.50) = 7` Wood refunded from a 15 Wood cost.
+- `build_cost = 0` (Storage Area): `floor(0 × 0.00) = 0`. Nothing to refund.
+
+**Example:** Player demolishes a Lumber Camp. Build cost was 15 Wood + 3 Stone. Refund rate is 0.00.
+- Wood: `floor(15 × 0.00) = 0`
+- Stone: `floor(3 × 0.00) = 0`
+- Result: No resources returned. Build costs are permanently lost.
+
+---
+
+### Formula 7: Placement Energy Cost
+
+Calculates the energy consumed by the player when confirming a building placement. Energy is drawn from the Player Character System's Energy pool (same pool used for manual labor actions). This is a secondary constraint layered on top of resource costs — the player may have enough resources but insufficient energy to place a building.
+
+The `placement_energy_cost` formula is defined as:
+
+`placement_energy_cost = floor(Σᵢ build_qty(resource_i) × energy_per_resource)`
+
+**Variables:**
+| Variable | Symbol | Type | Range | Description |
+|----------|--------|------|-------|-------------|
+| Build cost quantity | `build_qty(r)` | int | 0–∞ | Number of units of resource `r` required to build this building type. Looked up from the build cost table. Summed across all distinct resources in the cost. |
+| Energy per resource unit | `energy_per_resource` | float | 0.00–1.00 | Energy cost per resource unit placed. Default: 0.10. Tuning knob — see Tuning Knob T7. |
+
+**Output Range:** `0` to `∞` (float, floor-rounded to int for deduction from PC Energy pool).
+
+**Degeneracy checks:**
+- `Σ build_qty = 0` (Storage Area, free build): `floor(0 × 0.10) = 0`. No energy consumed — consistent with the free build cost.
+- `energy_per_resource = 0.00`: Always returns 0. Energy is not a constraint for placement. Placement is limited only by resource availability.
+- `building = Lumber Camp (15 Wood + 3 Stone)`: `floor((15 + 3) × 0.10) = floor(1.8) = 1`. Costs 1 energy unit.
+
+**Example:** Player has 100 Energy. Places a Residential House costing 10 Wood + 3 Stone.
+`placement_energy_cost = floor((10 + 3) × 0.10) = floor(1.3) = 1`
+Player's energy drops to 99. The PC System decrements its energy pool by 1.
+
+**Note on energy granularity:** At default `energy_per_resource = 0.10`, the floor rounding means all non-free buildings cost exactly 1 energy (Storage Building: floor(10×0.10)=1, Residential House: floor(13×0.10)=1, Lumber Camp: floor(18×0.10)=1). Energy is intentionally a binary gate — "can I afford to place this building?" — not a graded constraint. This is by design: resource cost provides the graded constraint; energy provides a secondary safety net that becomes meaningful in Core Experience when resource abundance increases.
+
+**Cross-reference:** Energy pool is owned by the Player Character System (PC System GDD). The Building System calls `PCSystem.consume_energy(placement_energy_cost)` as part of the placement commit. If energy is insufficient, placement is blocked and the preview shows "Not enough energy."
+
+---
+
+### Formula 8: NPC Spawn Timer (Residential House)
+
+Controls NPC spawning for Residential Houses. The first NPC spawns immediately on construction completion (no formula needed — it's an event trigger). The second NPC spawns after a fixed timer expires.
+
+The `npc_spawn_2` check is defined as:
+
+`npc_spawn_2_available = (npc_spawn_timer >= npc_spawn_2_threshold)`
+
+**Variables:**
+| Variable | Symbol | Type | Range | Description |
+|----------|--------|------|-------|-------------|
+| Spawn timer | `npc_spawn_timer` | int | 0–∞ | Number of ticks this building has been in OPERATING state without having 2 NPCs spawned. Increments by 1 each tick via `Tick.on_ticks_advanced()`. Resets to 0 on NPC spawn or building demolition. |
+| Second NPC threshold | `npc_spawn_2_threshold` | int | 1–∞ | Ticks after construction completion before the second NPC spawns. Default: 1000 (1 in-game day). Tuning knob — see Tuning Knobs section. |
+
+**Output Range:** `true` or `false` (boolean). Evaluated every tick while the building is in OPERATING state.
+
+**Degeneracy checks:**
+- `npc_spawn_timer = 0` (just completed construction): `0 >= 1000` is `false`. First NPC spawned immediately; second will not spawn until 1000 ticks have elapsed.
+- `npc_spawn_timer = 999`: `999 >= 1000` is `false`. One tick remaining.
+- `npc_spawn_timer = 1000`: `1000 >= 1000` is `true`. Second NPC spawns. Timer resets.
+- `npc_spawn_timer = 5000` (timer not reset after spawn): `5000 >= 1000` is `true`. If the timer is not properly reset after the spawn, the check returns true every tick. The implementation MUST reset the timer or set a flag to prevent repeated spawns. Maximum NPCs per house: 2 (hard-coded cap).
+- Building demolished before timer reaches threshold: Timer is cleared. No second NPC spawns.
+
+**Example:** Residential House completes construction at tick 0. First NPC spawns instantly. Timer starts at 0.
+- Tick 0: `0 >= 1000` → `false`. Waiting.
+- Tick 500: `500 >= 1000` → `false`. Still waiting.
+- Tick 1000: `1000 >= 1000` → `true`. Second NPC spawns. Timer resets.
+- Tick 1001+: `0 >= 1000` → `false` (timer reset). No further spawns (max 2 NPCs).
+
+## Edge Cases
+
+Edge cases are organized by severity. **HIGH** cases are mandatory for the Vertical Slice implementation. **MEDIUM** cases are in scope for the Vertical Slice. **LOW** cases are noted for developer awareness and future iterations.
+
+---
+
+### HIGH Severity
+
+**EC-H1: Save/Load During Construction Progress**
+
+- **Scenario:** The game is saved while a building is in the CONSTRUCTING state (e.g., Residential House at 87/150 ticks accumulated). On reload, the building must resume construction from where it left off — not reset to 0 and not start fully built.
+- **Handling:** The building's construction progress (`accumulated_ticks`) is serialized as part of the building registry snapshot in the Save/Load System. On load:
+  1. The building is re-instantiated in its correct state (CONSTRUCTING, OPERATING, etc.).
+  2. For CONSTRUCTING buildings: `accumulated_ticks` is restored from the save. Construction resumes on the next `on_ticks_advanced` event.
+  3. For OPERATING buildings with active production cycles: both the production cycle timer and the NPC spawn timer (if applicable) are restored.
+  4. For STALLED buildings: the held output is restored. STALLED state resumes indefinitely — output is never discarded regardless of ticks elapsed since save.
+  5. For BLOCKED buildings: no timer is at risk. The building re-checks input availability on `on_ticks_advanced` after load.
+- **Rationale:** Construction progress is a scalar value (integer ticks). Serializing it is trivial. Resetting to 0 on reload would be a severe frustration. Resetting to full (instantly built) would be inconsistent with the no-refund demolition rule. Resuming from the save point is the only defensible choice.
+- **Cross-reference:** Save/Load System GDD (building registry serialization). Inventory/Storage System EC-H3 (IN_TRANSIT state serialization pattern).
+
+**EC-H2: Production Building Stalls When Storage Is Full**
+
+- **Scenario:** A Lumber Camp completes a production cycle and attempts to deposit 5 Wood into its assigned storage container. The container is at capacity (150/150 slots). The building cannot deposit its output.
+- **Handling:** (Defined by Inventory/Storage System EC-H4 + Building System Rule 7)
+  1. Deposit attempt fails (`deposit_output` returns FAILURE).
+  2. The building enters the STALLED state. The produced item is held internally — NOT in storage, NOT on a tile.
+  3. The building shows a red pulsing indicator. Tooltip: "Storage full."
+  4. On every subsequent tick cycle, the building re-evaluates. If storage has capacity, it deposits and transitions back to OPERATING.
+  5. The building waits **indefinitely** — output is never discarded. The STALLED state resolves only when storage has room or the building is demolished.
+- **Rationale:** Output is the result of consumed inputs; discarding it would punish the player for a logistics problem they can still fix. STALLED is a signal to clear storage, not a countdown to loss.
+- **Cross-reference:** Inventory/Storage System EC-H4 (full container deposit).
+
+**EC-H3: Demolition During Active Production**
+
+- **Scenario:** A Lumber Camp is in the middle of a production cycle (60/100 ticks) when the player initiates demolition.
+- **Handling:**
+  1. The building transitions from its current state (CONSTRUCTING, OPERATING, BLOCKED, or STALLED) directly to DEMOLISHED. No intermediate state.
+  2. The building's PackedScene is destroyed (`queue_free()`).
+  3. The building is removed from the Grid System's BuildingLayer.
+  4. **No resource refund.** Any inputs consumed at the start of the interrupted cycle are permanently lost.
+  5. Any NPC assigned to the building is released back to the global NPC pool (`release_npc(npc_id)`).
+  6. Resource tiles beneath the building remain cleared (not restored).
+  7. Any pending production cycles are cancelled. All internal state is discarded.
+  8. If the building was STALLED and holding output internally: the held output is discarded.
+- **Rationale:** Demolition is intentionally irreversible. No refund reinforces "earned automation." The NPC release is the only recovery — all material investment is sunk.
+- **Cross-reference:** Building System Rule 8 (demolition procedure).
+
+**EC-H4: Building Placed on Resource Tile (Resource Permanently Lost)**
+
+- **Scenario:** The player places a building on a tile containing a clearable resource (TREE, BERRY, GRASS). The resource had value but has no representation after placement.
+- **Handling:**
+  1. Grid's `validate_placement()` determines the resource is clearable and returns SUCCESS.
+  2. Grid's `place_building()` removes the resource from ResourceLayer atomically with the BuildingLayer update.
+  3. **No resource refund, no salvage, no notification** beyond the placement preview showing the resource tile as the build target.
+  4. The resource is permanently destroyed.
+- **Rationale:** Consistent with Grid/Map System's "Resource tile clearing" rule and Inventory/Storage System EC-M2. Buildings "clear the land." The Grid System handles clearability; the Building System has no separate resource-loss check.
+- **Cross-reference:** Grid/Map System GDD (resource tile clearability). Inventory/Storage System EC-M2.
+- **Out of scope:** Non-clearable resource tiles (STONE, IRON) — placement is blocked entirely by `BLOCKED_BY_RESOURCE_TILE`.
+
+**EC-H5: Container Demolished While Building References It (Orphaned Reference)**
+
+- **Scenario:** A production building (e.g., Lumber Camp) is assigned to Storage Area SA1. The player demolishes SA1. The building still holds a reference to `container_id = "SA1"`, but the container no longer exists.
+- **Handling:**
+  1. Inventory System emits `on_container_removed(container_id)` when the container is removed.
+  2. Building System receives the signal and iterates all buildings to find any with `assigned_container_id == container_id`.
+  3. For each affected building: enters BLOCKED state, `assigned_container_id` set to `null`, red indicator shown, tooltip: "No storage assigned."
+  4. Player must assign a new storage area via building UI. When assigned, building transitions to OPERATING (or stays BLOCKED if other inputs missing).
+  5. Any output held internally by a STALLED building is discarded (no destination to deposit to).
+- **Rationale:** Buildings need storage. An orphaned reference must be explicitly resolved by the player — not auto-fixed (which could silently pull from the wrong storage). The held output is discarded because there is no destination to deposit to. This is a harsh consequence — it reinforces that storage is essential infrastructure. Players will learn to build redundant storage or keep output flowing.
+- **Cross-reference:** Inventory/Storage System EC-M6 (orphaned reference).
+
+---
+
+### MEDIUM Severity
+
+**EC-M1: Placement Race Condition — Validation vs. Commit**
+
+- **Scenario:** The player hovers the building ghost over a tile. `validate_placement()` returns SUCCESS. Between validation and confirmation, another process modifies the tile state.
+- **Handling:** The Building System performs a **re-validate at commit time**:
+  1. Player confirms placement → Building System calls `validate_placement()` again (internal second check).
+  2. If still SUCCESS: proceed with placement.
+  3. If BLOCKED_BY_*: abort placement, show brief "Placement invalid" message. No resources deducted (only the commit phase deducts).
+- **Rationale:** Single-player, single-threaded Godot means true race conditions are extremely unlikely. The re-validate is a zero-cost safety net for future multiplayer changes, background tile modifications, and debugging scenarios.
+- **Cross-reference:** Grid/Map System GDD EC "Building Placement Edge Cases."
+
+**EC-M2: Two Buildings Competing for the Same Storage Resource Simultaneously**
+
+- **Scenario:** Two Lumber Camps assigned to the same storage container. Both need tool charge. The slot has exactly 4.0 charge remaining (below the required 5.0 per cycle for both).
+- **Handling:** Building withdrawals are processed in **deterministic order** per tick cycle: `building_id` ascending (lexicographic string comparison). The first building gets the charge if sufficient (≥ 5.0); if not, it enters BLOCKED. The second building then checks what remains.
+- **Rationale:** Deterministic ordering prevents non-deterministic behavior. If the order were based on production completion time, the same scenario could produce different outcomes across saves.
+- **Cross-reference:** Inventory/Storage System EC-H5 (concurrent storage modifications).
+
+**EC-M3: Residential House NPC Spawn During Day Transition**
+
+- **Scenario:** A Residential House completes its NPC spawn timer (1000 ticks) at the exact tick as a day transition (`on_day_transition`). The spawned NPC is immediately subject to hunger consumption.
+- **Handling:** The Tick System's signal dispatch order is authoritative: `on_ticks_advanced()` fires before `on_day_transition()`. Therefore, the NPC **always** contributes to the day's food requirement on its spawn day.
+- **Rationale:** This is a Tick System ordering decision. The Building System fires `on_npc_spawned()` on tick advancement; the Hunger System subscribes to `on_day_transition`. The order is fixed.
+- **Cross-reference:** Tick System GDD (signal dispatch order). Hunger System GDD (day-transition consumption).
+
+**EC-M4: Building at Map Edge — Radius Queries Clipped**
+
+- **Scenario:** A Lumber Camp is placed at the edge of the 30×30 grid (e.g., tile (0, 15)). Radius-based queries return fewer tiles than a center building would see.
+- **Handling:** **No special edge-case handling in the Building System.** Distance calculations (Formula 3 and 4) use Manhattan distance, which is unaffected by grid boundaries. Radius clipping is the Grid System's responsibility.
+- **Rationale:** Distance formulas are coordinate-agnostic. They only care about the distance value, not absolute coordinates.
+- **Cross-reference:** Grid/Map System GDD EC "Grid Boundary Edge Cases."
+
+**EC-M5: Pause/Resume During Construction — Progress Preservation**
+
+- **Scenario:** The player pauses while a building is under construction (e.g., 120/200 ticks). The game is paused for an arbitrary amount of real time, then resumed.
+- **Handling:**
+  1. When PAUSED, `on_ticks_advanced()` is not called (or called with `delta_ticks = 0`). Construction progress does not change.
+  2. When resumed, `on_ticks_advanced()` resumes with normal `delta_ticks`. Progress continues from the stored value.
+  3. **No progress is lost.** The building does not reset.
+- **Rationale:** Pausing is a meta-game action, not a gameplay state change. The game world freezes. This is enforced by the Tick System's pause logic.
+- **Cross-reference:** Tick System GDD (pause behavior). Building System Rule 4.
+
+---
+
+### LOW Severity
+
+**EC-L1: Building Type Deprecated Between Game Versions**
+
+- **Scenario:** A save file contains a building type that no longer exists in the current build's building registry.
+- **Handling:**
+  1. Log warning: "Unknown building type '[building_type]' — deprecated."
+  2. The building instance is destroyed, its tile in BuildingLayer set to `null`.
+  3. Resource tiles beneath the building are restored to pre-building state (cleared resources returned).
+  4. **No resource refund.**
+- **Rationale:** Forward-compatibility safety net. The game must not crash on load. Resource restoration "frees" the land but is not a refund. **Note:** This is a special backward-compatibility case that differs from EC-H4 (normal placement permanently destroys resources). Deprecated-building resource restoration exists only to prevent permanently blocked tiles in loaded saves.
+- **Cross-reference:** Grid/Map System GDD EC "Map Loading Edge Cases."
+
+**EC-L2: Grid Size Change Between VS (30) and MVP (50)**
+
+- **Scenario:** A VS save (30×30 grid) is loaded in an MVP build (50×50 grid). Buildings are at valid coordinates in the VS grid but occupy only a fraction of the expanded grid.
+- **Handling:** The grid is instantiated at its configured size (50×50). Buildings are instantiated at their original coordinates. No coordinate remapping. All distance calculations continue to work (distance is relative, not absolute).
+- **Rationale:** Grid size is a project-level constant. 30×30 coordinates are a valid subset of 50×50 coordinates.
+- **Cross-reference:** Grid/Map System GDD EC "Grid size change between VS and MVP."
+
+**EC-L3: Stalled Re-evaluation After Storage Capacity Increases**
+
+- **Scenario:** A Lumber Camp is STALLED. The player moves items out of storage, freeing capacity. Does the building immediately deposit, or wait?
+- **Handling:** The building re-evaluates on every `on_ticks_advanced` tick. As soon as space is available, it deposits and transitions STALLED → OPERATING. No manual player action required.
+- **Rationale:** No timer or discard mechanic exists. STALLED is purely a "waiting for space" state — the building holds output indefinitely and resolves as soon as the condition clears.
+- **Cross-reference:** Inventory/Storage System EC-M3. Building System Rule 7.
+
+**EC-L4: Production Output of 0 Due to Extreme Distance**
+
+- **Scenario:** A building with `base_output = 1` is placed at extreme distance (e.g., distance = 49, `distance_modifier = max(0.50, 1.00 - 49 × 0.03) = 0.50`). `production_output = floor(1 × 0.50) = 0`.
+- **Handling:**
+  1. No deposit attempt is made (zero output = nothing to deposit).
+  2. The building does NOT enter STALLED state (STALLED requires a failed deposit of non-zero output).
+  3. **No resource is consumed** for a zero-output cycle — the building must check `production_output > 0` before deducting inputs. If inputs were already consumed (cycle-start-before-output-check pattern), those inputs are lost.
+  4. The building continues to operate (does not enter BLOCKED or DEMOLISHED). It simply produces nothing until distance is reduced.
+- **Rationale:** A zero-output building is functionally useless but not broken. It continues to tick. Players will naturally not build at extreme distances. The system must not crash or enter an infinite error loop.
+- **Cross-reference:** Formula 4 degeneracy check. Formula 3 floor behavior.
+
+**EC-L5: Item Charge Depleted During Production**
+
+- **Scenario:** A Lumber Camp's tool slot has current_charge = 15.0. Each cycle consumes 5.0 charge. After 3 cycles (15.0 consumed), current_charge = 0.0 and the slot is cleared. On the 4th cycle, the building cannot find a slot with sufficient charge.
+- **Handling:**
+  1. The building attempts `try_consume_charge()` at cycle start. If no slot of tool has `current_charge >= 5.0`, the call fails → building enters BLOCKED state.
+  2. The building does NOT start a new cycle without sufficient charge. Charge is consumed atomically at cycle start (full `charge_cost` deducted in one operation).
+  3. The building remains BLOCKED until tool charge is replenished by depositing new tools in the assigned storage. Tooltip shows "Insufficient charge: tool (need 5.0)."
+  4. **No partial charge is preserved across cycles.** If a slot has charge 12.0 and the cost is 5.0, the building consumes 5.0 (leaving 7.0), runs the cycle, and on the next start consumes 5.0 again (leaving 2.0). The 2.0 remaining is insufficient for the next cycle → BLOCKED.
+- **Cross-reference:** Recipe Database System (charge_cost definition). Building System Rule 5 (tool required for Lumber Camp).
+
+---
+
+### Edge Case Matrix: Cross-System Interactions
+
+| EC ID | Primary Owner | Coordinating System(s) | Boundary |
+|-------|--------------|------------------------|----------|
+| EC-H1 | Building System | Save/Load System | Save/Load ↔ Building |
+| EC-H2 | Building + Inventory | Inventory/Storage System | Building ↔ Inventory |
+| EC-H3 | Building System | NPC System, Grid System | Building ↔ NPC, Building ↔ Grid |
+| EC-H4 | Grid System | Building System (consumer) | Grid ↔ Building |
+| EC-H5 | Building + Inventory | Inventory/Storage System | Building ↔ Inventory |
+| EC-M1 | Building + Grid | Grid System (validation) | Building ↔ Grid |
+| EC-M2 | Building + Inventory | Inventory/Storage System (ordering) | Building ↔ Inventory |
+| EC-M3 | Tick System (ordering) | Building System, Hunger System | Tick ↔ Building ↔ Hunger |
+| EC-M4 | Grid System | Building System (delegator) | Grid → Building |
+| EC-M5 | Building + Tick | Tick System (pause) | Building ↔ Tick |
+| EC-L1 | Building + Grid | Save/Load System | Save/Load ↔ Building |
+| EC-L2 | Grid System | Building System (passive) | Grid → Building |
+| EC-L3 | Building System | Inventory/Storage System | Building ↔ Inventory |
+| EC-L4 | Building System | Formula 3, Formula 4 | Internal formula edge |
+
+## Dependencies
+
+Dependencies are organized into **upstream** (systems the Building System depends on) and **downstream** (systems that depend on the Building System). Each dependency specifies the interface used and the direction of data flow.
+
+### Upstream (Building System depends on)
+
+| System | Dependency Type | Interface Used | Notes |
+|--------|----------------|----------------|-------|
+| **Grid/Map System** | Hard — spatial validation and placement | `validate_placement(x, y, building_id) -> PlacementResult`, `place_building(x, y, building_id)`, `remove_building(x, y)`, `get_tile_view(x, y)` | The Grid System is the sole owner of the BuildingLayer. The Building System is the sole writer. No other system may modify the BuildingLayer. |
+| **Inventory/Storage System** | Hard — resource consumption and production I/O | `try_consume(container_id, resource_id, quantity)`, `deposit_output(container_id, resource_id, quantity)`, `get_resource(container_id, resource_id)`, `on_container_removed(container_id)` | Buildings never access tiles or player inventory directly. All resource operations flow through Inventory APIs. First-fit stacking governs all deposits. |
+| **Tick System** | Hard — timer advancement | `on_ticks_advanced(delta_ticks)`, `on_day_transition(days_elapsed)` | The Building Registry subscribes to `on_ticks_advanced` and iterates all buildings in a single loop. No per-scene `_process()` for tick logic. |
+| **Resource System** | Hard — resource definitions | `get_resource(resource_id) -> ResourceDef` | Reads resource attributes (stack_limit, max_charge, category) for build cost validation and production definitions. Read-only. |
+| **NPC System** | Hard — NPC assignment and availability | `assign_npc(npc_id, building_id)`, `release_npc(npc_id)`, `get_available_npcs(building_id)` | Bidirectional assignment tracking. Canonical record: NPC System (NPCs are the owned resource). Building System stores reference. |
+
+### Downstream (systems that depend on Building System)
+
+| System | Dependency Type | Interface Used | Notes |
+|--------|----------------|----------------|-------|
+| **Recipe Database System** | Hard — recipe data source | `get_recipe(building_id) -> RecipeDef` | Building System reads recipe definitions (inputs, outputs, tick_cost) from the Recipe Database. Recipe Database is pure data; all execution logic lives in the Building System. There is no separate Production System. |
+| **Player Character System** | Soft — placement initiation | `initiate_build(building_id, x, y)`, receives `on_construction_complete(building_id, x, y)` | Building placement was moved from PC System to Building System (PC System GDD revision B8). The PC System initiates the flow but does NOT execute placement. |
+| **Hunger System** | Soft — NPC count for consumption | Indirect via NPC System: `get_all_npcs()` returns count including house-spawned NPCs | Residential House spawns NPCs that become subject to hunger consumption. The Hunger System does not call Building System APIs directly. |
+| **HUD/UI** | Soft — display and interaction | `get_building_state(building_id) -> {state, blocked_reason, progress}` | HUD polls Building System for state display (ghost preview, status indicators, tooltip text). Building System does NOT push to HUD. |
+| **Save/Load System** | Hard — state serialization | `serialize() -> Array[building_snapshot]`, `deserialize(Array[building_snapshot])` | Building Registry provides deterministic serialization: buildings serialized in `building_id` order, fields in stable order (state, accumulated_ticks, assigned_container_id, npc_id, production_cycle_progress, stalled_since_tick). |
+
+### Bidirectional Consistency
+
+**Building System ↔ Grid/Map System:** Grid's `validate_placement()` is the authoritative placement gate. Building System never duplicates validation logic. Grid's BuildingLayer is modified only by `place_building()` and `remove_building()` from the Building System.
+
+**Building System ↔ Inventory/Storage System:** Building System is the active caller for `try_consume()` and `deposit_output()`. Inventory/Storage System emits `on_container_removed()` to notify dependent buildings. Deterministic withdrawal ordering (EC-H5) is enforced by both systems agreeing on `building_id` ascending order.
+
+**Building System ↔ NPC System:** Assignment is bidirectional but canonical in NPC System. Both track the assignment to prevent double-assignment. Building System queries availability; NPC System owns the authoritative assignment state.
+
+**Building System ↔ Recipe Database:** Building System reads recipe definitions at production cycle start. Recipe Database is read-only from the Building System's perspective — no writes, no signals.
+
+**Building System ↔ Save/Load System:** Building System is passive — Save/Load System calls `serialize()` and `deserialize()`. The Building System does not initiate save operations.
+
+### Circular Dependencies Summary
+
+| Pair | Type | Resolution |
+|------|------|------------|
+| Building ↔ Recipe Database | Active (Building) → Passive (Recipe DB) | Building System reads recipe data. Recipe Database never calls Building APIs. |
+| Building ↔ Inventory/Storage System | Active (Building) → Passive (Inventory) | Building System calls Inventory APIs. Inventory only pushes `on_container_removed()`. |
+| Building ↔ NPC System | Bidirectional tracking | Both track assignment. Canonical: NPC System. Building System stores reference. |
+
+### Cross-System Design Notes
+
+- **Building representation:** Buildings are PackedScene instances placed at tile centers (not TileMapLayer tiles), per Grid/Map System architecture. The Building System creates these instances and syncs their visual state (sprite, overlay) on state transitions. The instances are pure visual targets — no independent game state lives in the scene.
+
+- **YSort depth sorting:** All buildings must be children of a `YSort` node (`y_sort_enabled = true`) for proper top-down depth ordering. Direct children of `MapRoot` do NOT receive Y-sorting. This is enforced by the Grid/Map System's rendering architecture.
+
+- **Building data model:** Each building is defined by a data table with: `building_id`, `display_name`, `build_cost` (Array[{resource_id, quantity}]), `construction_ticks`, `building_type` (storage/housing/production), and type-specific fields (`capacity`, `housing_slots`, `base_output`, `cycle_ticks`). This table is the Building System's single source of truth — analogous to the Resource System's registry.
+
+## Tuning Knobs
+
+All tuning knobs below are parameters in the formulas defined in Section D. They are exposed as `@export` variables in the Building Registry script. Safe ranges define the boundaries within which the system behaves as designed — values outside may require changes to edge case handling or degeneracy checks.
+
+### T1: Distance Output Penalty (`penalty_factor`)
+- **Formula:** Formula 3 (Distance Modifier)
+- **Type:** float
+- **Safe Range:** 0.00–0.10
+- **Default:** 0.03
+- **Gameplay Effect:** Controls how strongly distance penalizes production output. At 0.00, proximity is irrelevant — all buildings produce at 100% regardless of placement. At 0.10, the floor (50% output) is reached at just 5 tiles of distance, making proximity extremely important. The default 0.03 means the floor is reached at 33 tiles — above the practical VS play area but within the grid boundary. At distance 10, output is 70% (30% penalty); at distance 5, 85%. The penalty is meaningfully visible without punishing reasonable placements.
+- **Playtesting question:** "Did placing buildings far from storage make you feel the penalty?" If players still don't notice the penalty at moderate distances, increase toward 0.04. If players feel punished for reasonable placements on the 30×30 grid, decrease toward 0.02.
+- **Pillar alignment:** Pillar 3 (Optimization Over Expansion) — this knob directly controls the strength of the spatial optimization incentive.
+
+### T2: Distance Time Penalty (`travel_penalty`)
+- **Formula:** Formula 5 (Production Cycle Duration)
+- **Type:** float
+- **Safe Range:** 0.00–0.10
+- **Default:** 0.02
+- **Gameplay Effect:** Controls how strongly distance increases production cycle time. Unlike `penalty_factor` (output penalty, which caps at 50%), this has no upper clamp — at extreme distances, cycles become arbitrarily long. This makes it a stronger dial for discouraging bad placement from the player's perspective (they wait longer, not just produce less). The default 0.02 means a building 10 tiles from storage takes 20% longer per cycle.
+- **Playtesting question:** "Did distant buildings feel noticeably slower?" If players don't mind the wait, increase toward 0.04. If a building 15 tiles away is unusably slow, decrease toward 0.01.
+- **Pillar alignment:** Pillar 3 — reinforces spatial planning through time cost.
+- **Note:** This knob is independent of `penalty_factor`. They share the same default but can be tuned separately. A higher time penalty with lower output penalty makes bad placement "annoying" rather than "broken." A lower time penalty with higher output penalty makes bad placement "marginalized but tolerable."
+
+### T3: Demolition Refund Rate (`refund_rate`)
+- **Formula:** Formula 6 (Demolition Refund)
+- **Type:** float
+- **Safe Range:** 0.00–1.00
+- **Default:** 0.00
+- **Gameplay Effect:** Controls how much resources are returned when a building is demolished. At 0.00 (default), demolition is a sunk cost — reinforcing "earned automation" and discouraging experimental placements. At 1.00, demolition is a free reset — encouraging trial-and-error placement. At 0.50, players can adjust layouts with a 50% tax.
+- **Playtesting question:** "Did demolition feel too permanent?" If players report frustration over failed placements and experiment rarely, consider increasing toward 0.50 for a "guilt-free trial" mode. If players feel no penalty for demolishing, increase above 0.00.
+- **Pillar alignment:** Pillar 1 (Earned Automation) — the higher the refund, the less "earned" each placement becomes.
+- **Note:** This is a game-mode-level knob. A full refund mode could be a separate difficulty setting.
+
+### T4: Second NPC Spawn Threshold (`npc_spawn_2_threshold`)
+- **Formula:** Formula 8 (NPC Spawn Timer)
+- **Type:** int (ticks)
+- **Safe Range:** 100–5000
+- **Default:** 1000 (1 in-game day)
+- **Gameplay Effect:** Controls how quickly a Residential House ramps from 1 NPC to 2 NPCs after construction completes. At 100 ticks (10 seconds), a new house is effectively producing 2 NPCs immediately. At 5000 ticks (50 seconds), players must wait a noticeable amount of time for the second NPC, extending the sense of gradual growth. The default 1000 (1 day) provides a moderate ramp — the player sees the house sit at 1 NPC for a full day cycle.
+- **Playtesting question:** "Did the NPC spawn timing feel right?" If players feel houses should ramp faster, decrease toward 500. If the game feels too NPC-saturated early on, increase toward 2000.
+- **Pillar alignment:** Pillar 1 (Earned Automation) — gradual growth reinforces the sense of building something from nothing.
+
+### T5: Distance Floor Multiplier
+- **Formula:** Formula 3 (Distance Modifier)
+- **Type:** float
+- **Safe Range:** 0.00–0.75
+- **Default:** 0.50
+- **Gameplay Effect:** The minimum output multiplier at extreme distances. At 0.00, a building at max distance produces nothing — it's completely non-functional. At 0.50 (default), it produces half output — frustrating but not broken. At 0.75, even the worst placement still produces 75%, making distance optimization feel optional rather than mandatory.
+- **Playtesting question:** "Did distant buildings feel useless or just slow?" If players report that buildings far from storage feel completely broken, increase toward 0.60. If distance optimization feels optional, decrease toward 0.40.
+- **Note:** This value must be less than the minimum `base_output / distance_modifier` threshold that produces zero output in Formula 4. With default `base_output = 5`, a floor of 0.20 would still produce 1 unit. A floor of 0.00 would produce 0.
+
+### T6: Construction Time Tuning (Per-Building)
+- **Formula:** Formula 2 (Construction Time Lookup)
+- **Type:** int (ticks)
+- **Safe Range:** 0–∞
+- **Default:** 0 (instant for Storage Area), 120 (Storage Building), 150 (Residential House), 200 (Lumber Camp)
+- **Gameplay Effect:** Base construction time for each building type. Storage Area is instant (0 ticks). Other buildings have their respective times.
+- **Playtesting question:** "Do building construction times feel appropriate?" Adjust individual building times based on feedback, keeping within the safe range.
+
+### T7: Building Menu Energy Cost per Resource
+- **Context:** Rule 2 (Placement — "deducts placement energy from the player's energy pool per Formula 7")
+- **Type:** float (energy per resource unit)
+- **Safe Range:** 0.00–1.00
+- **Default:** 0.10
+- **Gameplay Effect:** Controls the energy "cost" of placing a building, separate from the resource cost. At 0.00, placing buildings costs no energy — the only constraint is resource availability and grid space. At 1.00, placing a Lumber Camp (18 total resource cost) costs 1.8 energy. The default 0.10 means a Lumber Camp costs 1.8 energy, a Residential House costs 1.3, and a Storage Building costs 1.0. This is a secondary constraint layered on top of resource costs — it prevents energy-flood scenarios where the player has abundant resources but unlimited energy to place everything instantly.
+- **Playtesting question:** "Did energy feel like a meaningful constraint on building placement?" If players never worry about energy during placement, this knob can be reduced toward 0.00. If placement feels too easy, increase toward 0.20.
+- **Pillar alignment:** Pillar 1 — ties building density to energy management, reinforcing that every placement is a resource decision.
+
+### T8: Building Capacity Multiplier
+- **Context:** Storage Building capacity field
+- **Type:** float
+- **Safe Range:** 0.50–3.00
+- **Default:** 1.00
+- **Gameplay Effect:** Scales the base storage capacity of all storage buildings. At 1.00 (default), Storage Area = 50 slots, Storage Building = 150 slots. At 2.00, Storage Building = 300 slots — storage upgrades become more impactful, encouraging larger builds. At 0.50, Storage Building = 75 slots — forcing the player to build more buildings for more capacity, which is more spatially expensive but provides more placement decisions.
+- **Playtesting question:** "Did storage capacity feel like the right pressure?" If players always have too much storage, decrease toward 0.75. If players are constantly capped and need to rush new storage, increase toward 1.50.
+- **Note:** This knob affects space planning more than production. It's a secondary dial — important for pacing but not for immediate feel.
+
+### T9: Item Charge Cost Per Cycle
+- **Context:** Rule 5 (Operation — Lumber Camp), Recipe Database (`charge_cost` field)
+- **Type:** float
+- **Safe Range:** 0.1–50.0
+- **Default:** 5.0
+- **Gameplay Effect:** Controls how much charge is consumed from the tool slot per Lumber Camp production cycle. At 1.0, a fully-charged tool (100 charge) lasts 100 cycles (500 wood) — essentially infinite. At 5.0 (default), a tool lasts 20 cycles (100 wood) — meaningful but not urgent. Multiple tools stacked (e.g., 5 × 100.0 = 500 charge) last even longer. At 20.0, a single tool lasts only 5 cycles (25 wood) — the player must track and replenish tool stock regularly.
+- **Playtesting question:** "Did tool consumption feel meaningful?" If players never notice tools depleting, increase toward 10.0. If replenishing tools feels like a chore, decrease toward 2.0.
+- **Pillar alignment:** Pillar 2 (Information Transparency) — the building UI must show remaining tool charge so players can predict when to stock up.
+
+### Design Note: Multiple Building Distance Penalty
+
+When multiple buildings of the same type share a storage container (e.g., two Lumber Camps assigned to the same Storage Building), each building calculates its own distance penalty independently (Formula 3 is evaluated per-building using its own coordinate). This is the current design — no tuning knob needed. If future design changes this to a shared penalty, a new knob would be added here.
+
+### Knob Interaction Matrix
+
+| Pair of Knobs | Interaction | Notes |
+|---------------|-------------|-------|
+| T1 + T2 | Both scale distance impact. Tuning them together controls whether distance is a "soft nudge" or "hard wall." | T1 affects output; T2 affects time. They can be tuned independently for different player signals. |
+| T3 + T1 | High refund rate + high distance penalty = contradictory. Players can "undo" bad spatial decisions cheaply. | Keep T3 at 0.00 if T1 > 0.03. |
+| T4 + T8 | Second NPC spawn + storage capacity. More NPCs = more food = more production = more storage needed. | If T4 is low (fast NPC growth) and T8 is low (small storage), players may hit storage pressure early. |
+| T5 + T9 | Stalled timer + tool durability. If tools break and storage is full simultaneously, the building is stuck in STALLED until the player acts. | These stack as independent pressure points. Neither should be extreme. |
+
+## Visual/Audio Requirements
+
+This section covers visual feedback and audio cues for every Building System lifecycle event. Art direction follows the "Functional Clarity" visual identity and Moonlighter aesthetic (warm flat colors, high contrast, readable silhouettes). All status indicators use color + shape combinations for colorblind accessibility (no reliance on color alone).
+
+### Building Sprite Guidelines
+
+**Asset spec: 1×1 tile sprites at 64×64 pixels, Moonlighter style.** Warm flat colors with bold outlines, high contrast against the terrain, no shading gradients — solid fills only. Each building type has a distinct silhouette readable at a glance from across the 30×30 map.
+
+| Building | Silhouette Shape | Primary Color | Secondary Color | Detail Level |
+|----------|-----------------|---------------|-----------------|-------------|
+| **Storage Area** | Orange X marker on ground (no sprite) | Orange (#E67E22) | Dark brown outline | Minimal — just ground markings |
+| **Storage Building** | Small shed with peaked roof, single door | Warm tan walls (#D4A76A) | Brown timber frame (#5D4037), dark gray roof (#455A64) | Door detail, roof pitch, timber beam lines |
+| **Residential House** | Cozy house with chimney, rounded windows | Warm cream walls (#F5E6CA) | Brown timber frame (#5D4037), terracotta roof (#C0392B) | Chimney smoke (animated), window panes, front door |
+| **Lumber Camp** | Open-sided shed with sawhorse, visible wood pile | Pale wood color (#C9B07A) | Dark brown posts (#3E2723), gray saw blade | Saw blade outline, stacked wood planks, open front |
+
+**Design rules:**
+- All building sprites anchored at bottom-center of 64×64 tile (y-resolution).
+- Ground shadow underneath each building (solid dark shape, no gradient).
+- Roof overhang extends 8px beyond walls on all sides for visual warmth.
+- Warm palette: all colors use warm undertones (no cool blues on buildings themselves). Terrain provides cool contrast.
+- Silhouette test: each building must be distinguishable from the others at 25% zoom (16×16 preview size).
+
+### Visual Feedback by Lifecycle Event
+
+**VFX-1: Placement Preview (PLACE_VALIDATING)**
+
+- **Visual:** A semi-transparent ghost sprite of the building appears at the mouse cursor position. The ghost is rendered at 60% opacity with the building's normal sprite.
+  - **Valid placement:** Ghost tinted green (#4CAF50 overlay). Ground tile highlighted with a thin green border.
+  - **Blocked placement:** Ghost tinted red (#E74C3C overlay). Ground tile highlighted with a thick red border. A small icon appears above the ghost indicating the block reason:
+    - X icon for `BLOCKED_BY_BUILDING`
+    - Wall icon for `BLOCKED_BY_IMPASSABLE`
+    - Border icon for `BLOCKED_BY_BOUNDS`
+    - Tree icon for `BLOCKED_BY_RESOURCE_TILE`
+    - Bag icon for insufficient resources (queried from Inventory System)
+- **Audio:** No audio for preview hover. A soft "click" when confirming placement.
+
+**VFX-2: Construction Start**
+
+- **Visual:** Ghost solidifies into the building sprite at full opacity. A scaffolding overlay fades in over the sprite (semi-transparent wooden frame lines drawn on top). The scaffolding has a subtle bob animation (2px vertical oscillation at 2Hz).
+- **Audio:** A brief wood thud sound (200ms) when the building first appears.
+
+**VFX-3: Construction Progress (CONSTRUCTING)**
+
+- **Visual:** Hammer animation on the scaffolding. A small hammer icon swings in an arc (270° sweep) every 800ms. The hammer starts at the top-left of the building sprite and swings toward the center. Progress indicator: a thin bar appears at the bottom edge of the building showing `(accumulated_ticks / build_time)` as a green fill (left to right).
+- **Audio:** No continuous audio during construction. A soft "thud" at 25%, 50%, 75% milestones (subtle, not distracting).
+
+**VFX-4: Construction Complete**
+
+- **Visual:** Scaffolding overlay fades out over 300ms (alpha 100% → 0%). The building sprite transitions from scaffolding-covered to clean. A brief pulse effect on the building sprite (scale 1.0 → 1.05 → 1.0 over 400ms). Green checkmark icon appears above the building for 1 second, then fades.
+- **Audio:** A satisfying "ding" (wooden bell or chime, ~500ms, frequency ~800Hz) + a soft clap of wood (construction completion "sound of completion").
+
+**VFX-5: Operational State — Green (OPERATING, producing)**
+
+- **Visual:** Normal building sprite. A small green dot (4px diameter, #4CAF50) appears in the top-right corner of the sprite. The dot pulses subtly (scale 1.0 → 1.15 → 1.0 at 1.5Hz). If the building is producing (not just sitting idle), a subtle smoke or particle trail rises from chimney/top of building (for Lumber Camp: sawdust particles; for Residential House: chimney smoke).
+- **Audio:** No continuous audio. A soft "work hum" is not implemented at MVP — production is purely visual.
+
+**VFX-6: Operational State — Yellow/BLOCKED**
+
+- **Visual:** Green dot turns yellow (#FFC107). The dot becomes static (no pulsing). A small exclamation mark (!) icon appears above the building, hovering 8px above the roof peak. The icon does not animate. Tooltip text on hover shows what's missing.
+- **Audio:** No audio for BLOCKED state (silent failure — consistent with Pillar 2: information through UI, not sound).
+
+**VFX-7: Operational State — Red/STALLED**
+
+- **Visual:** Red dot turns (#E74C3C) and begins pulsing (scale 1.0 → 1.2 → 1.0 at 1Hz — slower pulse than the green producing dot). The exclamation mark (!) icon appears above the building. Tooltip text: "Storage full."
+- **Audio:** No audio for STALLED state (same rationale as BLOCKED).
+
+**VFX-8: Demolish**
+
+- **Visual:** Building sprite shrinks rapidly (scale 1.0 → 0.0 over 300ms) while fading to 0% opacity. Small debris particles scatter outward from the building center (4-6 brown/tan pixel fragments, each 4×4px, flying in random directions 200-40px). The ground tile briefly highlights orange where the building was, then returns to normal terrain.
+- **Audio:** A quick "crunch" sound (wood breaking, ~300ms, descending pitch) as the building collapses.
+
+**VFX-9: Residential House NPC Spawn**
+
+- **Visual:** When the first NPC spawns (immediate): a small person-silhouette icon (not a full NPC figure) appears above the building door, waves briefly (2-frame wave animation, ~500ms), then fades. When the second NPC spawns (after 1000 ticks): same silhouette animation from the building door. NPCs are not visible on the map per game design; this is a brief celebratory indicator, not a persistent NPC presence.
+- **Audio:** A soft "door open" creak + a subtle "hello" murmur (very quiet, 300ms).
+
+**VFX-10: Placement on Resource Tile**
+
+- **Visual:** When the building is placed on a clearable resource tile, the resource sprite briefly flashes (brightness increase, 200ms) then disappears as the building's foundation takes over. No special notification — the resource disappearance is visually implicit in the placement animation.
+- **Audio:** A brief "crunch" (terrain clearing, same as demolish but shorter, ~150ms).
+
+### Status Indicator Design (Colorblind-Safe)
+
+All status indicators use **color + shape + animation** triple encoding. A colorblind player can identify every state by shape or animation alone.
+
+| State | Color | Shape | Animation | Colorblind-safe? |
+|-------|-------|-------|-----------|-----------------|
+| Producing | Green (#4CAF50) | Solid circle (4px) | Subtle pulse (1.5Hz) | Yes — circle + pulse |
+| Idle (no production cycle) | Gray (#9E9E9E) | Solid circle (4px) | None | Yes — gray + static |
+| BLOCKED | Yellow (#FFC107) | Solid circle + exclamation mark above | None | Yes — exclamation mark |
+| STALLED | Red (#E74C3C) | Solid circle | Slow pulse (1Hz, larger amplitude) | Yes — slow big pulse |
+| CONSTRUCTING | Orange (#FF9800) | Scaffolding overlay | Hammer swing (periodic) | Yes — scaffolding unique shape |
+
+**Color hex values chosen for maximum contrast on all terrain types:**
+- Green #4CAF50 — passes WCAG AA on brown (#5D4037) and green (#388E3C) terrain
+- Yellow #FFC107 — passes WCAG AA on all terrain except very yellow grass
+- Red #E74C3C — distinct from yellow in hue (red vs. yellow), providing maximum contrast
+- Gray #9E9E9E — neutral, no hue conflict with any terrain
+
+**Colorblind simulation targets:**
+- Deuteranopia (red-green weakness): Green becomes darker orange, Yellow remains yellow, Red remains distinguishable as a darker red-orange. Distinguishable by shape+animation.
+- Tritanopia (blue-yellow weakness): No critical impact — no blue-dependent indicators.
+- Protanopia (red weakness): Red-tinted colors shift toward yellow. The red demolition ghost uses an X icon overlay, not just color.
+
+### Art Bible Mapping
+
+| Requirement | Art Bible Section | Principle |
+|-------------|------------------|-----------|
+| Building silhouette readability | Section 1 (Visual Identity — Functional Clarity) | "Can I identify a building from across the room?" — each sprite passes the 16×16 silhouette test |
+| Warm flat colors, no gradients | Section 2 (Color System — Palette Direction) | Moonlighter-aligned: solid fills, warm undertones, high-contrast outlines |
+| Status indicator color choices | Section 3 (Color System — Accessibility) | Colorblind-safe triple encoding; WCAG AA contrast verification |
+| Minimalist medieval shapes | Section 1 (Visual Identity — Minimalist Medieval) | Timber frames, thatched roofs, cobblestone — no fantasy-kitsch |
+| Ground shadows (solid, no gradient) | Section 2 (Shape Language — Consistency) | All shadows use the same dark fill shape language, not per-object shading |
+| Particle effects (debris, sawdust, smoke) | Section 1 (Information Density) | Particles are minimal — maximum 6 fragments, no bloom/glow. Always secondary to building readability |
+
+## UI Requirements
+
+### UI-1: Building Menu (Build Mode Entry)
+
+- **Trigger:** Player clicks the Building Button in the HUD (or presses B key) → opens the Building Menu as an overlay panel.
+- **Layout:** Grid of building icons (2 columns, scrollable if more than 6 buildings). Each icon shows the building sprite at 32×32 (half resolution of full sprite) with the building name below it.
+- **Per-building row entries:**
+  - Building icon + name
+  - Build cost display (resource icons with quantities: e.g., 🪵 15 + 🪨 3)
+  - Energy cost (e.g., "1 Energy") — shown in small text
+  - Affordability indicator: cost row is green if affordable, red if not (with a small "!" if resources are insufficient, showing deficit quantity)
+  - Construction time (e.g., "200 ticks") — shown in small text
+- **Selection:** Clicking a building icon selects it and closes the menu. The building ghost appears at the cursor. The previously selected building type is highlighted with a border in the menu.
+- **Close:** Click outside the menu, press Escape, or right-click closes the menu and deselects.
+
+### UI-2: Placement Ghost Preview
+
+- **Trigger:** Player selects a building from the menu and moves cursor onto the map.
+- **Display:** The ghost sprite follows the cursor, rendered at full sprite resolution with 60% opacity overlay (green tint if valid, red tint if blocked).
+- **Tooltip under ghost:** Shows building name, build cost, construction time, and energy cost (per Formula 7). E.g., "15 Wood, 3 Stone, 1 Energy". If blocked, shows the block reason:
+  - "Cannot build here — occupied" (BLOCKED_BY_BUILDING)
+  - "Cannot build here — impassable terrain" (BLOCKED_BY_IMPASSABLE)
+  - "Cannot build here — out of bounds" (BLOCKED_BY_BOUNDS)
+  - "Cannot build here — resource tile" (BLOCKED_BY_RESOURCE_TILE)
+  - "Cannot afford building" (insufficient resources)
+  - "Not enough energy" (insufficient energy)
+- **Confirm:** Left-click on valid tile confirms placement. Preview disappears, construction begins immediately.
+- **Cancel:** Escape, right-click, or scroll-wheel away cancels placement mode and closes the Building Menu.
+
+### UI-3: Building Interaction Panel (Click on Existing Building)
+
+- **Trigger:** Player clicks on an existing building (not in build mode).
+- **Display:** A context panel appears adjacent to the clicked building (never off-screen — position adjusts dynamically). The panel shows:
+  - **Building name** (header, bold)
+  - **Current state** with color indicator (green/yellow/red)
+  - **Progress bar** (if CONSTRUCTING or producing): `(accumulated_ticks / total_ticks)` as a horizontal fill bar
+  - **State-specific info:**
+    - CONSTRUCTING: "Building... X/Y ticks" + progress bar
+    - OPERATING: "Producing" or "Idle" + production rate (e.g., "5 wood per cycle")
+    - BLOCKED: "Blocked — [reason]" (e.g., "No NPC assigned", "Missing wood")
+    - STALLED: "Storage full"
+  - **Action buttons** (context-dependent):
+    - If OPERATING and has NPC: "Release NPC" button
+    - If OPERATING and no NPC assigned: "Assign NPC" button → opens NPC selection list
+    - Any state: "Demolish" button (always present)
+- **NPC Selection List (if "Assign NPC" clicked):** Opens a secondary popup listing all available NPCs with their names/IDs. Clicking an NPC assigns them and closes the popup.
+
+### UI-4: Demolish Confirmation
+
+- **Trigger:** Player clicks "Demolish" in the Building Interaction Panel.
+- **Display:** A confirmation dialog appears:
+  - Text: "Demolish [Building Name]? This action cannot be undone. No resources will be refunded."
+  - Two buttons: "Confirm Demolish" (red, prominent) and "Cancel" (gray)
+  - The building pulses red while the dialog is open to reinforce the danger.
+- **On confirm:** Building is demolished (see VFX-8). Interaction panel closes.
+- **On cancel:** Dialog closes. Building returns to normal state.
+
+### UI-5: Hover Tooltip (Quick Info)
+
+- **Trigger:** Player hovers cursor over a building for 250ms (tooltip delay to avoid flicker).
+- **Display:** A small tooltip appears near the cursor (not anchored to the building — follows cursor to avoid occlusion).
+- **Content:**
+  - Building name (bold, header)
+  - State line: `[Green Dot] Producing — 5 wood/cycle` or `[Yellow Dot] Blocked — No NPC assigned`
+  - If CONSTRUCTING: `Construction: 87/200 ticks (43%)`
+  - If OPERATING with assigned NPC: `NPC: [NPC Name]`
+  - If OPERATING with assigned storage: `Storage: [Storage Name/ID]`
+  - Distance to storage (if production building and assigned storage): `Distance: 10 tiles (70% efficiency)`
+  - **If building consumes tool charge:** `Tool Charge: 7.0 / 100.0 remaining` (format: `{item_name} Charge: {current_charge} / {max_charge}`). If remaining charge is ≤ 2 cycles worth: display in red. If no tool with sufficient charge present: `Tool Charge: NONE — will BLOCK on next cycle`. This ensures the player can see impending tool depletion before it stops production (Pillar 2: Information Transparency).
+- **No action buttons in hover tooltip** — it's read-only information.
+
+### UI-6: Build Mode Indicator
+
+- **Persistent UI element** when in build mode (building ghost is visible):
+  - A small banner in the top-center of the screen: "Build Mode — [Building Name] — Press Esc to cancel"
+  - The banner is semi-transparent, does not obstruct gameplay.
+  - The building name in the banner is clickable — clicking it re-opens the Building Menu for quick switching.
+- **When build mode is cancelled:** Banner fades out over 300ms.
+
+### UI-7: Construction Completion Notification
+
+- **Trigger:** A building finishes construction (CONSTRUCTING → OPERATING transition).
+- **Display:** A small notification appears in the top-right corner:
+  - Text: "[Building] is ready!"
+  - Duration: 3 seconds, then fades.
+  - If multiple buildings complete simultaneously (same tick): consolidated into one notification: "[Building A], [Building B] are ready!"
+- **Non-blocking:** Player can interact with the game while the notification is displayed.
+
+## Acceptance Criteria
+
+Each criterion uses the GIVEN/WHEN/THEN format and includes a verification method. Verification methods reference either visual observation (V), tooltip/UI text (T), state machine log (S), or API assertion (A).
+
+### Lifecycle & Placement
+
+**AC-01: Successful Placement**
+**GIVEN** a building is placed on a valid tile with sufficient resources, **WHEN** the player confirms placement, **THEN** resources are deducted from storage, the building enters CONSTRUCTING state, and the scaffolding visual appears.
+- **Verify:** T — storage UI shows reduced resource count; S — state machine shows PLACE → CONSTRUCTING; V — scaffolding PackedScene is visible
+
+**AC-02: Invalid Placement Blocked**
+**GIVEN** a building placement tile is invalid (occupied, impassable, out of bounds, or blocked by resource), **WHEN** the player attempts to confirm placement, **THEN** placement is blocked, the ghost shows a red tint, and a tooltip displays the specific block reason.
+- **Verify:** V — ghost tile is red; T — tooltip shows specific reason (e.g., "Tile occupied by another building")
+
+**AC-03: Placement Energy Cost Deduction** [NEW]
+**GIVEN** a player has sufficient resources and energy to place a building, **WHEN** placement is confirmed, **THEN** the energy cost calculated by Formula 7 is deducted from the Player Character's energy pool, in addition to resource costs.
+- **Example:** Residential House (10 Wood + 3 Stone) at energy_per_resource = 0.10 costs 1 energy. Player with 100 energy → 99 energy after placement.
+- **Verify:** T — player energy bar shows -1; S — PC System energy pool decremented by correct amount
+
+**AC-04: Zero-Energy Placement Blocked** [NEW]
+**GIVEN** a player has sufficient resources but insufficient energy, **WHEN** the player attempts to confirm placement, **THEN** placement is blocked, the ghost shows a red tint, and the tooltip displays "Not enough energy."
+- **Verify:** T — tooltip text "Not enough energy"; V — ghost is red
+
+**AC-05: Storage Area Instant Construction** [NEW]
+**GIVEN** a Storage Area is placed (cost: 0 resources, 0 energy), **WHEN** placement is confirmed, **THEN** the Storage Area enters OPERATING state immediately (no CONSTRUCTING phase), with 0 ticks of construction progress required.
+- **Verify:** S — state machine goes PLACE → OPERATING directly; V — no scaffolding visual appears
+
+### Construction
+
+**AC-06: Construction Progress**
+**GIVEN** a building is in CONSTRUCTING state, **WHEN** accumulated ticks reach the build_time threshold, **THEN** the building transitions to OPERATING state, scaffolding disappears, and a construction completion notification appears.
+- **Verify:** S — state machine shows CONSTRUCT → OPERATING; V — scaffolding removed; T — notification "[Building] construction complete!"
+
+**AC-07: Construction Paused When Game Paused**
+**GIVEN** a building is in CONSTRUCTING state and the game is paused, **WHEN** time passes in real life, **THEN** construction progress does NOT advance (accumulated_ticks remains unchanged).
+- **Verify:** S — accumulated_ticks stays constant across real-time seconds while paused
+
+**AC-08: Construction Demolished Before Completion** [NEW]
+**GIVEN** a building is in CONSTRUCTING state (e.g., Lumber Camp at 100/200 ticks), **WHEN** the player demolishes the partially-constructed building, **THEN** the building is destroyed, no resources are refunded, and all construction progress is lost.
+- **Verify:** S — building removed from registry; T — "No resources refunded" in demolition dialog; no resource items returned to storage
+
+### Production & Operation
+
+**AC-09: Production Cycle Starts**
+**GIVEN** a production building is in OPERATING state with all required inputs available and an NPC assigned, **WHEN** the next tick cycle fires, **THEN** the building deducts inputs from storage and begins a production cycle.
+- **Verify:** S — production_cycle_ticks resets to 0; T — building status shows "Producing"; storage UI shows reduced input resources
+
+**AC-10: Blocked State (Missing Input)**
+**GIVEN** a production building is missing a required input (resource, tool, or NPC), **WHEN** the tick cycle fires, **THEN** the building enters BLOCKED state and shows a yellow indicator with the missing item shown in the tooltip.
+- **Verify:** V — yellow circle indicator with !; T — tooltip lists missing item (e.g., "Missing: NPC assigned")
+
+**AC-11: Unblock on Input Available**
+**GIVEN** a production building is BLOCKED, **WHEN** the missing input becomes available (resource deposited or NPC assigned), **THEN** the building automatically transitions back to OPERATING on the next tick cycle without player action.
+- **Verify:** S — state machine shows BLOCKED → OPERATING without player input; V — indicator changes from yellow to green
+
+**AC-12: Distance-Based Output (Concrete Values)** [REVISED]
+**GIVEN** a Lumber Camp (base_output = 5) is at distance 10 from its assigned storage with penalty_factor = 0.03, **WHEN** it completes a production cycle, **THEN** the deposited output equals 3.
+- **Calculation:** `distance_modifier = max(0.50, 1.00 - 10 × 0.03) = 0.70`; `production_output = floor(5 × 0.70) = 3`
+- **Verify:** T — storage UI shows 3 Wood deposited (not 5); S — building state log shows output = 3
+
+**AC-13: Zero Output at Distance Floor** [NEW]
+**GIVEN** a Lumber Camp (base_output = 5) is at distance 25 or greater from storage (hitting the distance modifier floor of 0.50), **WHEN** it completes a production cycle, **THEN** the deposited output equals 2.
+- **Calculation:** `distance_modifier = max(0.50, 1.00 - 25 × 0.03) = 0.50`; `production_output = floor(5 × 0.50) = 2`
+- **Verify:** T — storage UI shows 2 Wood deposited
+
+**AC-14: Distance-Based Cycle Duration (Concrete Values)** [REVISED]
+**GIVEN** a Lumber Camp (base_cycle_ticks = 100) is at distance 10 from storage with travel_penalty = 0.02, **WHEN** it starts a production cycle, **THEN** the cycle duration equals 120 ticks.
+- **Calculation:** `floor(100 × (1.00 + 10 × 0.02)) = floor(120) = 120`
+- **Verify:** S — production_cycle_ticks reaches 120 before cycle completes
+
+### Stalled State
+
+**AC-15: Stalled When Storage Full**
+**GIVEN** a production building completes a production cycle and storage is at capacity, **WHEN** the building attempts to deposit output, **THEN** the building enters STALLED state, shows a red pulsing indicator, and the tooltip displays "Storage full."
+- **Verify:** V — red pulsing circle (1Hz); T — tooltip says "Storage full"; S — state = STALLED
+
+**AC-16: Unstall When Storage Capacity Increases**
+**GIVEN** a building is STALLED with held output, **WHEN** storage gains capacity (items moved out or storage demolished/replaced), **THEN** the building deposits its held output on the next tick cycle and transitions back to OPERATING.
+- **Verify:** S — state changes STALLED → OPERATING; T — held output appears in storage
+
+**AC-17: Stalled Output Is Never Discarded**
+**GIVEN** a building has been STALLED for any duration, **WHEN** the building's tick cycle fires, **THEN** the held output is NOT discarded — it remains held until storage has room or the building is demolished.
+- **Verify:** S — held_output value unchanged regardless of ticks elapsed; no discard event fired
+
+**AC-18: Stalled Building Demolished With Held Output**
+**GIVEN** a building is STALLED holding output (e.g., 3 Wood), **WHEN** the player demolishes the building, **THEN** the building is destroyed, the held output is discarded (not returned to storage), no resources are refunded, and the building is removed from the registry.
+- **Verify:** S — building removed from registry; T — no held output returned to any storage; no resource refund
+
+### Demolition & NPCs
+
+**AC-19: Demolition (No Refund)**
+**GIVEN** a player initiates demolition on any building via the interaction panel, **WHEN** the player confirms in the demolition dialog, **THEN** the building is destroyed, no resources are refunded, the assigned NPC is released, and all pending cycles are cancelled.
+- **Verify:** S — building removed from registry; T — "No resources refunded" shown; NPC shows "unassigned" in NPC UI
+
+**AC-20: Residential House First NPC Spawn**
+**GIVEN** a Residential House completes construction, **WHEN** the construction completes, **THEN** 1 NPC spawns immediately and the second-NPC timer starts at 1000 ticks.
+- **Verify:** S — NPC created and assigned to house; S — npc_spawn_timer = 1000; V — spawn animation (silhouette wave) on house sprite
+
+**AC-21: Residential House Second NPC Spawn**
+**GIVEN** a Residential House has been in OPERATING state for 1000 ticks with only 1 NPC spawned, **WHEN** the tick counter reaches 1000, **THEN** a second NPC spawns and the timer resets.
+- **Verify:** S — 2 NPCs assigned to house; S — npc_spawn_timer = 0; V — spawn animation on house; no third NPC spawns
+
+**AC-22: Residential House NPC Hard Cap** [NEW]
+**GIVEN** a Residential House has 2 NPCs spawned and the timer has reset, **WHEN** the npc_spawn_timer reaches 1000 again, **THEN** no third NPC spawns — the house maintains exactly 2 NPCs.
+- **Verify:** S — npc_spawn_2_available returns true only once; NPC count for house = 2 regardless of elapsed time; state machine prevents repeated spawn
+
+### Tile & Storage Interactions
+
+**AC-23: Resource Tile Removal**
+**GIVEN** a building is placed on a clearable resource tile, **WHEN** placement succeeds, **THEN** the resource is permanently removed from the tile and the building's foundation occupies that tile.
+- **Verify:** S — resource entry removed from Grid System ResourceLayer at (x, y); clicking the tile shows no resource info
+
+**AC-24: Storage Container Demolished**
+**GIVEN** a production building's storage container is demolished, **WHEN** the container is removed from the Inventory System, **THEN** the building receives a notification, enters BLOCKED state, and displays "No storage assigned" in the tooltip.
+- **Verify:** T — tooltip shows "No storage assigned"; V — yellow indicator; S — state = BLOCKED with missing_storage flag
+
+**AC-25: Deterministic Resource Ordering**
+**GIVEN** two production buildings assigned to the same storage, **WHEN** both need the same limited resource on the same tick cycle and only one unit is available, **THEN** the building with the lower building_id receives the resource first (deterministic ordering).
+- **Example:** Building #3 and Building #7 both need 1 Stone; only 1 Stone available. Building #3 gets it.
+- **Verify:** S — Building #3 state = OPERATING, Building #7 state = BLOCKED (missing stone); ordering is reproducible across load/unload
+

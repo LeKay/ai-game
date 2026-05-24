@@ -1,8 +1,8 @@
 ---
 name: prototyper
+model: qwen-3.6-35b-sovereign
 description: "Rapid prototyping specialist for pre-production. Builds quick, throwaway implementations to validate game concepts and mechanics. Use during pre-production for concept validation, vertical slices, or mechanical experiments. Standards are intentionally relaxed for speed."
 tools: Read, Glob, Grep, Write, Edit, Bash
-model: sonnet
 maxTurns: 25
 isolation: worktree
 ---

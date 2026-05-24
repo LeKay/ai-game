@@ -1,5 +1,6 @@
 ---
 name: skill-improve
+model: qwen-3.6-35b-sovereign
 description: "Improve a skill using a test-fix-retest loop. Runs static checks, proposes targeted fixes, rewrites the skill, re-tests, and keeps or reverts based on score change."
 argument-hint: "[skill-name]"
 user-invocable: true

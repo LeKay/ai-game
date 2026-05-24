@@ -1,5 +1,6 @@
 ---
 name: team-live-ops
+model: qwen-3.6-35b-sovereign
 description: "Orchestrate the live-ops team for post-launch content planning: coordinates live-ops-designer, economy-designer, analytics-engineer, community-manager, writer, and narrative-director to design and plan a season, event, or live content update."
 argument-hint: "[season name or event description]"
 user-invocable: true

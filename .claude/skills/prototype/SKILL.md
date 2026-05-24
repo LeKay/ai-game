@@ -1,5 +1,6 @@
 ---
 name: prototype
+model: qwen-3.6-35b-sovereign
 description: "Rapid prototyping workflow. Skips normal standards to quickly validate a game concept or mechanic. Produces throwaway code and a structured prototype report."
 argument-hint: "[concept-description] [--review full|lean|solo]"
 user-invocable: true

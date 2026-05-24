@@ -1,5 +1,6 @@
 ---
 name: changelog
+model: qwen-3.6-35b-sovereign
 description: "Auto-generates a changelog from git commits, sprint data, and design documents. Produces both internal and player-facing versions."
 argument-hint: "[version|sprint-number]"
 user-invocable: true
@@ -7,7 +8,6 @@ allowed-tools: Read, Glob, Grep, Bash, Write
 context: |
   !git log --oneline -30 2>/dev/null
   !git tag --list --sort=-v:refname 2>/dev/null | head -5
-model: haiku
 ---
 
 ## Phase 1: Parse Arguments

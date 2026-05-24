@@ -1,5 +1,6 @@
 ---
 name: team-combat
+model: qwen-3.6-35b-sovereign
 description: "Orchestrate the combat team: coordinates game-designer, gameplay-programmer, ai-programmer, technical-artist, sound-designer, and qa-tester to design, implement, and validate a combat feature end-to-end."
 argument-hint: "[combat feature description]"
 user-invocable: true

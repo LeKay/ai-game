@@ -1,8 +1,8 @@
 ---
 name: community-manager
+model: qwen-3.6-35b-sovereign
 description: "The community manager owns player-facing communication: patch notes, social media posts, community updates, player feedback collection, bug report triage from players, and crisis communication. They translate between development team and player community."
 tools: Read, Glob, Grep, Write, Edit, Task
-model: haiku
 maxTurns: 10
 disallowedTools: Bash
 ---

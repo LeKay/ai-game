@@ -1,8 +1,8 @@
 ---
 name: ai-programmer
+model: qwen-3.6-35b-sovereign
 description: "The AI Programmer implements game AI systems: behavior trees, state machines, pathfinding, perception systems, decision-making, and NPC behavior. Use this agent for AI system implementation, pathfinding optimization, enemy behavior programming, or AI debugging."
 tools: Read, Glob, Grep, Write, Edit, Bash
-model: sonnet
 maxTurns: 20
 ---
 

@@ -1,5 +1,6 @@
 ---
 name: content-audit
+model: qwen-3.6-35b-sovereign
 description: "Audit GDD-specified content counts against implemented content. Identifies what's planned vs built."
 argument-hint: "[system-name | --summary | (no arg = full audit)]"
 user-invocable: true

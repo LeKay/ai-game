@@ -1,5 +1,6 @@
 ---
 name: test-helpers
+model: qwen-3.6-35b-sovereign
 description: "Generate engine-specific test helper libraries for the project's test suite. Reads existing test patterns and produces tests/helpers/ with assertion utilities, factory functions, and mock objects tailored to the project's systems. Reduces boilerplate in new test files."
 argument-hint: "[system-name | all | scaffold]"
 user-invocable: true
