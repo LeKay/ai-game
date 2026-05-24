@@ -1,5 +1,6 @@
 ---
 name: tech-debt
+model: qwen-3.6-35b-sovereign
 description: "Track, categorize, and prioritize technical debt across the codebase. Scans for debt indicators, maintains a debt register, and recommends repayment scheduling."
 argument-hint: "[scan|add|prioritize|report]"
 user-invocable: true

@@ -1,5 +1,6 @@
 ---
 name: reverse-document
+model: qwen-3.6-35b-sovereign
 description: "Generate design or architecture documents from existing implementation. Works backwards from code/prototypes to create missing planning docs."
 argument-hint: "<type> <path> (e.g., 'design src/gameplay/combat' or 'architecture src/core')"
 user-invocable: true

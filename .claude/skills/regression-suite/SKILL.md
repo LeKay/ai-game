@@ -1,5 +1,6 @@
 ---
 name: regression-suite
+model: qwen-3.6-35b-sovereign
 description: "Map test coverage to GDD critical paths, identify fixed bugs without regression tests, flag coverage drift from new features, and maintain tests/regression-suite.md. Run after implementing a bug fix or before a release gate."
 argument-hint: "[update | audit | report]"
 user-invocable: true

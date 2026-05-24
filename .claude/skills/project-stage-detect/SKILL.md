@@ -1,10 +1,10 @@
 ---
 name: project-stage-detect
+model: qwen-3.6-35b-sovereign
 description: "Automatically analyze project state, detect stage, identify gaps, and recommend next steps based on existing artifacts. Use when user asks 'where are we in development', 'what stage are we in', 'full project audit'."
 argument-hint: "[optional: role filter like 'programmer' or 'designer']"
 user-invocable: true
 allowed-tools: Read, Glob, Grep, Bash, Write
-model: haiku
 # Read-only diagnostic skill — no specialist agent delegation needed
 ---
 

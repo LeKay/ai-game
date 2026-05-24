@@ -1,5 +1,6 @@
 ---
 name: start
+model: qwen-3.6-35b-sovereign
 description: "First-time onboarding — asks where you are, then guides you to the right workflow. No assumptions."
 argument-hint: "[no arguments]"
 user-invocable: true

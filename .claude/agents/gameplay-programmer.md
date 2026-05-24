@@ -1,8 +1,8 @@
 ---
 name: gameplay-programmer
+model: qwen-3.6-35b-sovereign
 description: "The Gameplay Programmer implements game mechanics, player systems, combat, and interactive features as code. Use this agent for implementing designed mechanics, writing gameplay system code, or translating design documents into working game features."
 tools: Read, Glob, Grep, Write, Edit, Bash
-model: sonnet
 maxTurns: 20
 ---
 

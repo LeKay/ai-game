@@ -1,5 +1,6 @@
 ---
 name: design-system
+model: qwen-3.6-35b-sovereign
 description: "Guided, section-by-section GDD authoring for a single game system. Gathers context from existing docs, walks through each required section collaboratively, cross-references dependencies, and writes incrementally to file."
 argument-hint: "<system-name> [--review full|lean|solo]"
 user-invocable: true

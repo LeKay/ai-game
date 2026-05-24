@@ -1,0 +1,27 @@
+[gd_scene load_steps=1 format=3]
+
+[node name="GameWorld" type="Control"]
+
+[node name="Viewport" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color( 0.2, 0.3, 0.2, 1 )
+
+[node name="Placeholder" type="Label" parent="."]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -15.0
+offset_right = 100.0
+offset_bottom = 15.0
+layout_mode = 1
+theme_override_font_sizes/font_size = 18
+theme_override_color/font_color = Color( 0.94, 0.93, 0.9, 1 )
+text = "Game World"
+horizontal_alignment = 1

@@ -1,5 +1,6 @@
 ---
 name: map-systems
+model: qwen-3.6-35b-sovereign
 description: "Decompose a game concept into individual systems, map dependencies, prioritize design order, and create the systems index."
 argument-hint: "[next | system-name] [--review full|lean|solo]"
 user-invocable: true

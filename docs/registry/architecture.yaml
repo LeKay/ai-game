@@ -30,7 +30,7 @@
 #   Superseded entries:     Grep pattern="status: superseded"
 
 version: 1
-last_updated: ""
+last_updated: 2026-05-13
 
 # ─── STATE OWNERSHIP ─────────────────────────────────────────────────────────
 # Who is the authoritative owner of each piece of shared game state.
@@ -43,7 +43,137 @@ last_updated: ""
 # interface: how other systems access this state (read-only property, method call,
 #   signal, shared resource, etc.) — this is the contract other ADRs depend on.
 
-state_ownership: []
+state_ownership:
+  - state: tick_count
+    status: active
+    owner_system: tick-system
+    adr: docs/architecture/adr-0001-tick-system.md
+    interface: "TickSystem.tick_count (read-only int, [0, 999] within day)"
+    write_access: tick-system-only
+    referenced_by:
+      - docs/architecture/adr-0001-tick-system.md
+    added: 2026-05-13
+
+  - state: current_day
+    status: active
+    owner_system: tick-system
+    adr: docs/architecture/adr-0001-tick-system.md
+    interface: "TickSystem.current_day (read-only int, [1, ∞))"
+    write_access: tick-system-only
+    referenced_by:
+      - docs/architecture/adr-0001-tick-system.md
+    added: 2026-05-13
+
+  - state: speed_multiplier
+    status: active
+    owner_system: tick-system
+    adr: docs/architecture/adr-0001-tick-system.md
+    interface: "TickSystem.speed_multiplier (read-only float, {0.5, 1.0, 2.0})"
+    write_access: tick-system-only
+    referenced_by:
+      - docs/architecture/adr-0001-tick-system.md
+    added: 2026-05-13
+
+  - state: is_paused
+    status: active
+    owner_system: tick-system
+    adr: docs/architecture/adr-0001-tick-system.md
+    interface: "TickSystem.is_paused (read-only bool)"
+    write_access: tick-system-only
+    referenced_by:
+      - docs/architecture/adr-0001-tick-system.md
+    added: 2026-05-13
+
+  - state: resource_definitions
+    status: active
+    owner_system: resource-registry
+    adr: docs/architecture/adr-0002-resource-data-registry.md
+    interface: "Dictionary[StringName, _ResourceDefinition] — write: ResourceRegistry.load_from_file(); read: ResourceRegistry.get_definition(id) (O(1), returns null if not found)"
+    write_access: resource-registry-only
+    referenced_by:
+      - docs/architecture/adr-0002-resource-data-registry.md
+    added: 2026-05-13
+
+  - state: active_input_context
+    status: active
+    owner_system: input-context
+    adr: docs/architecture/adr-0003-input-context-system.md
+    interface: "InputContext.get_current() -> Context (WORLD_ACTIVE / UI_ACTIVE / PAUSED), stack-based push/pop"
+    write_access: input-context-only
+    referenced_by:
+      - docs/architecture/adr-0003-input-context-system.md
+    added: 2026-05-13
+
+  - state: terrain_layer
+    status: active
+    owner_system: grid-map
+    adr: docs/architecture/adr-0004-grid-map-data-model.md
+    interface: "Array[Array[TileType]] — 30×30, write-once at generation, immutable after _ready()"
+    write_access: map-generator-only
+    referenced_by:
+      - docs/architecture/adr-0004-grid-map-data-model.md
+    added: 2026-05-13
+
+  - state: resource_layer
+    status: active
+    owner_system: grid-map
+    adr: docs/architecture/adr-0004-grid-map-data-model.md
+    interface: "Array[Array[ResourceTileData?]] — 30×30, mutable: MapGenerator (generation), Building System (clear on placement)"
+    write_access: grid-map-only
+    referenced_by:
+      - docs/architecture/adr-0004-grid-map-data-model.md
+    added: 2026-05-13
+
+  - state: building_layer
+    status: active
+    owner_system: grid-map
+    adr: docs/architecture/adr-0004-grid-map-data-model.md
+    interface: "Array[Array[String?]] — 30×30, mutable: Building System (place/remove)"
+    write_access: grid-map-only
+    referenced_by:
+      - docs/architecture/adr-0004-grid-map-data-model.md
+    added: 2026-05-13
+
+  - state: grid_dimensions
+    status: active
+    owner_system: grid-map
+    adr: docs/architecture/adr-0004-grid-map-data-model.md
+    interface: "const GRID_SIZE: int = 30 (read-only constant)"
+    write_access: grid-map-only
+    referenced_by:
+      - docs/architecture/adr-0004-grid-map-data-model.md
+    added: 2026-05-13
+
+  - state: inventory_containers
+    status: active
+    owner_system: inventory-system
+    adr: docs/architecture/adr-0005-inventory-item-state-machine.md
+    interface: "Dictionary[StringName, InventoryContainer] — write: InventorySystem.create_container(); read: InventorySystem.get_container(id) (O(1), returns null if not found)"
+    write_access: inventory-system-only
+    referenced_by:
+      - docs/architecture/adr-0005-inventory-item-state-machine.md
+    added: 2026-05-13
+
+  - state: transit_items
+    status: active
+    owner_system: inventory-system
+    adr: docs/architecture/adr-0005-inventory-item-state-machine.md
+    interface: "Dictionary[StringName, TransitItem] — write: InventorySystem.start_transport(); read: InventorySystem.get_in_transit(id); mutable: decrement remaining_ticks on ticks_advanced()"
+    write_access: inventory-system-only
+    referenced_by:
+      - docs/architecture/adr-0005-inventory-item-state-machine.md
+    added: 2026-05-13
+
+  - state: npc_instances
+    status: active
+    owner_system: npc-system
+    adr: docs/architecture/adr-0009-npc-state-machine.md
+    interface: "Dictionary[StringName, NPCInstance] — write: NPCSystem (assign, release, recruit); read: get_npc_state(), get_available_npcs(), get_npc_count(), get_assigned_npc(), find_nearest_idle_npc()"
+    write_access: npc-system-only
+    referenced_by:
+      - docs/architecture/adr-0009-npc-state-machine.md
+    added: 2026-05-13
+    revised: ""
 
 # Example:
 #
@@ -71,7 +201,349 @@ state_ownership: []
 #
 # pattern options: signal | direct_call | event_bus | shared_resource | rpc | none
 
-interfaces: []
+interfaces:
+  - contract: tick_event_dispatch
+    status: active
+    pattern: signal
+    producer: tick-system
+    consumers:
+      - production-system
+      - npc-system
+      - hunger-system
+      - inventory-storage-system
+      - hud-system
+    adr: docs/architecture/adr-0001-tick-system.md
+    signal_signatures:
+      - ticks_advanced(delta_ticks: int)
+      - day_transition(days_elapsed: int)
+      - speed_changed(new_speed: float)
+      - pause_state_changed(is_paused: bool)
+    referenced_by:
+      - docs/architecture/adr-0001-tick-system.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: resource_lookup
+    status: active
+    pattern: direct_call
+    producer: resource-registry
+    consumers:
+      - inventory-system
+      - building-system
+      - hunger-system
+      - trading-system
+      - hud-system
+      - npc-system
+    adr: docs/architecture/adr-0002-resource-data-registry.md
+    signal_signatures:
+      - get_definition(id: StringName) -> _ResourceDefinition?
+      - is_valid_id(id: StringName) -> bool
+      - get_all_by_category(category: ResourceCategory) -> Array[_ResourceDefinition]
+    referenced_by:
+      - docs/architecture/adr-0002-resource-data-registry.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: context_management
+    status: active
+    pattern: direct_call
+    producer: input-context
+    consumers:
+      - player-character-system
+      - camera-system
+      - hud-system
+      - building-system
+      - all-ui-systems
+    adr: docs/architecture/adr-0003-input-context-system.md
+    signal_signatures:
+      - get_current() -> Context
+      - push_context(ctx: Context) -> void
+      - pop_context() -> void
+      - is_context_active(ctx: Context) -> bool
+    referenced_by:
+      - docs/architecture/adr-0003-input-context-system.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: grid_queries
+    status: active
+    pattern: direct_call
+    producer: grid-map
+    consumers:
+      - player-character-system
+      - building-system
+      - camera-system
+      - hud-system
+      - npc-system
+      - logistics-system
+      - production-system
+    adr: docs/architecture/adr-0004-grid-map-data-model.md
+    signal_signatures:
+      - "get_terrain(x: int, y: int) -> TileType"
+      - "get_resource(x: int, y: int) -> ResourceTileData?"
+      - "get_building(x: int, y: int) -> String?"
+      - "get_tile_view(x: int, y: int) -> TileView"
+      - "is_passable(x: int, y: int) -> bool"
+    referenced_by:
+      - docs/architecture/adr-0004-grid-map-data-model.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: grid_mutations
+    status: active
+    pattern: direct_call
+    producer: grid-map
+    consumers:
+      - building-system
+    adr: docs/architecture/adr-0004-grid-map-data-model.md
+    signal_signatures:
+      - "validate_placement(tile: Vector2i, building_type: BuildingType) -> PlacementResult"
+      - "place_building(tile: Vector2i, building_type: BuildingType) -> void"
+      - "remove_building(tile: Vector2i) -> void"
+    referenced_by:
+      - docs/architecture/adr-0004-grid-map-data-model.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: grid_spatial
+    status: active
+    pattern: direct_call
+    producer: grid-map
+    consumers:
+      - logistics-system
+      - building-system
+      - npc-system
+      - camera-system
+    adr: docs/architecture/adr-0004-grid-map-data-model.md
+    signal_signatures:
+      - "distance_between(a: Vector2i, b: Vector2i, metric: DistanceMetric) -> float"
+      - "get_tiles_in_radius(cx: int, cy: int, radius: int) -> Array[Vector2i]"
+      - "get_neighbors(x: int, y: int, diagonals: bool) -> Array[Vector2i]"
+      - "find_nearest(x: int, y: int, resource_id: StringName, max_radius: int) -> Vector2i?"
+    referenced_by:
+      - docs/architecture/adr-0004-grid-map-data-model.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: storage_queries
+    status: active
+    pattern: direct_call
+    producer: inventory-system
+    consumers:
+      - building-system
+      - production-system
+      - hud-system
+      - save-load-system
+    adr: docs/architecture/adr-0005-inventory-item-state-machine.md
+    signal_signatures:
+      - "get_container(id: StringName) -> InventoryContainer?"
+      - "get_all_containers() -> Array[InventoryContainer]"
+      - "get_resource_quantity(container_id: StringName, resource_id: StringName) -> int"
+      - "get_occupied_slots(container_id: StringName) -> int"
+      - "get_slot_data(container_id: StringName, slot_index: int) -> SlotData?"
+    referenced_by:
+      - docs/architecture/adr-0005-inventory-item-state-machine.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: inventory_mutations
+    status: active
+    pattern: direct_call
+    producer: inventory-system
+    consumers:
+      - building-system
+      - production-system
+      - hunger-system
+    adr: docs/architecture/adr-0005-inventory-item-state-machine.md
+    signal_signatures:
+      - "try_deposit(container_id: StringName, resource_id: StringName, quantity: int) -> DepositResult"
+      - "try_consume(container_id: StringName, resource_id: StringName, quantity: int) -> ConsumeResult"
+      - "consume_food(daily_requirement: int) -> FoodConsumptionResult"
+      - "start_transport(source_tile: Vector2i, target_container_id: StringName, quantity: int) -> StringName"
+    referenced_by:
+      - docs/architecture/adr-0005-inventory-item-state-machine.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: transport_signals
+    status: active
+    pattern: signal
+    producer: inventory-system
+    consumers:
+      - hud-system
+      - player-character-system
+    adr: docs/architecture/adr-0005-inventory-item-state-machine.md
+    signal_signatures:
+      - "storage_changed(container_id: StringName)"
+      - "transport_started(transit_id: StringName)"
+      - "transport_completed(transit_id: StringName)"
+      - "transport_failed(transit_id: StringName)"
+      - "container_capacity_changed(container_id: StringName, old_capacity: int, new_capacity: int)"
+    referenced_by:
+      - docs/architecture/adr-0005-inventory-item-state-machine.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: save_load_orchestration
+    status: active
+    pattern: direct_call
+    producer: world-save-manager
+    consumers:
+      - tick-system
+      - grid-map
+      - inventory-system
+      - building-system
+      - npc-system
+      - hunger-system
+      - player-character-system
+    adr: docs/architecture/adr-0006-save-load-format-and-serialization-order.md
+    signal_signatures:
+      - "register_save_system(name: String) -> void"
+      - "save_game(slot: int) -> bool"
+      - "load_game(slot: int) -> bool"
+      - "delete_save(slot: int) -> bool"
+      - "get_save_info(slot: int) -> Dictionary?"
+    referenced_by:
+      - docs/architecture/adr-0006-save-load-format-and-serialization-order.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: energy_state
+    status: active
+    pattern: direct_call
+    producer: player-character-system
+    consumers:
+      - hud-system
+      - hunger-system
+    adr: docs/architecture/adr-0007-player-character-energy-model.md
+    signal_signatures:
+      - "get_current_energy() -> int"
+      - "get_max_energy() -> int"
+      - "is_depleted() -> bool"
+    referenced_by:
+      - docs/architecture/adr-0007-player-character-energy-model.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: building_system
+    status: active
+    pattern: direct_call
+    producer: building-system
+    consumers:
+      - npc-system
+      - hud-system
+      - save-load-system
+    adr: docs/architecture/adr-0008-building-placement-production.md
+    signal_signatures:
+      - "initiate_build(building_type: BuildingType, x: int, y: int) -> PlacementResult"
+      - "demolish_building(building_id: String) -> bool"
+      - "assign_npc(building_id: String, npc_id: StringName) -> AssignmentResult"
+      - "release_npc(building_id: String) -> void"
+      - "get_building_state(building_id: String) -> State"
+      - "get_building_count() -> int"
+      - "get_building_tile(building_id: String) -> Vector2i"
+      - "is_building_at_tile(x: int, y: int) -> String?"
+    referenced_by:
+      - docs/architecture/adr-0008-building-placement-production.md
+      - docs/architecture/adr-0009-npc-state-machine.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: container_removed
+    status: active
+    pattern: signal
+    producer: inventory-system
+    consumers:
+      - building-system
+      - npc-system
+    adr: docs/architecture/adr-0008-building-placement-production.md
+    signal_signatures:
+      - "on_container_removed(container_id: StringName)"
+    referenced_by:
+      - docs/architecture/adr-0005-inventory-item-state-machine.md
+      - docs/architecture/adr-0008-building-placement-production.md
+      - docs/architecture/adr-0009-npc-state-machine.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: npc_management
+    status: active
+    pattern: direct_call
+    producer: npc-system
+    consumers:
+      - building-system
+      - save-load-system
+    adr: docs/architecture/adr-0009-npc-state-machine.md
+    signal_signatures:
+      - "assign_npc(npc_id: StringName, building_id: StringName, storage_id: StringName) -> AssignmentResult"
+      - "release_npc(npc_id: StringName) -> void"
+      - "recruit_npc(home_base: Vector2i) -> StringName"
+      - "get_npc_state(npc_id: StringName) -> TaskState"
+      - "get_npc_position(npc_id: StringName) -> Vector2i"
+      - "get_available_npcs() -> Array[StringName]"
+      - "get_npc_count() -> int"
+      - "get_assigned_npc(building_id: StringName) -> StringName?"
+      - "find_nearest_idle_npc(target_tile: Vector2i) -> StringName?"
+    referenced_by:
+      - docs/architecture/adr-0009-npc-state-machine.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: npc_signals
+    status: active
+    pattern: signal
+    producer: npc-system
+    consumers:
+      - building-system
+      - hud-system
+    adr: docs/architecture/adr-0009-npc-state-machine.md
+    signal_signatures:
+      - "npc_assigned(npc_id: StringName, building_id: StringName)"
+      - "npc_released(npc_id: StringName)"
+      - "npc_recruited(npc_id: StringName, home_base: Vector2i)"
+      - "npc_travel_started(npc_id: StringName, destination: Vector2i, ticks_total: int)"
+      - "npc_travel_completed(npc_id: StringName, destination: Vector2i)"
+      - "npc_production_ready(npc_id: StringName, building_id: StringName)"
+      - "npc_deposit_completed(npc_id: StringName, storage_id: StringName)"
+      - "npc_storage_full(npc_id: StringName, storage_id: StringName)"
+      - "npc_returned_home(npc_id: StringName)"
+    referenced_by:
+      - docs/architecture/adr-0009-npc-state-machine.md
+    added: 2026-05-13
+    revised: ""
+
+  - state: hunger_debuff
+    status: active
+    owner_system: hunger-system
+    adr: docs/architecture/adr-0010-hunger-system-and-debuff-stacking.md
+    interface: "HungerSystem.hunger_debuff_active (read-only bool), get_hunger_tick_multiplier() -> float, get_hunger_output_multiplier() -> float"
+    write_access: hunger-system-only
+    referenced_by:
+      - docs/architecture/adr-0010-hunger-system-and-debuff-stacking.md
+    added: 2026-05-13
+    revised: ""
+
+  - state: logistics_routes
+    status: active
+    owner_system: logistics-system
+    adr: docs/architecture/adr-0011-logistics-system.md
+    interface: "Array[LogisticsRoute] — write: LogisticsSystem.create_route(), delete_route(), toggle_route(); read: get_active_routes(), get_route_status(), get_route_efficiency()"
+    write_access: logistics-system-only
+    referenced_by:
+      - docs/architecture/adr-0011-logistics-system.md
+    added: 2026-05-19
+    revised: ""
+
+  - state: carrier_states
+    status: active
+    owner_system: logistics-system
+    adr: docs/architecture/adr-0011-logistics-system.md
+    interface: "LogisticsRoute.carrier_state (int, 0=IDLE/1=TRAVEL_TO_SOURCE/2=AT_SOURCE/3=WAITING_SOURCE/4=TRAVEL_TO_DESTINATION/5=AT_DESTINATION/6=WAITING_DESTINATION/7=RETURN_HOME) — read-only: get_route_status()"
+    write_access: logistics-system-only
+    referenced_by:
+      - docs/architecture/adr-0011-logistics-system.md
+    added: 2026-05-19
+    revised: ""
 
 # Example:
 #
@@ -100,7 +572,181 @@ interfaces: []
 # Register a budget when an ADR explicitly claims a frame time allocation.
 # The registry lets /architecture-review verify the total doesn't exceed the target.
 
-performance_budgets: []
+performance_budgets:
+  - system: tick-system
+    status: active
+    target_fps: 60
+    total_frame_budget_ms: 16.6
+    budget_ms: 0.1
+    adr: docs/architecture/adr-0001-tick-system.md
+    notes: "_process() accumulator + signal emission. At 60fps/1x, ticks fire ~10x/sec. Signal calls: ~100/sec for 10 subscribers. set_process(false) when paused = zero cost."
+    referenced_by:
+      - docs/architecture/adr-0001-tick-system.md
+    added: 2026-05-13
+    revised: ""
+
+  - system: resource-registry
+    status: active
+    target_fps: 60
+    total_frame_budget_ms: 16.6
+    budget_ms: 0.002
+    adr: docs/architecture/adr-0002-resource-data-registry.md
+    notes: "One-time startup load (~30 resources). 1-2ms JSON parse + validate. O(1) dictionary lookup at runtime. Zero frame-time impact."
+    referenced_by:
+      - docs/architecture/adr-0002-resource-data-registry.md
+    added: 2026-05-13
+    revised: ""
+
+  - system: input-context
+    status: active
+    target_fps: 60
+    total_frame_budget_ms: 16.6
+    budget_ms: 0.001
+    adr: docs/architecture/adr-0003-input-context-system.md
+    notes: "_unhandled_input() fires only for unhandled events. O(1) stack peek. Dictionary lookup for debounce. Negligible cost."
+    referenced_by:
+      - docs/architecture/adr-0003-input-context-system.md
+    added: 2026-05-13
+    revised: ""
+
+  - system: grid-map
+    status: active
+    target_fps: 60
+    total_frame_budget_ms: 16.6
+    budget_ms: 0.1
+    adr: docs/architecture/adr-0004-grid-map-data-model.md
+    notes: "50 get_tile_view() calls per frame at 60fps = < 0.1ms total. O(n) spatial queries bounded by 30x30 grid. No optimization needed for VS."
+    referenced_by:
+      - docs/architecture/adr-0004-grid-map-data-model.md
+    added: 2026-05-13
+    revised: ""
+
+  - system: inventory-system
+    status: active
+    target_fps: 60
+    total_frame_budget_ms: 16.6
+    budget_ms: 0.05
+    adr: docs/architecture/adr-0005-inventory-item-state-machine.md
+    notes: "_process() handles transit timer countdown (typically 0-2 active transports). First-fit scan bounded by 150 slots max. Dictionary lookups O(1). consume_food() fires once per day — full container scan is startup-only cost, not per-frame."
+    referenced_by:
+      - docs/architecture/adr-0005-inventory-item-state-machine.md
+    added: 2026-05-13
+    revised: ""
+
+  - system: player-character-system
+    status: active
+    target_fps: 60
+    total_frame_budget_ms: 16.6
+    budget_ms: 0.5
+    adr: docs/architecture/adr-0007-player-character-energy-model.md
+    notes: "_process() accumulator for action tick advancement, HUD signal emission on progress update. Idle: < 0.1ms (signal subscription overhead only). At 144fps fast-forward, accumulator pattern prevents per-frame processing."
+    referenced_by:
+      - docs/architecture/adr-0007-player-character-energy-model.md
+    added: 2026-05-13
+    revised: ""
+
+  - system: building-system
+    status: active
+    target_fps: 60
+    total_frame_budget_ms: 16.6
+    budget_ms: 1.0
+    adr: docs/architecture/adr-0008-building-placement-production.md
+    notes: "Single-loop iteration over all_buildings on ticks_advanced() event (~20µs per building). No per-scene _process(). At 50 buildings: ~1ms total. At 144fps fast-forward, ticks_advanced() driven by TickSystem, not frame rate."
+    referenced_by:
+      - docs/architecture/adr-0008-building-placement-production.md
+    added: 2026-05-13
+    revised: ""
+
+  - system: npc-system
+    status: active
+    target_fps: 60
+    total_frame_budget_ms: 16.6
+    budget_ms: 0.05
+    adr: docs/architecture/adr-0009-npc-state-machine.md
+    notes: "Single-loop iteration over all_npcs on ticks_advanced() event (~6µs per NPC). At 8 NPCs: ~0.05ms total. Idle states (IDLE/WORK_AT_BUILDING/DEPOSIT/WAITING) have zero timer work (state match returns immediately). At 144fps fast-forward, ticks_advanced() driven by TickSystem, not frame rate."
+    referenced_by:
+      - docs/architecture/adr-0009-npc-state-machine.md
+    added: 2026-05-13
+    revised: ""
+
+  - system: hunger-system
+    status: active
+    target_fps: 60
+    total_frame_budget_ms: 16.6
+    budget_ms: 0.002
+    adr: docs/architecture/adr-0010-hunger-system-and-debuff-stacking.md
+    notes: "Zero per-frame cost — no _process(). consume_food() fires once per day transition (~10x/sec at 1x speed). Single NPC count query + InventorySystem.consume_food call + state comparison = ~0.002ms total. hunger_state_changed signal fires once per day transition."
+    referenced_by:
+      - docs/architecture/adr-0010-hunger-system-and-debuff-stacking.md
+    added: 2026-05-13
+    revised: ""
+
+  - system: logistics-system
+    status: active
+    target_fps: 60
+    total_frame_budget_ms: 16.6
+    budget_ms: 0.1
+    adr: docs/architecture/adr-0011-logistics-system.md
+    notes: "Single-loop iteration over all active carriers on ticks_advanced() event (~0.01ms per carrier per tick). At 10 carriers × 10 ticks/sec (1x speed): ~1ms/sec total. O(1) state evaluation per carrier. No per-frame _process() cost; all work driven by TickSystem.on_tick_complete() coordinator."
+    referenced_by:
+      - docs/architecture/adr-0011-logistics-system.md
+    added: 2026-05-19
+    revised: ""
+
+  - contract: hunger_debuff
+    status: active
+    pattern: direct_call
+    producer: hunger-system
+    consumers:
+      - player-character-system
+      - building-system
+      - hud-system
+    adr: docs/architecture/adr-0010-hunger-system-and-debuff-stacking.md
+    signal_signatures:
+      - "get_hunger_tick_multiplier() -> float"
+      - "get_hunger_output_multiplier() -> float"
+      - "is_hunger_debuff_active() -> bool"
+    referenced_by:
+      - docs/architecture/adr-0010-hunger-system-and-debuff-stacking.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: hunger_signals
+    status: active
+    pattern: signal
+    producer: hunger-system
+    consumers:
+      - building-system
+      - hud-system
+    adr: docs/architecture/adr-0010-hunger-system-and-debuff-stacking.md
+    signal_signatures:
+      - "hunger_state_changed(new_tick_multiplier: float)"
+      - "hunger_display_updated(fed: bool, food_available: int, food_required: int)"
+    referenced_by:
+      - docs/architecture/adr-0010-hunger-system-and-debuff-stacking.md
+    added: 2026-05-13
+    revised: ""
+
+  - contract: logistics_routes
+    status: active
+    pattern: direct_call
+    producer: logistics-system
+    consumers:
+      - building-system
+      - hud-system
+      - transportation-ui
+    adr: docs/architecture/adr-0011-logistics-system.md
+    signal_signatures:
+      - "get_active_routes() -> Array[LogisticsRoute]"
+      - "get_route_status(npc_id: StringName) -> int"
+      - "get_route_efficiency(route: LogisticsRoute) -> float"
+      - "create_route(source: StringName, destination: StringName, npc: StringName, route_type: RouteType) -> Result"
+      - "delete_route(npc_id: StringName) -> void"
+      - "toggle_route(npc_id: StringName, active: bool) -> void"
+    referenced_by:
+      - docs/architecture/adr-0011-logistics-system.md
+    added: 2026-05-19
+    revised: ""
 
 # Example:
 #
@@ -131,7 +777,50 @@ performance_budgets: []
 # Register an API decision when the choice is non-obvious and other ADRs might
 # make a different choice for the same purpose without knowing this was decided.
 
-api_decisions: []
+api_decisions:
+  - purpose: resource_data_storage
+    status: active
+    api: "JSON file + FileAccess + JSON.parse()"
+    not: Godot .tres/.resource files   # explicitly banned for resource definitions
+    adr: docs/architecture/adr-0002-resource-data-registry.md
+    reason: "Resources must be editable outside Godot (spreadsheet, config tools). JSON is human-editable, version-control friendly, and schema-versionable."
+    referenced_by:
+      - docs/architecture/adr-0002-resource-data-registry.md
+    added: 2026-05-13
+    revised: ""
+
+  - purpose: grid_rendering
+    status: active
+    api: TileMapLayer (3 nodes: TerrainLayer, ResourceOverlay, BuildingSlots)
+    not: TileMap   # explicitly banned — deprecated since Godot 4.3
+    adr: docs/architecture/adr-0004-grid-map-data-model.md
+    reason: "TileMap is deprecated since Godot 4.3. TileMapLayer provides one node per layer, scene-level tile rotation (4.6), and is the required rendering approach."
+    referenced_by:
+      - docs/architecture/adr-0004-grid-map-data-model.md
+    added: 2026-05-13
+    revised: ""
+
+  - purpose: save_file_format
+    status: active
+    api: "JSON file + FileAccess.store_string() + JSON.parse()"
+    not: "Godot .tres (ResourceSaver), binary format"
+    adr: docs/architecture/adr-0006-save-load-format-and-serialization-order.md
+    reason: "Save files must be human-readable for debugging, version-control friendly for diffs, and editable for testing. JSON provides all three. Binary and .tres are opaque and not debuggable without custom tooling."
+    referenced_by:
+      - docs/architecture/adr-0006-save-load-format-and-serialization-order.md
+    added: 2026-05-13
+    revised: ""
+
+  - purpose: autoload_access
+    status: active
+    api: Engine.get_singleton("Name")
+    not: get_node("/root/Name")   # works but less type-safe and less clear
+    adr: docs/architecture/adr-0007-player-character-energy-model.md
+    reason: "All Foundation systems use Autoload singletons. Engine.get_singleton() is the standard and type-safe access method in Godot 4.x. get_node() works but is more error-prone and less readable."
+    referenced_by:
+      - docs/architecture/adr-0007-player-character-energy-model.md
+    added: 2026-05-13
+    revised: ""
 
 # Example:
 #
@@ -157,7 +846,48 @@ api_decisions: []
 # Register a pattern when an ADR explicitly bans it AND other ADRs might
 # unknowingly use it (i.e., it's a tempting but wrong approach for this project).
 
-forbidden_patterns: []
+forbidden_patterns:
+  - pattern: hardcoded_resource_definitions
+    status: active
+    description: "Systems must not define resource definitions inline in GDScript code. All resource lookups must go through ResourceRegistry.get_definition()."
+    why: "Hardcoded definitions are not data-driven, cannot be edited by designers without code changes, have no schema versioning, and create inconsistency when multiple systems define their own resource lists."
+    adr: docs/architecture/adr-0002-resource-data-registry.md
+    added: 2026-05-13
+
+  - pattern: input_without_context_gate
+    status: active
+    description: "Systems must not bypass InputContext for player action input. All game-level input must pass through InputContext._unhandled_input() for context gating. Direct calls to Input.is_action_just_pressed() are only valid for UI Control node shortcuts (which consume events before _unhandled_input reaches InputContext)."
+    why: "Without context gating, world actions (WASD, interact) would be processed when UI menus are open, causing unintended state mutations. The InputContext stack ensures actions are only processed in the correct context."
+    adr: docs/architecture/adr-0003-input-context-system.md
+    added: 2026-05-13
+
+  - pattern: tilemap_get_cell_readback
+    status: active
+    description: "Gameplay code must NEVER call TileMapLayer.get_cell() to determine game state. The GridMap data model is the single source of truth; TileMapLayer is a pure rendering target. If gameplay data doesn't match rendering, it's a rendering bug, not a data bug."
+    why: "Readback from renderer creates coupling between game logic and rendering. If renderer state diverges from game data (lag, timing, bugs), gameplay behaves incorrectly. All state must come from the GridMap data arrays."
+    adr: docs/architecture/adr-0004-grid-map-data-model.md
+    added: 2026-05-13
+
+  - pattern: hardcoded_stack_limits
+    status: active
+    description: "InventorySystem must never define stack_limit values inline. All stack limits must come from ResourceRegistry.get_definition(id).stack_limit. This ensures balance changes, new resource types, and prototype tuning only require JSON edits, not code changes."
+    why: "Hardcoded stack limits in inventory logic duplicate the resource definition source of truth. If the inventory and resource systems disagree on stack_limit, stacking behavior becomes incorrect — items may overflow or underfill slots."
+    adr: docs/architecture/adr-0005-inventory-item-state-machine.md
+    added: 2026-05-13
+
+  - pattern: circular_serialization
+    status: active
+    description: "A system's serialize() method must NOT call another system's serialize() method. Each system serializes its own state to a plain Dictionary. WorldSaveManager orchestrates collection and merging — systems do not orchestrate each other."
+    why: "Circular serialization creates hidden dependencies between systems that break when save order changes or when a system is added/removed. The orchestrator must be the single coordinator. If System A calls System B's serialize(), then System A becomes tightly coupled to System B's save format."
+    adr: docs/architecture/adr-0006-save-load-format-and-serialization-order.md
+    added: 2026-05-13
+
+  - pattern: direct_dictionary_access_in_deserialize
+    status: active
+    description: "Deserializers must use Dictionary.get(key, default) with fallback defaults — NEVER direct access via data[key]. Direct access raises an error on missing keys, which will happen when loading older saves that lack new fields added in later game versions."
+    why: "Older save files will not contain keys for systems or fields added in future updates. data[key] access crashes on missing keys. Dictionary.get(key, default) returns the default value instead, enabling graceful schema migration."
+    adr: docs/architecture/adr-0006-save-load-format-and-serialization-order.md
+    added: 2026-05-13
 
 # Example:
 #

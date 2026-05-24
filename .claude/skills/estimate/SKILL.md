@@ -1,5 +1,6 @@
 ---
 name: estimate
+model: qwen-3.6-35b-sovereign
 description: "Estimates task effort by analyzing complexity, dependencies, historical velocity, and risk factors. Produces a structured estimate with confidence levels."
 argument-hint: "[task-description]"
 user-invocable: true

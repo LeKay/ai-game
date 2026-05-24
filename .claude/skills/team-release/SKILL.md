@@ -1,5 +1,6 @@
 ---
 name: team-release
+model: qwen-3.6-35b-sovereign
 description: "Orchestrate the release team: coordinates release-manager, qa-lead, devops-engineer, and producer to execute a release from candidate to deployment."
 argument-hint: "[version number or 'next']"
 user-invocable: true

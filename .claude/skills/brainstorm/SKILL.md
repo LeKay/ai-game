@@ -1,5 +1,6 @@
 ---
 name: brainstorm
+model: qwen-3.6-35b-sovereign
 description: "Guided game concept ideation — from zero idea to a structured game concept document. Uses professional studio ideation techniques, player psychology frameworks, and structured creative exploration."
 argument-hint: "[genre or theme hint, or 'open'] [--review full|lean|solo]"
 user-invocable: true

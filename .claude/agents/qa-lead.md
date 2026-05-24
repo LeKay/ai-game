@@ -1,8 +1,8 @@
 ---
 name: qa-lead
+model: qwen-3.6-35b-sovereign
 description: "The QA Lead owns test strategy, bug triage, release quality gates, and testing process design. Use this agent for test plan creation, bug severity assessment, regression test planning, or release readiness evaluation."
 tools: Read, Glob, Grep, Write, Edit, Bash
-model: sonnet
 maxTurns: 20
 skills: [bug-report, release-checklist]
 memory: project

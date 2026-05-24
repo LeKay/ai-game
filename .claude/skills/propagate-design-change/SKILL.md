@@ -1,5 +1,6 @@
 ---
 name: propagate-design-change
+model: qwen-3.6-35b-sovereign
 description: "When a GDD is revised, scans all ADRs and the traceability index to identify which architectural decisions are now potentially stale. Produces a change impact report and guides the user through resolution."
 argument-hint: "[path/to/changed-gdd.md]"
 user-invocable: true

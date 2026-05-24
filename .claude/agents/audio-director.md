@@ -1,8 +1,8 @@
 ---
 name: audio-director
+model: qwen-3.6-35b-sovereign
 description: "The Audio Director owns the sonic identity of the game: music direction, sound design philosophy, audio implementation strategy, and mix balance. Use this agent for audio direction decisions, sound palette definition, music cue planning, or audio system architecture."
 tools: Read, Glob, Grep, Write, Edit, WebSearch
-model: sonnet
 maxTurns: 20
 disallowedTools: Bash
 memory: project

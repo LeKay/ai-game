@@ -1,5 +1,6 @@
 ---
 name: design-review
+model: qwen-3.6-35b-sovereign
 description: "Reviews a game design document for completeness, internal consistency, implementability, and adherence to project design standards. Run this before handing a design document to programmers."
 argument-hint: "[path-to-design-doc] [--depth full|lean|solo]"
 user-invocable: true

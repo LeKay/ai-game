@@ -1,5 +1,6 @@
 ---
 name: team-level
+model: qwen-3.6-35b-sovereign
 description: "Orchestrate level design team: level-designer + narrative-director + world-builder + art-director + systems-designer + qa-tester for complete area/level creation."
 argument-hint: "[level name or area to design]"
 user-invocable: true

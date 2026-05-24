@@ -1,10 +1,10 @@
 ---
 name: review-all-gdds
+model: qwen-3.6-35b-sovereign
 description: "Holistic cross-GDD consistency and game design review. Reads all system GDDs simultaneously and checks for contradictions between them, stale references, ownership conflicts, formula incompatibilities, and game design theory violations (dominant strategies, economic imbalance, cognitive overload, pillar drift). Run after all MVP GDDs are written, before architecture begins."
 argument-hint: "[focus: full | consistency | design-theory | since-last-review]"
 user-invocable: true
 allowed-tools: Read, Glob, Grep, Write, Bash, AskUserQuestion, Task
-model: opus
 ---
 
 # Review All GDDs

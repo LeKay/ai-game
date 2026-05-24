@@ -1,5 +1,6 @@
 ---
 name: soak-test
+model: qwen-3.6-35b-sovereign
 description: "Generate a soak test protocol for extended play sessions. Defines what to observe, measure, and log during long play sessions to surface slow leaks, fatigue effects, and edge cases that only appear after sustained play. Primarily used in Polish and Release phases."
 argument-hint: "[duration: 30m | 1h | 2h | 4h] [focus: memory | stability | balance | all]"
 user-invocable: true

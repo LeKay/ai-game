@@ -25,32 +25,827 @@
 # STATUS VALUES: active | deprecated | superseded-by: TR-[system]-NNN
 
 version: 1
-last_updated: ""
+last_updated: "2026-05-19"
 
-requirements: []
+requirements:
 
-# --- EXAMPLE ENTRIES (remove when first real entries are added) ---
-#
-# - id: TR-combat-001
-#   system: combat
-#   gdd: design/gdd/combat-system.md
-#   requirement: "Player takes damage from enemies based on attack power minus defence"
-#   created: 2026-03-10
-#   revised: ""
-#   status: active
-#
-# - id: TR-combat-002
-#   system: combat
-#   gdd: design/gdd/combat-system.md
-#   requirement: "Combo window timing is 0.4 seconds between hits"
-#   created: 2026-03-10
-#   revised: "2026-04-01"
-#   status: active
-#
-# - id: TR-combat-003
-#   system: combat
-#   gdd: design/gdd/combat-system.md
-#   requirement: "Old damage formula using raw stats"
-#   created: 2026-03-10
-#   revised: ""
-#   status: superseded-by: TR-combat-001
+  # --- TICK SYSTEM ---
+
+  - id: TR-tick-001
+    system: tick
+    gdd: design/gdd/tick-system.md
+    requirement: "1000-tick/day float accumulator with fractional remainder carry"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0001
+
+  - id: TR-tick-002
+    system: tick
+    gdd: design/gdd/tick-system.md
+    requirement: "3 speed modes (0.5x/1x/2x) + pause state"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0001
+
+  - id: TR-tick-003
+    system: tick
+    gdd: design/gdd/tick-system.md
+    requirement: "Tick signal emission to all subscribers per tick"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0001
+
+  - id: TR-tick-004
+    system: tick
+    gdd: design/gdd/tick-system.md
+    requirement: "Manual action tick advancement (player actions cost ticks)"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0001
+
+  - id: TR-tick-005
+    system: tick
+    gdd: design/gdd/tick-system.md
+    requirement: "Day-transition event at 1000 ticks + auto-pause"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0001
+
+  - id: TR-tick-006
+    system: tick
+    gdd: design/gdd/tick-system.md
+    requirement: "Determinism: same seed produces same tick sequence"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0001
+
+  # --- RESOURCE SYSTEM ---
+
+  - id: TR-res-001
+    system: res
+    gdd: design/gdd/resource-system.md
+    requirement: "JSON data registry at res://data/resources.json loaded at startup"
+    domain: Foundation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0002
+
+  - id: TR-res-002
+    system: res
+    gdd: design/gdd/resource-system.md
+    requirement: "Resource definition: id, display_name, category, stack_limit, icon_path (required); subcategory, weight, base_value, max_charge, description, tags (optional)"
+    domain: Foundation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0002
+
+  - id: TR-res-003
+    system: res
+    gdd: design/gdd/resource-system.md
+    requirement: "Schema validation on load with fail-fast: invalid data halts loading"
+    domain: Foundation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0002
+
+  - id: TR-res-004
+    system: res
+    gdd: design/gdd/resource-system.md
+    requirement: "O(1) id-keyed runtime lookup via Dictionary[StringName, ResourceDefinition]"
+    domain: Foundation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0002
+
+  - id: TR-res-005
+    system: res
+    gdd: design/gdd/resource-system.md
+    requirement: "Two categories: Consumables (consumables) / Production Goods (production goods)"
+    domain: Foundation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0002
+
+  # --- INPUT SYSTEM ---
+
+  - id: TR-input-001
+    system: input
+    gdd: design/gdd/input-system.md
+    requirement: "Unified action mapping: keyboard+mouse and gamepad map to the same semantic actions"
+    domain: Foundation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0003
+
+  - id: TR-input-002
+    system: input
+    gdd: design/gdd/input-system.md
+    requirement: "Input context switching: WORLD_ACTIVE / UI_ACTIVE / PAUSED"
+    domain: Foundation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0003
+
+  - id: TR-input-003
+    system: input
+    gdd: design/gdd/input-system.md
+    requirement: "Context transition on UI open/close via push_context/pop_context"
+    domain: Foundation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0003
+
+  - id: TR-input-004
+    system: input
+    gdd: design/gdd/input-system.md
+    requirement: "Input debouncing for rapid presses (0.25s timer-based gate)"
+    domain: Foundation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0003
+
+  - id: TR-input-005
+    system: input
+    gdd: design/gdd/input-system.md
+    requirement: "Mouse position to world tile coordinate conversion"
+    domain: Foundation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0003
+    notes: "Delegated to CameraController.get_tile_at_screen() — InputContext provides gating only"
+
+  # --- HUD SYSTEM ---
+  # These TRs were added in 2026-05-14 /architecture-review run.
+  # No ADR exists yet — see architecture-review-2026-05-14.md for details.
+
+  - id: TR-hud-001
+    system: hud
+    gdd: design/gdd/hud-system.md
+    requirement: "Real-time display: player energy bar, current day, time-of-day, per-resource counts from storage"
+    domain: Presentation
+    created: "2026-05-14"
+    revised: ""
+    status: active
+    adr: ""
+    notes: "No ADR — see architecture-review-2026-05-14.md Gap #1"
+
+  - id: TR-hud-002
+    system: hud
+    gdd: design/gdd/hud-system.md
+    requirement: "Days-of-food-remaining calculation and display in HUD"
+    domain: Presentation
+    created: "2026-05-14"
+    revised: ""
+    status: active
+    adr: ""
+    notes: "No ADR — see architecture-review-2026-05-14.md Gap #2"
+
+  - id: TR-hud-003
+    system: hud
+    gdd: design/gdd/hud-system.md
+    requirement: "Notification system: building complete, NPC hungry, storage full events displayed"
+    domain: Presentation
+    created: "2026-05-14"
+    revised: ""
+    status: active
+    adr: ""
+    notes: "No ADR — see architecture-review-2026-05-14.md Gap #3"
+
+  - id: TR-hud-004
+    system: hud
+    gdd: design/gdd/hud-system.md
+    requirement: "Time controls in HUD: speed buttons (0.5x/1x/2x) and pause button"
+    domain: Presentation
+    created: "2026-05-14"
+    revised: ""
+    status: active
+    adr: ""
+    notes: "No ADR — see architecture-review-2026-05-14.md Gap #4"
+
+  - id: TR-hud-005
+    system: hud
+    gdd: design/gdd/hud-system.md
+    requirement: "Dual-focus aware UI: mouse hover and keyboard/gamepad focus handled separately (Godot 4.6)"
+    domain: Presentation
+    created: "2026-05-14"
+    revised: ""
+    status: active
+    adr: ""
+    notes: "No ADR — MEDIUM engine risk (Godot 4.6 dual-focus) — see architecture-review-2026-05-14.md Gap #5"
+
+  # --- PLAYER CHARACTER SYSTEM ---
+
+  - id: TR-player-001
+    system: player
+    gdd: design/gdd/player-character-system.md
+    requirement: "Energy pool (0–100) with tick-based drain and depletion penalties"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-player-002
+    system: player
+    gdd: design/gdd/player-character-system.md
+    requirement: "Manual action dispatch (forage/pick/craft/chop/mine/transport) each with defined energy and tick cost"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-player-003
+    system: player
+    gdd: design/gdd/player-character-system.md
+    requirement: "Drag-and-drop transport: carry item from tile to storage container"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-player-004
+    system: player
+    gdd: design/gdd/player-character-system.md
+    requirement: "Energy depletion penalty at 0 energy: 2x tick cost + ceil(output * 0.5) minimum 1"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-player-005
+    system: player
+    gdd: design/gdd/player-character-system.md
+    requirement: "Food-to-energy refill: consuming food restores energy based on food type"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-player-006
+    system: player
+    gdd: design/gdd/player-character-system.md
+    requirement: "Architect Mode lock: after first NPC assigned, manual gathering is permanently locked out"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  # --- GRID/MAP SYSTEM ---
+
+  - id: TR-grid-001
+    system: grid
+    gdd: design/gdd/grid-map-system.md
+    requirement: "30x30 tile grid with 3-layer data model: TerrainLayer (write-once), ResourceLayer (mutable), BuildingLayer (mutable)"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0004
+
+  - id: TR-grid-002
+    system: grid
+    gdd: design/gdd/grid-map-system.md
+    requirement: "TileMapLayer rendering (TileMap is deprecated since 4.3 and must not be used)"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0004
+
+  - id: TR-grid-003
+    system: grid
+    gdd: design/gdd/grid-map-system.md
+    requirement: "Perlin noise procedural terrain generation at world init with deterministic seed"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0004
+
+  - id: TR-grid-004
+    system: grid
+    gdd: design/gdd/grid-map-system.md
+    requirement: "Single validate_placement gate checks all 3 layers before any building placement"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0004
+
+  - id: TR-grid-005
+    system: grid
+    gdd: design/gdd/grid-map-system.md
+    requirement: "Manhattan and Euclidean distance functions exposed as grid API"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0004
+
+  - id: TR-grid-006
+    system: grid
+    gdd: design/gdd/grid-map-system.md
+    requirement: "World-space to tile-coordinate and tile-coordinate to world-space conversion"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0004
+
+  # --- INVENTORY/STORAGE SYSTEM ---
+
+  - id: TR-inv-001
+    system: inv
+    gdd: design/gdd/inventory-storage-system.md
+    requirement: "InventoryContainer with first-fit stacking algorithm: extend existing slots then fill empty"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0005
+
+  - id: TR-inv-002
+    system: inv
+    gdd: design/gdd/inventory-storage-system.md
+    requirement: "Resource state machine: DROPPED -> IN_TRANSIT -> STORED/LOST"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0005
+
+  - id: TR-inv-003
+    system: inv
+    gdd: design/gdd/inventory-storage-system.md
+    requirement: "Transport cost formulas: energy = 2*qty + 1*distance, time = 5*distance"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0005
+
+  - id: TR-inv-004
+    system: inv
+    gdd: design/gdd/inventory-storage-system.md
+    requirement: "Hunger consumption priority: withdraw from lowest-quantity storage bin first"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0005
+
+  - id: TR-inv-005
+    system: inv
+    gdd: design/gdd/inventory-storage-system.md
+    requirement: "Storage Area (50 slots, free) and Storage Building (150 slots, 8 Wood + 2 Stone)"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0005
+
+  - id: TR-inv-006
+    system: inv
+    gdd: design/gdd/inventory-storage-system.md
+    requirement: "Items can only be consumed from STORED state — not DROPPED or IN_TRANSIT"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ADR-0005
+
+  # --- BUILDING SYSTEM ---
+
+  - id: TR-build-001
+    system: build
+    gdd: design/gdd/building-system.md
+    requirement: "1-tile footprint building placement with atomic resource cost deduction from storage"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-build-002
+    system: build
+    gdd: design/gdd/building-system.md
+    requirement: "4 building types for Vertical Slice: Storage Area, Storage Building, Residential House, Lumber Camp"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-build-003
+    system: build
+    gdd: design/gdd/building-system.md
+    requirement: "Tick-based build time progression: CONSTRUCTING state with accumulated tick counter"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-build-004
+    system: build
+    gdd: design/gdd/building-system.md
+    requirement: "Production cycle tick advancement for Lumber Camp: input consume -> cycle timer -> output deposit"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-build-005
+    system: build
+    gdd: design/gdd/building-system.md
+    requirement: "NPC assignment slot per production building; building cannot produce without assigned NPC"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  # --- CAMERA SYSTEM ---
+
+  - id: TR-cam-001
+    system: cam
+    gdd: design/gdd/camera-system.md
+    requirement: "Pan via WASD/arrow keys, middle mouse drag, and edge scrolling"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+    notes: "ADR deferred — Camera2D API stable; GDD fully specifies behavior"
+
+  - id: TR-cam-002
+    system: cam
+    gdd: design/gdd/camera-system.md
+    requirement: "Zoom range [0.85, 2.0] anchored to mouse cursor position"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+    notes: "ADR deferred — Camera2D zoom API stable"
+
+  - id: TR-cam-003
+    system: cam
+    gdd: design/gdd/camera-system.md
+    requirement: "Boundary clamping: camera cannot scroll outside world tile bounds"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+    notes: "ADR deferred"
+
+  - id: TR-cam-004
+    system: cam
+    gdd: design/gdd/camera-system.md
+    requirement: "Screen-to-tile coordinate conversion: mouse click to tile Vector2i"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+    notes: "ADR deferred; owned by CameraController.get_tile_at_screen()"
+
+  - id: TR-cam-005
+    system: cam
+    gdd: design/gdd/camera-system.md
+    requirement: "Fit-to-view reset on R key: camera frames the full 30x30 world"
+    domain: Core
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+    notes: "ADR deferred"
+
+  # --- NPC SYSTEM ---
+
+  - id: TR-npc-001
+    system: npc
+    gdd: design/gdd/npc-system.md
+    requirement: "NPC data model: id, name, state, assignment, current_task"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-npc-002
+    system: npc
+    gdd: design/gdd/npc-system.md
+    requirement: "NPC state machine: IDLE -> TRAVEL_TO_BUILDING -> WORK -> TRAVEL_TO_STORAGE -> DEPOSIT -> RETURN_TO_BASE"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-npc-003
+    system: npc
+    gdd: design/gdd/npc-system.md
+    requirement: "Manhattan-distance abstract movement (no NavigationAgent2D for Vertical Slice; ticks_per_tile = 3.0)"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-npc-004
+    system: npc
+    gdd: design/gdd/npc-system.md
+    requirement: "Recruitment: up to 2 NPCs per Residential House; first spawns on completion, second after 1 day"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-npc-005
+    system: npc
+    gdd: design/gdd/npc-system.md
+    requirement: "Task assignment: player assigns NPC to a building via building UI"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-npc-006
+    system: npc
+    gdd: design/gdd/npc-system.md
+    requirement: "Building demolition disconnects NPC assignment and returns NPC to IDLE pool"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  # --- HUNGER SYSTEM ---
+
+  - id: TR-hunger-001
+    system: hunger
+    gdd: design/gdd/hunger-system.md
+    requirement: "Daily food consumption: 1 food unit per NPC per day at day transition"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-hunger-002
+    system: hunger
+    gdd: design/gdd/hunger-system.md
+    requirement: "Hunger debuff: 2x tick cost for all NPC travel and work when food runs out"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-hunger-003
+    system: hunger
+    gdd: design/gdd/hunger-system.md
+    requirement: "Combined debuff: hunger debuff multiplies with energy depletion penalty for 4x total tick cost cap"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-hunger-004
+    system: hunger
+    gdd: design/gdd/hunger-system.md
+    requirement: "Food unit conversion: Berry = 1 unit, Bread = 2 units"
+    domain: Feature
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  # --- HUD SYSTEM ---
+
+  - id: TR-hud-001
+    system: hud
+    gdd: design/gdd/hud-system.md
+    requirement: "Real-time display: player energy bar, current day, time-of-day, per-resource counts from storage"
+    domain: Presentation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-hud-002
+    system: hud
+    gdd: design/gdd/hud-system.md
+    requirement: "Days-of-food-remaining calculation and display in HUD"
+    domain: Presentation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-hud-003
+    system: hud
+    gdd: design/gdd/hud-system.md
+    requirement: "Notification system: building complete, NPC hungry, storage full events displayed"
+    domain: Presentation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-hud-004
+    system: hud
+    gdd: design/gdd/hud-system.md
+    requirement: "Time controls in HUD: speed buttons (0.5x/1x/2x) and pause button"
+    domain: Presentation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+
+  - id: TR-hud-005
+    system: hud
+    gdd: design/gdd/hud-system.md
+    requirement: "Dual-focus aware UI: mouse hover and keyboard/gamepad focus handled separately (Godot 4.6)"
+    domain: Presentation
+    created: "2026-05-13"
+    revised: ""
+    status: active
+    adr: ""
+    notes: "ADR-0003 covers input context gating; HUD ADR needed for dual-focus implementation details"
+
+  # --- LOGISTICS SYSTEM ---
+
+  - id: TR-logistics-001
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "Three route types: Storage→Production, Production→Storage, Production→Production"
+    domain: Feature
+    created: "2026-05-19"
+    revised: ""
+    status: active
+    adr: ADR-0011
+
+  - id: TR-logistics-002
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "Carrier FSM with 8 states (IDLE, TRAVEL_TO_SOURCE, AT_SOURCE, WAITING_SOURCE, TRAVEL_TO_DESTINATION, AT_DESTINATION, WAITING_DESTINATION, RETURN_HOME)"
+    domain: Feature
+    created: "2026-05-19"
+    revised: ""
+    status: active
+    adr: ADR-0011
+
+  - id: TR-logistics-003
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "Slot-based assignment: at most one carrier per slot type per building"
+    domain: Feature
+    created: "2026-05-19"
+    revised: ""
+    status: active
+    adr: ADR-0011
+
+  - id: TR-logistics-004
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "Travel time = Manhattan distance × ticks_per_tile (Formula 1)"
+    domain: Feature
+    created: "2026-05-19"
+    revised: ""
+    status: active
+    adr: ADR-0011
+
+  - id: TR-logistics-005
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "Building status integration: BLOCKED (no input carrier), STALLED (no output carrier/destination full), OPERATING"
+    domain: Feature
+    created: "2026-05-19"
+    revised: ""
+    status: active
+    adr: ADR-0011
+
+  - id: TR-logistics-006
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "Carrier waiting timeout: 300 ticks at WAITING_SOURCE and WAITING_DESTINATION before returning home and deactivating route"
+    domain: Feature
+    created: "2026-05-19"
+    revised: ""
+    status: active
+    adr: ADR-0011
+
+  - id: TR-logistics-007
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "NPC ↔ Logistics precedence: carrier FSM fully replaces NPC task cycle during carrier assignment"
+    domain: Feature
+    created: "2026-05-19"
+    revised: ""
+    status: active
+    adr: ADR-0011
+
+  - id: TR-logistics-008
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "Save/load persistence of routes and carrier states as part of game state"
+    domain: Feature
+    created: "2026-05-19"
+    revised: ""
+    status: active
+    adr: ADR-0011
+
+  - id: TR-logistics-009
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "Route visualization: always-visible lines with color/status encoding, hover tooltips, line patterns for colorblind accessibility"
+    domain: Presentation
+    created: "2026-05-19"
+    revised: ""
+    status: active
+    adr: ADR-0011
+
+  - id: TR-logistics-010
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "Route efficiency and carrier count formulas (Formulas 3 and 4)"
+    domain: Feature
+    created: "2026-05-19"
+    revised: ""
+    status: active
+    adr: ADR-0011
+
+  - id: TR-logistics-011
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "NPC carrier management interface: set_carrier_state, get_npc_position, is_available, release_npc, on_npc_at_location"
+    domain: Feature
+    created: "2026-05-19"
+    revised: ""
+    status: active
+    adr: ADR-0011
+
+  - id: TR-logistics-012
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "Carrier deposit/withdraw operations via InventorySystem.try_deposit() and try_consume()"
+    domain: Feature
+    created: "2026-05-19"
+    revised: ""
+    status: active
+    adr: ADR-0011
+
+  - id: TR-logistics-013
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "Building slot definitions: validated via create_route() slot availability check"
+    domain: Feature
+    created: "2026-05-19"
+    revised: ""
+    status: active
+    adr: ADR-0011
+
+  - id: TR-logistics-014
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "Transportation Management UI for route creation, editing, and deletion"
+    domain: Presentation
+    created: "2026-05-19"
+    revised: ""
+    status: active
+    adr: ""
+    notes: "UX spec exists at design/ux/transportation.md — no ADR needed for UI spec; see UX spec acceptance criteria for implementation guidance"

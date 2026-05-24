@@ -1,0 +1,899 @@
+# Art Bible — "From Scratch" Village Builder
+
+> **Created:** 2026-05-14
+> **Engine:** Godot 4.6 (2D Top-Down)
+> **Platform:** PC (Steam / Epic)
+> **Art Direction:** Functional Clarity
+
+---
+
+## Section 1: Visual Identity Statement
+
+> **"The production chain reads first — every visual element exists to make a step clear."**
+
+### Principle 1: Manual-to-Automated Progression
+Assets encode their production tier through material language: rough-hewn and warm for manual stages, clean and metallic for automated ones.
+- **Design test:** *Can a player identify the production tier of any building at a glance without reading its name?*
+- **Pillar served:** Earned Automation — makes the progression fantasy visual and immediate.
+
+### Principle 2: Chain Transparency Through Color
+Every production step carries a consistent color signature that flows along the chain, creating a visual language the player learns.
+- **Design test:** *Can a new player follow a complete production chain across the screen using only color cues?*
+- **Pillar served:** Information Transparency — production chains must be debuggable and traceable by color alone.
+
+### Principle 3: Restraint Over Volume
+Visual density follows active player attention; peripheral zones simplify to readable shapes.
+- **Design test:** *Does adding one more decorative element to any screen improve or harm the readability of the active production chain?*
+- **Pillar served:** Optimization Over Expansion — concentrate visual investment where the player is making decisions, simplify elsewhere.
+
+---
+
+## Section 2: Mood & Atmosphere
+
+**Cross-State Relationship Map** — ensures each state feels visually distinct.
+
+| State | Color Temp | Saturation | Contrast | Key Differentiator |
+|-------|-----------|------------|----------|-------------------|
+| Idle/Pause | Neutral 5000K | -20% from base | Low | No flow effects |
+| Exploration | Cool 3500K / warm horizon | Low (fog) | High (localized) | Cool + fog only state |
+| Construction | Warming 4500K→5500K | Medium | Medium-high | Scaffolding + workers |
+| Production | Warm 5500-6000K | High | Low (bright everywhere) | Flow lines (signature) |
+| Bottleneck | Cool-gray 4200K | Low (global desat) | Moderate (flat) | Red warning accent |
+| Victory | Warm 2800-3200K | Very high | High (long shadows) | Golden hour + bloom |
+| Menu/Map | Gradient 6500K→3000K | Medium | Medium | Dusk + vignette + interior lights |
+
+### 1. Idle / Pause
+
+**Primary emotion:** *Clarity.* The player is thinking. The scene is an open board — every element legible, no visual noise.
+
+**Lighting character:** Neutral midday sun, slightly desaturated, flat shadows. 5000K (neutral white). Contrast lowered 15-20% from active states.
+
+**Atmospheric descriptors:** Still / legible / clean / patient / spacious
+
+**Energy level:** Contemplative
+
+**Signature visual element:** *Desaturation wash.* All production-flow effects dissolve instantly. No buildings glow. Only the UI overlay stays vivid — sharp figure-ground boundary between "world" and "plan."
+
+### 2. Exploration (Early Game)
+
+**Primary emotion:** *Quiet uncertainty.* Alone in an unfamiliar place, learning the land. Not scary — just humble.
+
+**Lighting character:** Dawn. Cool blue-gray ambient with warm orange band at the horizon. High contrast between cool shadows (desaturated blues) and warm localized light (fire, first torches).
+
+**Atmospheric descriptors:** Misty / raw / fragile / awakening / uncertain
+
+**Energy level:** Measured, but lean — like held breath
+
+**Signature visual element:** *Volumetric ground fog.* Two fog planes: thick near-ground mist (partially obscures terrain) + thin upper fog (atmospheric depth). Both fade as map knowledge grows. Communicates scarcity and unknown space without a fog-of-war overlay.
+
+### 3. Construction (Mid Game)
+
+**Primary emotion:** *Earned momentum.* Things are going up. Physical proof that planning is paying off.
+
+**Lighting character:** Late morning to early afternoon. Warm directional sunlight from east. Gradually warms from 4500K to 5500K as buildings near completion — subtle warmth shift acts as visual progress signal.
+
+**Atmospheric descriptors:** Bustling / purposeful / provisional / active / grounded
+
+**Energy level:** Active / purposeful — building tension toward a climax
+
+**Signature visual element:** *Construction scaffolding.* Visible scaffolding poles (thin vertical/horizontal raw wood lines), partially laid foundation (uncolored, rough geometry), worker silhouettes at active sites. Raw-wood palette (brown-gray) visually separates "work in progress" from "finished structure." Scaffolding serves as a visual progress bar.
+
+### 4. Production (Core Gameplay)
+
+**Primary emotion:** *Satisfaction.* Systems working together. The player feels clever for building this machine. The emotional payoff.
+
+**Lighting character:** Bright midday. Full-spectrum warm sunlight (5500-6000K). Lowest contrast of all active states. High saturation: green grass, brown earth, blue sky, warm wood tones. World feels alive and abundant.
+
+**Atmospheric descriptors:** Flowing / rhythmic / warm / abundant / alive
+
+**Energy level:** Measured but confident — like a well-oiled machine, not a factory floor
+
+**Signature visual element:** *Color-coded production-flow lines.* Semi-transparent colored ribbons/particle streams on the ground between structures. Grain = golden yellow, flour = pale cream, bread = warm brown, iron ore = steel blue, tools = silver-gray. Lines pulse gently (~2s breathing cycle). Smooth chains = continuous; broken = stuttering/broken lines. This is the single most important visual system in the game.
+
+### 5. Bottleneck / Blocked
+
+**Primary emotion:** *Targeted concern.* "Pay attention here," not "everything is broken." The player feels capable of solving this.
+
+**Lighting character:** Overcast / gray afternoon. Sky desaturated to ~30%. Cool-neutral 4200K. Moderate but flat, directionless contrast — no strong shadows. Subtle unease without darkness.
+
+**Atmospheric descriptors:** Stagnant / heavy / watchful / still / waiting
+
+**Energy level:** Tense but controlled — a clock ticking you haven't noticed yet
+
+**Signature visual element:** *Red warning accent on the blocked chain only.* Flow line turns to muted dark red (rust/oxblood, ~RGB 120,40,40). Pulses slowly (once per 3 seconds). Only the broken chain gets this treatment — avoids alert fatigue. Workers on affected chain have gray idle animation.
+
+### 6. Victory / Progression Milestone
+
+**Primary emotion:** *Warm accomplishment.* Dignified celebration. "The harvest is in," not "we won the championship."
+
+**Lighting character:** Golden hour. Sun at ~20° above horizon. Warm directional light (2800-3200K, strong orange-gold). High contrast with long shadows. Sky: warm orange at horizon → amber → deep blue at zenith. Entire scene bathed in golden tint.
+
+**Atmospheric descriptors:** Golden / celebratory / expansive / luminous / rewarding
+
+**Energy level:** Celebratory — grounded, communal, not frenetic
+
+**Signature visual element:** *Golden particle bloom.* Warm gold particles bloom outward from the milestone structure, drifting upward, fading over ~4 seconds. Localized — sparks from a hearth. After peak, fades to a permanent golden ambient glow on the milestone structure as a lasting trophy.
+
+### 7. Main Menu / Map Screen
+
+**Primary emotion:** *Invitation.* "Come in, there's work to be done." Warm but restrained.
+
+**Lighting character:** Dusk. Deep blue sky at top → warm amber at horizon. Village lit by warm interior light (windows, fires) — small warm points against cooling exterior. Gradient: 6500K (sky) → 3000K (horizon/village lights).
+
+**Atmospheric descriptors:** Welcoming / atmospheric / anticipatory / intimate / story-rich
+
+**Energy level:** Open-ended — the player sets their own pace
+
+**Signature visual element:** *Vignette-framed village diorama.* Stylized diorama view at dusk, framed by darkened edges (warm dark brown vignette). Interior window lights flicker subtly. Thin chimney smoke trails. Map overlay uses parchment-texture base with hand-drawn-style borders.
+
+---
+
+## Section 3: Shape Language
+
+**Design decisions:** Pixel art (32x32 base per tile), slight top-down angle (not flat, not true 3D isometric).
+
+### 1. Character Silhouette Philosophy
+
+**Base shape:** Rectilinear foundation with purposeful irregularity. Head = circle, body = rectangle or trapezoid, one deliberate irregular detail per archetype.
+
+**Manual vs Automated branching:**
+- **Manual gatherers:** Asymmetrical, wider base, visible "tool" silhouette protruding. Asymmetry communicates *human effort*.
+- **Automated buildings:** Symmetrical, tighter proportions, no tool protrusion. Symmetry reads as *efficient* — earned automation.
+
+**Archetype silhouettes (readable at 24x24px):**
+
+| Archetype | Base Shape | Distinguishing Detail |
+|-----------|-----------|----------------------|
+| Player Character | Circle + narrow rectangle | Carry-sack protrusion (offset side) |
+| Lumberjack | Same base | Axe silhouette (L-shape extension) |
+| Miner | Same base | Pickaxe cross-shape |
+| Farmer | Same base | Scythe curve |
+| Carpenter | Same base | Hammer shape |
+
+**Top-down readability rule:** Every character and building silhouette must be recognizable within a 24x24 pixel bounding box.
+
+### 2. Environment Geometry
+
+**Dominant language:** Angular geometry with organic accents. Civilization imposes structure on the wild world.
+
+**Terrain classification through shape:**
+
+| Category | Shape | Player Reads As |
+|----------|-------|-----------------|
+| Resource | Clean geometric clusters (trees in triangle formation) | "Collectible" |
+| Decoration | Organic, irregular, low-contrast (scattered grass tufts) | "Nothing" |
+| Impassable | Jagged, angular, high-contrast (rocky outcrop = irregular polygon) | "Cannot pass" |
+| Path/Road | Perfectly straight, grid-aligned lines | "Connection" |
+
+**Why angular dominates:** Anti-pillar "no procedural sprawl" — rectangles naturally contain themselves. A geometric world reads as organized and intentional. Every new building is a deliberate placement.
+
+**Emotional communication:** Angular world shapes communicate *control* and * deliberation*. The player's civilization imposes straight lines on a world of circles (trees) and jagged edges (rocks). Visual story without words.
+
+### 3. UI Shape Grammar
+
+**Core principle:** Geometric UI with medieval color, NOT medieval shape. Clean rectangles with 2-4px corner radius for panels, sharp rectangles for buttons, rounded rectangles (4px) for tooltips.
+
+**Why non-medieval shapes:** Gothic arches, parchment edges, flourishes compete with world shapes for attention. The UI is an invisible window — the world is the game.
+
+**Functional Clarity hierarchy:**
+
+1. **Production chain elements:** Filled chevrons, thick dashed lines overlay the world. Angular geometry (sharp-pointed arrows, straight lines) — visual equivalent of an electrical schematic.
+2. **Menus/panels:** Pure rectangles, subtle 1px border in muted color. Medieval theme via *color* (earth tones), not *shape*.
+3. **Tooltips:** Rounded rectangles (4px radius) with subtle shadow — ephemeral, light.
+4. **Buttons:** Sharp rectangles. Corner radius micro-interaction: 0px (normal) → 2px (hover) → 4px (active).
+
+**UI-world boundary rule:** UI never echoes the world's angular geometry. World = sharp and intentional; UI = clean and invisible. Creates visual layering where the production chain always reads on top.
+
+### 4. Hero Shapes vs. Supporting Shapes
+
+**The production chain IS the hero shape of every frame.** "The production chain reads first" means the chain itself is what draws the eye.
+
+**Hero shapes (~5% of visible shapes):**
+1. **Flow arrows/connection lines:** Filled chevrons, thick dashed lines overlaying the world. Brightest, most saturated elements.
+2. **Player character:** Largest silhouette, most distinctive shape (carry-sack + tool). Always first shape recognized.
+3. **Buildings with active production:** Brighter color variant + subtle outline pulse. Treatment changes, not shape.
+
+**Supporting shapes (recede):**
+1. **Empty buildings:** Muted color, no outline, minimal detail. Context only.
+2. **Terrain features:** Simple shapes, low contrast. Establish world, indicate resources.
+3. **NPC workers (non-player):** Smaller than PC, no carry-sack. "Part of the building" not "individual actor."
+4. **Decorative elements:** Simple rectangles and circles. Prevent sterile feel.
+
+**Progression through shape treatment:**
+- **Early game:** Player character is the sole hero shape.
+- **Mid game:** Buildings with active chains become heroes alongside PC.
+- **Late game:** The production chain network forms a unified hero shape. System > individual.
+
+---
+
+## Section 4: Color System
+
+### 1. Primary Palette
+
+**World Palette**
+
+| Name | Hex | HSL | Meaning | Context |
+|------|-----|-----|---------|---------|
+| Meadow Green | `#5C8A4D` | 108°, 36%, 41% | Fertility, safety, working land | Default ground tile, meadow biome |
+| Earth Brown | `#7A5C3E` | 28°, 34%, 36% | Stability, honest ground | Dirt paths, building foundations |
+| Stone Gray | `#8A8B8A` | 0°, 0%, 54% | Permanence, infrastructure | Building walls, stone paths, rock deposits |
+| Timber Brown | `#6B5240` | 24°, 32%, 30% | Raw material, medieval handcraft | Building beams, wooden structures, fences |
+
+**Atmosphere / Sky**
+
+| Name | Hex | HSL | Meaning | Context |
+|------|-----|-----|---------|---------|
+| Dawn Sky | `#C8B8A0` | 36°, 25%, 71% | Beginning of possibility, early optimism | Default sky, early game overlay |
+| Overcast | `#A8A8A8` | 0°, 0%, 66% | Bottleneck, stagnation | Bottleneck state overlay |
+| Golden Hour | `#D4A85C` | 38°, 58%, 59% | Victory, success, harvest | Victory state, chain completion |
+
+**UI Structural**
+
+| Name | Hex | HSL | Meaning | Context |
+|------|-----|-----|---------|---------|
+| UI Panel | `#3A3A3A` | 0°, 0%, 23% | UI frame — always present, never competing | Panel backgrounds |
+| UI Border | `#5A5A5A` | 0°, 0%, 35% | Edge separating UI from world | Panel borders, button edges |
+
+### 2. Semantic Color Usage
+
+No combat → all semantics are about production chain state.
+
+| Color | Hex | HSL | Meaning | Use |
+|-------|-----|-----|---------|-----|
+| **Blue** (Action) | `#4A7EA8` | 206°, 39%, 47% | Buildable / Available / "You can do this" | Build preview, placement indicators, action buttons |
+| **Golden Yellow** | `#D4A832` | 42°, 66%, 51% | Grain / Raw harvest / Early chain stage | Grain icons, field markers, harvest indicators |
+| **Pale Cream** | `#E8DCC4` | 40°, 42%, 84% | Flour / Intermediate stage / Transformation in progress | Flour icons, milling output |
+| **Warm Brown** | `#A0724E` | 26°, 35%, 47% | Bread / Final food / Sustenance | Bread icons, bakery output, food storage |
+| **Steel Blue** | `#5A7A8E` | 202°, 22%, 42% | Iron ore / Refined metal / Industrial transition | Iron ore icons, mine indicators |
+| **Silver Gray** | `#B0B0B0` | 0°, 0%, 69% | Tools / Crafted goods / Mid-level production | Tool icons, toolmaker output |
+| **Red** (Error) | `#C45A4A` | 8°, 49%, 53% | Production chain broken / Blocker / Stalled | Build errors, stalled chain markers, low supply warnings |
+| **Green** (Success) | `#7DA86B` | 102°, 22%, 56% | Chain complete / Healthy / Available | Chain completion flash, healthy production rate, resource fully stocked |
+| **White** (Automated) | `#F0EDE6` | 36°, 18%, 92% | Clean / Refined / Automated stage | Automated zone accents, refined products, automation indicators |
+
+**Red ≠ danger (no combat).** Red = "production chain is broken here." Desaturated terracotta, not fire engine — consistent with medieval architecture. Reserved for genuine problems only.
+
+**Green ≠ background grass.** More orange-shifted than Meadow Green (102° vs 108°), more saturated. Reads as "checkmark" not "lawn."
+
+**Blue = the most colorblind-safe hue.** Used for action states (buildable). No adjustment needed.
+
+### 3. Per-Biome Color Temperature Rules
+
+| Biome | Temperature | Base Ground | Ambient Overlay | Rationale |
+|-------|------------|-------------|-----------------|-----------|
+| **Meadow** (Early) | Warm (+8 toward yellow) | Meadow Green `#5C8A4D` | Dawn Sky `#C8B8A0` @ 15% | Hope, growth, manual labor — surrounded by nature |
+| **Construction Zone** (Mid) | Warm-Metallic (+5 yellow, -5 cool) | Earth Brown `#7A5C3E` | Golden `#D4A85C` @ 10% | Transitional — bridges natural meadow and automated zones |
+| **Automated Production** (Late) | Cool-Neutral (-5 toward blue) | Stone Gray `#8A8B8A` | Neutral, slight cool `#B8B8C0` @ 5% | Clean, controlled — cool contrasts sharply with meadow |
+| **Settlement Hub** (Center) | Neutral-Warm (baseline) | Earth Brown + Meadow Green patches | None — balanced for UI priority | Player manages everything here; colors must not add cognitive load |
+
+**Lighting State Overlays**
+
+| State | Tint | Opacity |
+|-------|------|---------|
+| Idle / Neutral | None | 0% |
+| Exploration | Cool Dawn `#B8C8D8` | 12% |
+| Construction | Warm Morning `#D4A85C` | 10% |
+| Production | Bright Midday `#F0E8D0` | 8% |
+| Bottleneck | Overcast `#A8A8A8` | 18% |
+| Victory | Golden Hour `#D4A85C` | 25% |
+| Menu / Dusk | Deep Dusk `#6A6070` | 30% |
+
+### 4. UI Palette
+
+**Divergence from world:** UI deliberately does NOT share hues with world palette. World = warm and earthy; UI = neutral-cool. Ensures UI elements pop without outlines or drop shadows.
+
+**HUD Elements**
+
+| Element | Color | Rationale |
+|---------|-------|-----------|
+| Resource count numbers | `#F0EDE6` (White) | Max contrast against dark panel |
+| Resource icons | Chain colors (golden, cream, brown, steel, silver) | Chain transparency extends to HUD |
+| Progress bars | Fill = chain color; Track = `#5A5A5A` | Bars inherit chain meaning |
+| Notification badges | `#C45A4A` (Red) + white icon | Only genuine notifications |
+| Selection outline | `#4A7EA8` (Blue) 2px stroke | Distinguishable from world |
+| Ghost build preview | `#4A7EA8` @ 40% opacity | "Buildable" indicator |
+| Invalid build ghost | `#C45A4A` @ 40% opacity | "Cannot build here" |
+
+**Menu Colors**
+
+| Element | Color | Rationale |
+|---------|-------|-----------|
+| Main menu bg | `#3A3A3A` + Golden Hour sky behind | Sets mood before gameplay |
+| Menu title | `#F0EDE6` with `#D4A85C` outline | Golden, prominent |
+| Menu buttons (idle) | `#5A5A5A` fill, `#A8A49C` text | Subtle |
+| Menu buttons (hover) | `#4A7EA8` fill, `#F0EDE6` text | Action color activates |
+| Menu buttons (selected) | `#F0EDE6` fill, `#3A3A3A` text | Max contrast |
+
+### 5. Colorblind Safety
+
+**Critical pair: Red (Error) vs Green (Success) — fails for ALL colorblind types.**
+
+| Problem Pair | Fails For | Severity | Backup Cue |
+|-------------|-----------|----------|------------|
+| **Red vs Green** | Protanopia, Deuteranopia, Tritanopia | CRITICAL | Triangle icon (error) vs checkmark icon (success). Pulsing (red) vs flash (green). Different shapes. |
+| **Green (Meadow) vs Green (Success)** | Deuteranopia, Protanopia | HIGH | Success = checkmark icon + animated pulse. Meadow = no icon, no animation. Different brightness. |
+| **Gold (Chain) vs White (Automated)** | Protanopia | MEDIUM | Gold = grain icon. White = clean/refined icon. Luminance: 51% vs 92%. |
+| **Brown (Bread) vs Brown (Earth)** | Deuteranopia, Protanopia | MEDIUM | Bread = bread icon. Earth = background, no icon. Different brightness/saturation. |
+| **Silver vs Stone** | Protanopia, Deuteranopia | LOW | Silver = tool icon. Stone = background. Different brightness (69% vs 54%). |
+
+**Non-negotiable backup cues:**
+
+| Cue | Examples | Used When |
+|-----|----------|-----------|
+| Shape/Icon | Triangle = error, Checkmark = success, Sparkle = new, Hourglass = bottleneck | Every semantic color pair that fails colorblind |
+| Animation | Pulsing (urgent/red), Flash (event/green), Steady (idle/blue) | Red and green states |
+| Pattern | Diagonal lines on red-tinted buildings | Color-only state indicators |
+| Sound | Low hum = bottleneck, Ding = success, Chime = construction complete | All notifications |
+| Text | "Bottleneck: Grain storage full" | All UI notifications |
+
+**Colorblind modes required:**
+- **Protanopia** (red-blind) — ~1% of males
+- **Deuteranopia** (green-blind) — ~6% of males
+- **Tritanopia** (blue-blind) — ~0.1% of population
+
+**Implementation approach:** No semantic meaning relies on color alone. Production chain uses unique icons (grain stalk, mill wheel, loaf, ore chunk, tool) in addition to color. UI has clear text labels. Sky state overlay works even without color perception.
+
+**Safety adjustments (conditional):**
+- If protanopia testing fails: Shift Success Green toward cyan (`#6BAF7A`)
+- If protanopia testing fails: Shift Error Red toward orange-red (`#C46A3A`)
+- Action Blue (`#4A7EA8`) — safe for all types, no adjustment needed
+
+---
+
+## Section 5: Character Design Direction
+
+**Visibility model:** Rimworld-style NPC abstraction — NPCs NOT permanently visible on main camera. Routes visualized via production chain arrows, not individual NPC sprites.
+
+### 1. NPC Design Philosophy
+
+**Two-tier system** — match art investment to screen presence.
+
+| Tier | Use Case | Detail Level |
+|------|----------|-------------|
+| **Tier A: Brief Appearance** | Construction animation, recruitment, notification pop-up | Full sprites — walk/idle/work, 32x32 or 48x48 |
+| **Tier B: Abstract Dot** | Main camera gameplay (95% of play time) | 8x8 solid color circle — not a sprite, just a colored marker |
+
+**Philosophy:** *"The game is about the production chain, not the characters. Character detail is invested proportionally to screen presence."* — Optimization Over Expansion pillar applied to art.
+
+### 2. Player Character
+
+**Always visible, 32x32, most prominent shape.** Never abstracted.
+
+| Role | Primary Color | Secondary | Tool Indicator |
+|------|--------------|-----------|----------------|
+| **Player** | Deep blue | Gold trim | Carries multiple tools (sack) |
+| **Lumberjack** | Forest green | Brown | Axe (L-shape) |
+| **Farmer** | Wheat yellow | Earth brown | Scythe (curve) |
+| **Miner** | Charcoal grey | Stone tan | Pickaxe (cross) |
+| **Builder** | Terracotta | Mortar white | Trowel |
+| **Forager** | Berry red | Leaf green | Basket |
+
+**Palette principle:** Natural medieval pigments only — all colors exist in the environment. No neon, no synthetic hues.
+
+### 3. Role Communication Hierarchy
+
+1. **Color** (fastest) — clothing palette per role, visible even at 8x8 pixel dot size
+2. **Silhouette** — unique body/proportion profile per archetype
+3. **Tool** (Tier A only) — reinforces role in brief appearances
+
+### 4. LOD Philosophy
+
+| LOD Level | Size | Detail | Usage |
+|-----------|------|--------|-------|
+| **LOD0: Full** | 32x32 | Full sprite sheet: idle (4f), walk (4f), work (3f/tool), 8 directions | Player always; NPCs only in Tier A moments |
+| **LOD1: Abstract** | 8x8 | Solid color circle, no sprite | NPCs on main camera |
+| **LOD2: Icon** | 16x16 | Single static pose, simplified | NPC selection panel, assignment UI, tooltips |
+
+**80% sprite reduction** vs. full NPC sprite system.
+
+---
+
+## Section 6: Environment & Level Art
+
+### 1. Architectural Style
+
+**Minimalist Medieval** — authentic medieval shapes (timber frames, thatched roofs, cobblestone), flat-colored or simple pixel art. No fantasy-kitsch (no glowing crystals, no dragons), no hyper-realism.
+
+**Building visual language:**
+- **Manual-stage buildings:** Rough-hewn timber, thatched roofs, exposed beams, warm browns. Asymmetrical details — each building has slightly different timber placement (randomized per-instance during authoring).
+- **Automated-stage buildings:** Clean geometric forms, stone foundations, metal accents (bell roofs, iron trim), white/silver accents. Symmetrical and precise.
+- **Progression signal:** A lumber mill starts as a timber-frame shack with a manual saw. Once automated, it gains a stone chimney, metal gears, and white accent panels. The player *sees* automation.
+
+### 2. Texture Philosophy
+
+**Flat-colored pixel art with minimal shading.** 2-3 shade levels per color (base + shadow + highlight) — enough for depth perception, never enough to create visual noise at 60fps.
+
+**No PBR, no normal maps.** TileMapLayer rendering with flat colors is sufficient for top-down 2D. Texture variation comes from palette swaps and tile set diversity, not surface detail.
+
+**Pixel art anti-aliasing:** None. Hard edges only. Anti-aliasing is a 3D technique that looks wrong on pixel art at game scale.
+
+### 3. Prop Density Rules
+
+| Area Type | Prop Density | Examples | Rationale |
+|-----------|-------------|----------|-----------|
+| **Meadow (Early Game)** | Sparse — 1 prop per 10-15 tiles | Wild berry bushes, lone trees, small rock clusters | Natural, untouched landscape |
+| **Construction Zone** | Medium — 1 prop per 5-8 tiles | Felled stumps, stacked wood piles, dirt paths | Active building creates localized clutter |
+| **Automated Production** | Low — 1 prop per 20+ tiles | Only functional props (chutes, hoppers, storage bins) | Clean, efficient — optimization over volume |
+| **Settlement Hub** | Medium — 1 prop per 5-8 tiles | Benches, wells, market stalls, fences | Social center, but not cluttered |
+
+**Rule:** Never place decorative props in a player's direct line of sight along a production chain flow line. Decorations compete with chain readability.
+
+---
+
+## Section 7: UI/HUD Visual Direction
+
+### 1. HUD Architecture: Asymmetric Screen-Space Panels
+
+Pure diegetic UI won't work for production chain management. Screen-space panels are required, styled to feel integrated with the world.
+
+**Panel layout:**
+```
+┌──────────────────────────────────────────────────────────┐
+│  Game World (main viewport)                              │
+│                                                          │
+│                                              ┌─────────┐ │
+│  ┌─────┐  ┌─────┐  ┌─────┐                   │Production│ │
+│  │Wheat│→│Mill │→│Bakery│                   │  Chains  │ │
+│  └─────┘  └─────┘  └─────┘                   │  [◻]   │ │
+│                                              └─────────┘ │
+├──────────────────────────────────────────────────────────┤
+│  ⚡ Energy ████████████░░░░  72%    [Day 7, Tick 14/30] │
+│  Inv  [🌾][🍞][🪓][🪨][  ]     3/5 items                 │
+└──────────────────────────────────────────────────────────┘
+```
+
+- **Right panel:** Production chain dashboard (most-used info, natural reading end-position)
+- **Bottom-left:** Energy bar + trage inventory (persistent need-to-know, out of primary view)
+- **Bottom-center:** Day/time display (low-frequency, always visible)
+- **Top-right:** Notification toasts (edge of screen, doesn't interfere)
+
+### 2. Iconography: Outlined Line-Art
+
+- **2px stroke width, 16px grid**
+- **Neutral charcoal** (`#2A2A2A` or `#8B8B8B`) — semantic color appears only on accents (energy bar, status dots), NOT on icons themselves
+- **Why not illustrated pixel art?** Requires ~3x more design work, won't read at small sizes, creates visual noise in dense UI
+
+### 3. Typography
+
+**Font:** Silkscreen (or similar geometric pixel font)
+
+**Hierarchy:**
+
+| Role | Size | Weight | Use Case |
+|------|------|--------|----------|
+| Panel Title | 20px | Bold | "Production Chains", "Resources" |
+| Label | 16px | Medium | "Wheat → Flour", "Efficiency" |
+| Data Value | 16px | Regular | "87%", "3/5", "12/day" |
+| Secondary | 14px* | Regular | "Waits for wheat", "2 pending" |
+| Notification | 14px | Regular | Toast messages |
+| Tooltip | 14px* | Regular | Per-building hover |
+
+*\*Upgraded from 12px per UX review — 12px Silkscreen is borderline unreadable and causes reading fatigue.*
+
+**Accessibility:** 3 discrete font sizes (Small/Medium/Large), NOT continuous slider. Pixel fonts don't scale smoothly — discrete steps keep them crisp.
+
+### 4. Animation Direction
+
+**"Functional, not decorative."**
+
+| Trigger | Animation | Duration | Easing |
+|---------|-----------|----------|--------|
+| Panel appear/disappear | Slide-in from edge | 120ms | ease-out |
+| Production step status change | Color transition (no movement) | 80ms | linear |
+| Bottleneck highlight | Color pulse | 600ms loop | ease-in-out |
+| Energy bar depletion | Smooth fill reduction | 200ms | ease-out |
+| Notification toast | Slide-in + hold 3s + slide-out | 3800ms total | ease-out |
+| Production arrow flow | Dot traveling along chain line | 400ms repeat | linear loop |
+
+**No spring/overshoot animations.** UI is data-dense. Animated panels that bounce make reading feel like waiting.
+
+**Performance constraint:** Max 4 simultaneous UI animations. Use `CanvasItem` transforms, NOT shaders. Batch all production arrow dots into a single CanvasGroup (1 draw call).
+
+### 5. UX Alignment: Key Conflicts Resolved
+
+| Conflict | Resolution |
+|----------|-----------|
+| Color-only status indicators | Every color has a shape/icon backup (triangle=error, checkmark=success) |
+| Build ghost visibility on pixel terrain | 2px outline + grid overlay, green=valid, red=invalid |
+| Bottleneck urgency vs. non-intrusive | Tiered system: persistent badge on production chain panel, not just toasts |
+| Pixel font readability at 12px | Minimum 14px for all body/secondary text |
+| Animation budget impact | Cap at 4 simultaneous, batch production dots, pause when FPS < 55 |
+| Colorblind access | No semantic meaning relies on color alone; full icon+text backup |
+
+---
+
+## Section 8: Asset Standards
+
+### 1. File Format & Organization
+
+**Core philosophy:** Atlas-first for static geometry, sprite sheet for animation, individual sprites only where layout flexibility demands it.
+
+| Category | Format | Atlas Size | Reason |
+|----------|--------|------------|--------|
+| Ground tiles | Texture atlas (PNG) | 256x256 (8x8 grid of 32px) | 1 draw call for entire ground layer |
+| Building tiles | Texture atlas (PNG) | 512x512 | All buildings share palette |
+| Props/foliage | Texture atlas (PNG) | 256x256 | Shared earthy palette |
+| Characters | Sprite sheets (PNG) | 128x128 to 256x256 | Rows = directions, columns = frames |
+| UI elements | Texture atlas (PNG) | 512x512 | All UI controls in one draw call |
+| VFX/particles | Texture atlas (PNG) | 128x128 max per effect | 5 atlases max total |
+| Individual sprites | PNG | 32x32 to 64x64 | Unique props under 30 for MVP |
+
+**Naming convention:**
+```
+atlas_[purpose].png               # Atlas files (ground, buildings, props, ui, vfx)
+char_[name]_animation.png          # Character sprite sheets
+env_tile_[name]_[id].png          # Individual tile images (before atlas assembly)
+env_shadow_[name].png             # Ground contact shadows
+vfx_[effect]_[frame|atlas].png    # Particle textures
+```
+
+### 2. Resolution Tiers
+
+| Category | Base Size | Max Size | Notes |
+|----------|-----------|----------|-------|
+| Ground tiles | 32x32 | 32x32 | Fixed — consistency over variety |
+| Building tiles | 32x32/cell | Up to 128x128 | Multi-tile buildings in Core Experience |
+| Characters | 32x32 | 64x64 | NPCs at 32px, player at 64px |
+| Props | 32x32 | 64x64 | Small for readability at camera distance |
+| VFX | 32x32 | 128x128 | Larger for particle systems |
+| UI icons | 16x16 | 32x32 | High detail at close range |
+
+**Golden rule:** Every sprite snaps cleanly to a 32px grid. No 33px, 47px, or 51px sprites.
+
+### 3. Godot 4.6 Pixel Art Import Settings (NON-NEGOTIABLE)
+
+Every sprite texture in Godot 4.6 import must have:
+
+```
+Filter:     Nearest (no bilinear/trilinear — this ruins pixel art)
+Mipmaps:    Disabled (cause aliasing and shimmering)
+Compression: Lossless PNG (not VCS/SVT — artifacts on pixel edges)
+Wrap Mode:  Clamp to edge (prevents texture bleeding at tile boundaries)
+SRGB:       Disabled (handled in material, not import)
+Normal Map: Disabled
+```
+
+**One exception:** Particle textures use `Filter: Linear` (GPUParticles2D needs smooth blending).
+
+**Enforcement:** Create a custom Godot import preset that auto-applies these settings to all `.png` files in `assets/art/`.
+
+### 4. Performance Budgets
+
+**Draw Call Budget (< 1000):**
+
+| Element | Draw Calls |
+|---------|-----------|
+| Ground TileMapLayer | 1 |
+| Ground Detail Layer | 1 |
+| Building TileMapLayer | 1 |
+| Prop/Foliage Layer | 1 |
+| Sprite2D instances (~50-80) | ~30-50 (batched by atlas) |
+| UI layer | ~3-5 |
+| Particle systems (3-5) | 3-5 |
+| **Total (MVP, full map)** | **~45-65** |
+
+TileMapLayer batches all tiles from the same atlas into a single draw call. At 45-65 DC, the game uses ~5-6% of the budget even with a 30x30 map and full MVP content.
+
+**Memory Budget (512MB soft):**
+
+| Textures | Size |
+|----------|------|
+| All atlases (ground, buildings, props, ui, vfx) | ~3.5 MB |
+| Individual sprites (~30) | ~256 KB |
+| Character animation sheets (~10) | ~1.5 MB |
+| **Total** | **~5.3 MB** |
+
+Texture memory is trivially small. The real constraint is draw call batching, not memory.
+
+**Instance budget:** 100-200 visible Sprite2D instances at any time. All batched by shared atlas texture.
+
+### 5. TileMapLayer Architecture (Recommended, bottom to top)
+
+```
+Layer 0: Ground tiles (grass, dirt, water, roads)
+Layer 1: Ground details (grass tufts, cracks, pebbles) — same atlas as Layer 0
+Layer 2: Building floors/walls
+Layer 3: Building details (doors, windows, roofs) — same atlas as Layer 2
+Layer 4: Props and foliage
+Layer 5: Overhead props (trees above buildings, hanging decorations)
+Layer 6: Dynamic entities (player, NPCs) — Sprite2D nodes, not tiles
+Layer 7: UI overlay (indicators, tooltips, placement preview)
+```
+
+**Maximum:** 8-10 TileMapLayers. More than 15 risks render order bugs with no performance benefit.
+
+### 6. Material Constraints
+
+- **Sprite2D:** 1 material slot per sprite (`material` property). No multi-material sprites — use texture regions from atlases.
+- **TileSet:** 1 texture per TileSet. Max 100+ tile variations per TileSet from a single atlas.
+- **Custom shaders:** Not needed for MVP. Reserved for: seasonal palette swap, water shimmer, day/night overlay.
+
+### 7. Draw Call Rules
+
+1. Never put tiles from different atlases on the same TileMapLayer
+2. Never use Sprite2D for atlas-boundable content
+3. Every unique texture = potential new draw call. Keep unique textures under 25
+4. Each ParticleProcessMaterial = 1 draw call. Cap at 5 visible simultaneously
+5. UI: batch all icons into the UI atlas. No individual texture files for UI icons.
+
+---
+
+## Section 9: Reference Direction
+
+These references are deliberately non-overlapping — each covers a different domain. Together they form a complete visual system.
+
+| Reference | Domain | Unique Contribution |
+|-----------|--------|-------------------|
+| Stardew Valley | Tile-level material differentiation | Incremental stage-change technique for production states |
+| Farming Simulator 19 | Production pipeline color coding | Edge treatment for sprite overlap in top-down |
+| LOTR: Shire design | Environmental storytelling | Functional architecture identifiable from above |
+| Kingdomino | UI/UX visual separation | The saturation-gap technique for UI-world boundary |
+| Medieval manuscripts | Accent color hierarchy | Gold-as-signal for automation completion |
+
+### Reference 1: Stardew Valley — Tile-Level Material Differentiation
+
+**What to draw from:** Value-contrast system for material identification. Different materials (soil, stone, water, wood, crops) are differentiated by *texture pattern density* and *color value*, not detail richness. Each material has a distinctive, low-pixel-count repeating pattern. Stone wall and wood fence are distinguishable because lightness values and pattern geometry differ significantly.
+
+Crop progression (seed → sprout → growing → ripe) uses *strictly incremental* visual change — each stage adds exactly one new visual marker rather than redrawing from scratch. Maps directly to "Earned Automation."
+
+**What to avoid:** Decorative density — every surface has visible detail (flower pots, scattered leaves, fence ornaments). Stardew's charm is clutter; our clarity is reduction. Also diverge: warm, saturated global color grading (golden hour tint on whole screen) — our earthy world palette uses flat lighting.
+
+### Reference 2: Farming Simulator 19 — Production Pipeline Color Coding
+
+**What to draw from:** Different materials in the production pipeline (logs → planks → furniture) are rendered with distinct dominant hues *within* an earthy palette — logs read as brown-green, planks as golden-brown, finished furniture as warm cream. Same value range and saturation, so they read as a coherent world AND as distinct pipeline stages.
+
+Outline and edge treatment for separating overlapping sprites in top-down view. When sprites overlap, one is rendered with slightly darker value to maintain separation. Critical for production chain visualization where NPC paths, storage buildings, and production stages overlap.
+
+**What to avoid:** Photorealistic rendering (subsurface scattering, metallic highlights, soft shadows). Glossy, skeuomorphic UI with bevels and drop shadows. Our flat-colored pixel art + geometric UI is the intentional opposite.
+
+### Reference 3: LOTR — The Shire Production Design (Environmental Storytelling)
+
+**What to draw from:** *Lived-in medieval without fantasy.* Buildings have visible construction methods — timber framing with wattle-and-daub, stone foundations, thatch roof texture patterns. Each building type communicates function through structural vocabulary, not signage.
+
+Pathways are *visually distinct from surrounding terrain through material change* (packed dirt vs. grass) rather than color change — both are green/brown, but the path has a compressed value. Creates natural player guidance without arrows or highlights.
+
+Production buildings have *functional protrusions visible from above* — a mill has a water wheel extension, a kiln has a smokestack. Identifiable from top-down without labels.
+
+**What to avoid:** Cinematic lighting (volumetric god rays, deep shadow pools, high-contrast drama). Grand fantasy scale (cathedrals, castles). Lush, near-saturated green (Shire idyll). Our village is human-scale, cottage-level, with muted greens and more brown/grey undertones.
+
+### Reference 4: Kingdomino — UI/World Separation Through Color Saturation
+
+**What to draw from:** The *saturation-gap technique*. Board uses muted, naturalistic terrain tiles (earth tones, subtle greens, soft browns) while interactive elements use pure, high-saturation colors (flat red, flat blue, flat yellow). One glance tells the player: "the board is the world you're building; the colored panels are the information overlay."
+
+Iconographic simplification: resource symbols (wheat stalk, water drop, wood log) reduced to 2-3 colors and 1px outline. Works at 8x8 or 16x16 pixel sizes.
+
+**What to avoid:** Perfectly aligned uniform grid composition (Kingdomino's board has no terrain variation). Bright RGB primary colors for UI — our palette should lean medieval-appropriate (deep crimson, mineral blue, brass-gold) rather than pure primaries. Medieval restraint applies to color *selection*, not saturation.
+
+### Reference 5: Medieval Illumination Manuscripts — Hierarchical Accent Color
+
+**What to draw from:** Strategic use of gold leaf as a *single, highly-valued accent color* in an otherwise earthy palette. Gold is deployed ONLY for specific visual hierarchy markers: chapter headings, key narrative moments, important names. The gold doesn't decorate the whole page — it *anchors* specific elements.
+
+For the game: gold (or gold-adjacent luminous yellow) serves as the visual signal for "automation completed" — a mill actively producing, a chain running at capacity. The visual payoff for Earned Automation.
+
+Structured compartmentalization — gold borders frame distinct visual fields. Maps to how production chain nodes are visually "framed" when active, creating clear reading order.
+
+**What to avoid:** Ornamental complexity (interlace patterns, decorated initials, marginalia, floral borders). The gold is a *signal*, not decoration. Not the manuscript color palette (verdigris greens, lapis lazuli purples — expensive pigments that feel ornate, not rustic).
+
+### How They Interact
+
+```
+World rendering  (Stardew + FS19)    →  tells you WHAT things are made of
+Environment      (LOTR)              →  tells you WHAT buildings do
+UI separation    (Kingdomino)        →  tells you what's information vs. world
+Accent language  (Manuscripts)       →  tells you what's been achieved
+```
+
+No reference covers the whole visual identity. They are composed together, like pigments on a palette.
+
+---
+
+## Appendix: Section Index
+
+| # | Section | Pages |
+|---|---------|-------|
+| 1 | Visual Identity Statement | 10-27 |
+| 2 | Mood & Atmosphere | 29-127 |
+| 3 | Shape Language | 131-205 |
+| 4 | Color System | 209-338 |
+| 5 | Character Design Direction | 342-386 |
+| 6 | Environment & Level Art | 390-702 |
+| 7 | UI/HUD Visual Direction | 422-500 |
+| 8 | Asset Standards | 573-685 |
+| 9 | Reference Direction | 504-569 |
+
+These references are deliberately non-overlapping — each covers a different domain. Together they form a complete visual system.
+
+| Reference | Domain | Unique Contribution |
+|-----------|--------|-------------------|
+| Stardew Valley | Tile-level material differentiation | Incremental stage-change technique for production states |
+| Farming Simulator 19 | Production pipeline color coding | Edge treatment for sprite overlap in top-down |
+| LOTR: Shire design | Environmental storytelling | Functional architecture identifiable from above |
+| Kingdomino | UI/UX visual separation | The saturation-gap technique for UI-world boundary |
+| Medieval manuscripts | Accent color hierarchy | Gold-as-signal for automation completion |
+
+### Reference 1: Stardew Valley — Tile-Level Material Differentiation
+
+**What to draw from:** Value-contrast system for material identification. Different materials (soil, stone, water, wood, crops) are differentiated by *texture pattern density* and *color value*, not detail richness. Each material has a distinctive, low-pixel-count repeating pattern. Stone wall and wood fence are distinguishable because lightness values and pattern geometry differ significantly.
+
+Crop progression (seed → sprout → growing → ripe) uses *strictly incremental* visual change — each stage adds exactly one new visual marker rather than redrawing from scratch. Maps directly to "Earned Automation."
+
+**What to avoid:** Decorative density — every surface has visible detail (flower pots, scattered leaves, fence ornaments). Stardew's charm is clutter; our clarity is reduction. Also diverge: warm, saturated global color grading (golden hour tint on whole screen) — our earthy world palette uses flat lighting.
+
+### Reference 2: Farming Simulator 19 — Production Pipeline Color Coding
+
+**What to draw from:** Different materials in the production pipeline (logs → planks → furniture) are rendered with distinct dominant hues *within* an earthy palette — logs read as brown-green, planks as golden-brown, finished furniture as warm cream. Same value range and saturation, so they read as a coherent world AND as distinct pipeline stages.
+
+Outline and edge treatment for separating overlapping sprites in top-down view. When sprites overlap, one is rendered with slightly darker value to maintain separation. Critical for production chain visualization where NPC paths, storage buildings, and production stages overlap.
+
+**What to avoid:** Photorealistic rendering (subsurface scattering, metallic highlights, soft shadows). Glossy, skeuomorphic UI with bevels and drop shadows. Our flat-colored pixel art + geometric UI is the intentional opposite.
+
+### Reference 3: LOTR — The Shire Production Design (Environmental Storytelling)
+
+**What to draw from:** *Lived-in medieval without fantasy.* Buildings have visible construction methods — timber framing with wattle-and-daub, stone foundations, thatch roof texture patterns. Each building type communicates function through structural vocabulary, not signage.
+
+Pathways are *visually distinct from surrounding terrain through material change* (packed dirt vs. grass) rather than color change — both are green/brown, but the path has a compressed value. Creates natural player guidance without arrows or highlights.
+
+Production buildings have *functional protrusions visible from above* — a mill has a water wheel extension, a kiln has a smokestack. Identifiable from top-down without labels.
+
+**What to avoid:** Cinematic lighting (volumetric god rays, deep shadow pools, high-contrast drama). Grand fantasy scale (cathedrals, castles). Lush, near-saturated green (Shire idyll). Our village is human-scale, cottage-level, with muted greens and more brown/grey undertones.
+
+### Reference 4: Kingdomino — UI/World Separation Through Color Saturation
+
+**What to draw from:** The *saturation-gap technique*. Board uses muted, naturalistic terrain tiles (earth tones, subtle greens, soft browns) while interactive elements use pure, high-saturation colors (flat red, flat blue, flat yellow). One glance tells the player: "the board is the world you're building; the colored panels are the information overlay."
+
+Iconographic simplification: resource symbols (wheat stalk, water drop, wood log) reduced to 2-3 colors and 1px outline. Works at 8x8 or 16x16 pixel sizes.
+
+**What to avoid:** Perfectly aligned uniform grid composition (Kingdomino's board has no terrain variation). Bright RGB primary colors for UI — our palette should lean medieval-appropriate (deep crimson, mineral blue, brass-gold) rather than pure primaries. Medieval restraint applies to color *selection*, not saturation.
+
+### Reference 5: Medieval Illumination Manuscripts — Hierarchical Accent Color
+
+**What to draw from:** Strategic use of gold leaf as a *single, highly-valued accent color* in an otherwise earthy palette. Gold is deployed ONLY for specific visual hierarchy markers: chapter headings, key narrative moments, important names. The gold doesn't decorate the whole page — it *anchors* specific elements.
+
+For the game: gold (or gold-adjacent luminous yellow) serves as the visual signal for "automation completed" — a mill actively producing, a chain running at capacity. The visual payoff for Earned Automation.
+
+Structured compartmentalization — gold borders frame distinct visual fields. Maps to how production chain nodes are visually "framed" when active, creating clear reading order.
+
+**What to avoid:** Ornamental complexity (interlace patterns, decorated initials, marginalia, floral borders). The gold is a *signal*, not decoration. Not the manuscript color palette (verdigris greens, lapis lazuli purples — expensive pigments that feel ornate, not rustic).
+
+### How They Interact
+
+```
+World rendering  (Stardew + FS19)    →  tells you WHAT things are made of
+Environment      (LOTR)              →  tells you WHAT buildings do
+UI separation    (Kingdomino)        →  tells you what's information vs. world
+Accent language  (Manuscripts)       →  tells you what's been achieved
+```
+
+No reference covers the whole visual identity. They are composed together, like pigments on a palette.
+
+---
+
+## Section 8: Asset Standards
+
+### 1. File Format & Organization
+
+**Core philosophy:** Atlas-first for static geometry, sprite sheet for animation, individual sprites only where layout flexibility demands it.
+
+| Category | Format | Atlas Size | Reason |
+|----------|--------|------------|--------|
+| Ground tiles | Texture atlas (PNG) | 256x256 (8x8 grid of 32px) | 1 draw call for entire ground layer |
+| Building tiles | Texture atlas (PNG) | 512x512 | All buildings share palette |
+| Props/foliage | Texture atlas (PNG) | 256x256 | Shared earthy palette |
+| Characters | Sprite sheets (PNG) | 128x128 to 256x256 | Rows = directions, columns = frames |
+| UI elements | Texture atlas (PNG) | 512x512 | All UI controls in one draw call |
+| VFX/particles | Texture atlas (PNG) | 128x128 max per effect | 5 atlases max total |
+| Individual sprites | PNG | 32x32 to 64x64 | Unique props under 30 for MVP |
+
+**Naming convention:**
+```
+atlas_[purpose].png               # Atlas files (ground, buildings, props, ui, vfx)
+char_[name]_animation.png          # Character sprite sheets
+env_tile_[name]_[id].png          # Individual tile images (before atlas assembly)
+env_shadow_[name].png             # Ground contact shadows
+vfx_[effect]_[frame|atlas].png    # Particle textures
+```
+
+### 2. Resolution Tiers
+
+| Category | Base Size | Max Size | Notes |
+|----------|-----------|----------|-------|
+| Ground tiles | 32x32 | 32x32 | Fixed — consistency over variety |
+| Building tiles | 32x32/cell | Up to 128x128 | Multi-tile buildings in Core Experience |
+| Characters | 32x32 | 64x64 | NPCs at 32px, player at 64px |
+| Props | 32x32 | 64x64 | Small for readability at camera distance |
+| VFX | 32x32 | 128x128 | Larger for particle systems |
+| UI icons | 16x16 | 32x32 | High detail at close range |
+
+**Golden rule:** Every sprite snaps cleanly to a 32px grid. No 33px, 47px, or 51px sprites.
+
+### 3. Godot 4.6 Pixel Art Import Settings (NON-NEGOTIABLE)
+
+Every sprite texture in Godot 4.6 import must have:
+
+```
+Filter:     Nearest (no bilinear/trilinear — this ruins pixel art)
+Mipmaps:    Disabled (cause aliasing and shimmering)
+Compression: Lossless PNG (not VCS/SVT — artifacts on pixel edges)
+Wrap Mode:  Clamp to edge (prevents texture bleeding at tile boundaries)
+SRGB:       Disabled (handled in material, not import)
+Normal Map: Disabled
+```
+
+**One exception:** Particle textures use `Filter: Linear` (GPUParticles2D needs smooth blending).
+
+**Enforcement:** Create a custom Godot import preset that auto-applies these settings to all `.png` files in `assets/art/`.
+
+### 4. Performance Budgets
+
+**Draw Call Budget (< 1000):**
+
+| Element | Draw Calls |
+|---------|-----------|
+| Ground TileMapLayer | 1 |
+| Ground Detail Layer | 1 |
+| Building TileMapLayer | 1 |
+| Prop/Foliage Layer | 1 |
+| Sprite2D instances (~50-80) | ~30-50 (batched by atlas) |
+| UI layer | ~3-5 |
+| Particle systems (3-5) | 3-5 |
+| **Total (MVP, full map)** | **~45-65** |
+
+TileMapLayer batches all tiles from the same atlas into a single draw call. At 45-65 DC, the game uses ~5-6% of the budget even with a 30x30 map and full MVP content.
+
+**Memory Budget (512MB soft):**
+
+| Textures | Size |
+|----------|------|
+| All atlases (ground, buildings, props, ui, vfx) | ~3.5 MB |
+| Individual sprites (~30) | ~256 KB |
+| Character animation sheets (~10) | ~1.5 MB |
+| **Total** | **~5.3 MB** |
+
+Texture memory is trivially small. The real constraint is draw call batching, not memory.
+
+**Instance budget:** 100-200 visible Sprite2D instances at any time. All batched by shared atlas texture.
+
+### 5. TileMapLayer Architecture (Recommended, bottom to top)
+
+```
+Layer 0: Ground tiles (grass, dirt, water, roads)
+Layer 1: Ground details (grass tufts, cracks, pebbles) — same atlas as Layer 0
+Layer 2: Building floors/walls
+Layer 3: Building details (doors, windows, roofs) — same atlas as Layer 2
+Layer 4: Props and foliage
+Layer 5: Overhead props (trees above buildings, hanging decorations)
+Layer 6: Dynamic entities (player, NPCs) — Sprite2D nodes, not tiles
+Layer 7: UI overlay (indicators, tooltips, placement preview)
+```
+
+**Maximum:** 8-10 TileMapLayers. More than 15 risks render order bugs with no performance benefit.
+
+### 6. Material Constraints
+
+- **Sprite2D:** 1 material slot per sprite (`material` property). No multi-material sprites — use texture regions from atlases.
+- **TileSet:** 1 texture per TileSet. Max 100+ tile variations per TileSet from a single atlas.
+- **Custom shaders:** Not needed for MVP. Reserved for: seasonal palette swap, water shimmer, day/night overlay.
+
+### 7. Draw Call Rules
+
+1. Never put tiles from different atlases on the same TileMapLayer
+2. Never use Sprite2D for atlas-boundable content
+3. Every unique texture = potential new draw call. Keep unique textures under 25
+4. Each ParticleProcessMaterial = 1 draw call. Cap at 5 visible simultaneously
+5. UI: batch all icons into the UI atlas. No individual texture files for UI icons.
+
+### 4. Environmental Storytelling
+
+**What visual details tell the story without text:**
+
+1. **The progression trail:** Old felled tree stumps near early buildings, fresh stumps near new construction. Shows *when* the village expanded.
+2. **Abandoned sites:** If a production chain is broken and never replaced, the building slowly becomes visually derelict (roof sags, vegetation grows). Not a degradation system — an authoring choice. Derelict buildings are placed by level designers, not generated.
+3. **Resource proximity:** Buildings are always near their required resource tiles (Anno-style). A lumber mill sits near tree clusters; a stone works near rock deposits. The spatial logic tells the player "this is where resources come from."
+4. **NPC activity indicators:** Chimney smoke (animated), construction scaffolding (before automation), idle worker silhouettes (during Tier A moments). These create life without permanent NPC visibility.
+
+### 5. Tile Design Requirements
+
+**Ground tiles (32x32):** Each terrain type needs 4-8 variants (corners, edges, random) for natural look. Shared palette within each terrain family to enable atlas batching.
+
+**Building tiles:** One tile per building type (MVP: 1 tile per building). Multi-tile buildings (2x2 or larger) in Core Experience. Single tile per building in MVP.
+
+**Resource tiles:** Trees, berry bushes, rock deposits — each a distinct tile that visually communicates "I am collectible." Green highlight glow (not red — that's for errors) when player can interact.

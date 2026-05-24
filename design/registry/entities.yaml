@@ -34,135 +34,83 @@
 #
 # FORMAT: YAML. Consistent indentation is critical for grep reliability.
 #   Sections: entities | items | formulas | constants
-#   Each entry: name, status, source, referenced_by[], attributes{}, added, revised
+#   Each entry: name, status, source, referenced_by, added
+#               plus attribute fields per type
 
 version: 1
-last_updated: ""
+last_updated: 2026-05-19
 
 # ─── ENTITIES ────────────────────────────────────────────────────────────────
 # Named game-world objects: enemies, NPCs, characters, factions, bosses.
-# Register an entity here when it appears in more than one GDD — e.g., an
-# enemy defined in combat.md that also drops items listed in inventory.md.
-#
-# Required fields: name, status, source, referenced_by, added
-# Attribute fields: any key stats that could appear in another GDD
-#   (health, damage, drops, faction, etc.)
+# Register an entity here when it appears in more than one GDD.
 
 entities: []
-
-# Example (remove when first real entry is added):
-#
-# entities:
-#   - name: goblin
-#     status: active              # active | deprecated
-#     source: design/gdd/combat.md
-#     referenced_by:
-#       - design/gdd/combat.md
-#       - design/gdd/inventory.md
-#     health: 40
-#     damage: 8
-#     drops:
-#       - item: goblin_arm        # must match an entry in items section
-#         qty: 1
-#         drop_rate: 0.8          # 0.0–1.0
-#     added: 2026-03-26
-#     revised: ""
-
 
 # ─── ITEMS ───────────────────────────────────────────────────────────────────
 # Named collectables, equipment, consumables, crafting materials, currency.
 # Register an item when its name or value appears in more than one GDD.
-#
-# Required fields: name, status, source, referenced_by, added
-# Attribute fields: value_gold, weight, stackable, category, and any stat
-#   modifiers that another system (e.g., economy, crafting) might reference.
 
 items: []
-
-# Example:
-#
-# items:
-#   - name: goblin_arm
-#     status: active
-#     source: design/gdd/combat.md   # drop defined in combat GDD
-#     referenced_by:
-#       - design/gdd/combat.md
-#       - design/gdd/inventory.md    # inventory GDD lists its weight/stack rules
-#       - design/gdd/economy.md      # economy GDD references its sell price
-#     value_gold: 5
-#     weight: 1
-#     stackable: true
-#     category: crafting_material
-#     added: 2026-03-26
-#     revised: ""
-
 
 # ─── FORMULAS ────────────────────────────────────────────────────────────────
 # Named calculations with defined variables and output ranges.
 # Register a formula when its output feeds into another system's input,
 # or when another GDD references it by name.
-#
-# Required fields: name, status, source, referenced_by, variables[],
-#   output_range[min, max], added
-# Optional: expression (the actual formula), notes
 
-formulas: []
-
-# Example:
-#
-# formulas:
-#   - name: damage_formula
-#     status: active
-#     source: design/gdd/combat.md
-#     referenced_by:
-#       - design/gdd/combat.md
-#       - design/gdd/progression.md   # progression GDD scales attack variable
-#     variables:
-#       - attack
-#       - defense
-#       - crit_chance
-#       - crit_multiplier
-#     output_range: [0, 999]
-#     expression: "max(0, attack - defense) * (1 + crit_chance * crit_multiplier)"
-#     notes: "Output feeds into health-system damage intake. Min is 0 (armour
-#       can absorb all damage). Max is uncapped in formula but tuning knob
-#       damage_cap in combat.md clamps at 999."
-#     added: 2026-03-26
-#     revised: ""
-
+formulas:
+  - name: carrier_travel_ticks
+    status: active
+    source: design/gdd/building-system.md
+    referenced_by:
+      - design/gdd/building-system.md
+      - design/gdd/logistics-system.md
+      - design/gdd/npc-system.md
+    variables:
+      - distance
+      - ticks_per_tile
+    # was: [0, 750] — corrected to uncapped per building-system.md line 428
+    output_range: [0, "∞"]
+    expression: "floor(distance × ticks_per_tile)"
+    notes: "Output feeds into NPC travel time (NPC System) and logistics round-trip time (Logistics System). Distance is Manhattan distance from Grid/Map System."
+    added: 2026-05-11
+    revised: 2026-05-19
 
 # ─── CONSTANTS ───────────────────────────────────────────────────────────────
 # Named numerical values referenced across multiple systems.
-# Register a constant when it is defined in one GDD but another GDD must
-# agree with it (e.g., gold carry limit defined in economy but checked in
-# inventory, or base inventory slots defined in inventory but displayed in HUD).
-#
-# Required fields: name, status, source, referenced_by, value, unit, added
 
-constants: []
+constants:
+  - name: ticks_per_tile
+    status: active
+    source: design/gdd/building-system.md
+    referenced_by:
+      - design/gdd/building-system.md
+      - design/gdd/logistics-system.md
+      - design/gdd/npc-system.md
+    value: 3.0
+    unit: ticks/tile
+    added: 2026-05-11
+    revised: 2026-05-19
 
-# Example:
-#
-# constants:
-#   - name: gold_carry_limit
-#     status: active
-#     source: design/gdd/economy.md
-#     referenced_by:
-#       - design/gdd/economy.md
-#       - design/gdd/inventory.md   # inventory enforces the carry limit
-#       - design/gdd/ui.md          # HUD displays current gold vs limit
-#     value: 9999
-#     unit: gold
-#     added: 2026-03-26
-#     revised: ""
-#
-#   - name: base_inventory_slots
-#     status: active
-#     source: design/gdd/inventory.md
-#     referenced_by:
-#       - design/gdd/inventory.md
-#       - design/gdd/progression.md  # progression unlocks additional slots
-#     value: 20
-#     unit: slots
-#     added: 2026-03-26
-#     revised: ""
+  - name: carrier_capacity
+    status: active
+    source: design/gdd/game-concept.md
+    referenced_by:
+      - design/gdd/game-concept.md
+      - design/gdd/logistics-system.md
+    value: 1
+    unit: items/NPC
+    notes: "MVP. Can be increased post-MVP to 2 or 3."
+    added: 2026-05-11
+    revised: 2026-05-19
+
+  - name: TICKS_PER_DAY
+    status: active
+    source: design/gdd/tick-system.md
+    referenced_by:
+      - design/gdd/tick-system.md
+      - design/gdd/logistics-system.md
+      - design/gdd/game-concept.md
+    value: 1000
+    unit: ticks/day
+    added: 2026-05-05
+    revised: 2026-05-19

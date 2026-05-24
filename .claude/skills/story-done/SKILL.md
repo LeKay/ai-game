@@ -1,5 +1,6 @@
 ---
 name: story-done
+model: qwen-3.6-35b-sovereign
 description: "End-of-story completion review. Reads the story file, verifies each acceptance criterion against the implementation, checks for GDD/ADR deviations, prompts code review, updates story status to Complete, and surfaces the next ready story from the sprint."
 argument-hint: "[story-file-path] [--review full|lean|solo]"
 user-invocable: true

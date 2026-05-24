@@ -1,5 +1,6 @@
 ---
 name: hotfix
+model: qwen-3.6-35b-sovereign
 description: "Emergency fix workflow that bypasses normal sprint processes with a full audit trail. Creates hotfix branch, tracks approvals, and ensures the fix is backported correctly."
 argument-hint: "[bug-id or description]"
 user-invocable: true
