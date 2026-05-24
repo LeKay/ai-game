@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "resources": [
+    {
+      "id": "wood",
+      "display_name": "Wood",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 2.5,
+      "base_value": 2,
+      "max_charge": 100.0,
+      "icon_path": "assets/ui/icons/resources/wood.png",
+      "description": "Freshly chopped logs.",
+      "tags": ["burnable", "construction_material"]
+    },
+    {
+      "id": "berry",
+      "display_name": "Berry",
+      "category": "consumable",
+      "subcategory": "food",
+      "stack_limit": 50,
+      "weight": 0.1,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "icon_path": "assets/ui/icons/resources/berry.png",
+      "description": "Wild berries. Edible and nutritious.",
+      "tags": ["food"]
+    }
+  ]
+}

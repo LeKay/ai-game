@@ -138,3 +138,14 @@ Revised review: APPROVED — completeness 8/8, all GDDs aligned, accessibility c
 - Test written: None — UI story, evidence required at `production/qa/evidence/main-menu-evidence.md`
 - Blockers: None
 - Next: /code-review → /story-done
+
+## Session Extract — /dev-story 2026-05-24
+- Story: production/epics/resource-system/story-001-json-loading-and-schema.md — Resource Registry JSON Loading
+- Files changed:
+  - `src/systems/resource_registry.gd` — Created (Autoload singleton, load_from_file, get_definition stub, _ResourceDefinition inner class)
+  - `tests/unit/resource/registry_loading_test.gd` — Created (17 test functions covering AC-1 through AC-5)
+  - `tests/fixtures/malformed_resources.json` — Created (truncated JSON for AC-4 test)
+  - `project.godot` — Added ResourceRegistry autoload (first position, per ADR-0006 load order)
+- Test written: tests/unit/resource/registry_loading_test.gd (17 tests)
+- Blockers: None
+- Next: /code-review src/systems/resource_registry.gd tests/unit/resource/registry_loading_test.gd → /story-done production/epics/resource-system/story-001-json-loading-and-schema.md

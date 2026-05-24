@@ -1,6 +1,6 @@
----
+﻿---
 name: lead-programmer
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "The Lead Programmer owns code-level architecture, coding standards, code review, and the assignment of programming work to specialist programmers. Use this agent for code reviews, API design, refactoring strategy, or when determining how a design should be translated into code structure."
 tools: Read, Glob, Grep, Write, Edit, Bash
 maxTurns: 20

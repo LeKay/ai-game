@@ -1,6 +1,6 @@
----
+﻿---
 name: test-helpers
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Generate engine-specific test helper libraries for the project's test suite. Reads existing test patterns and produces tests/helpers/ with assertion utilities, factory functions, and mock objects tailored to the project's systems. Reduces boilerplate in new test files."
 argument-hint: "[system-name | all | scaffold]"
 user-invocable: true
@@ -12,7 +12,7 @@ allowed-tools: Read, Glob, Grep, Write
 Writing test cases is faster and more consistent when common setup, teardown,
 and assertion patterns are abstracted into helpers. This skill generates a
 `tests/helpers/` library tailored to the project's actual engine, language,
-and systems — so every developer writes less boilerplate and more assertions.
+and systems â€” so every developer writes less boilerplate and more assertions.
 
 **Output:** `tests/helpers/` directory with engine-specific helper files
 
@@ -26,12 +26,12 @@ and systems — so every developer writes less boilerplate and more assertions.
 ## 1. Parse Arguments
 
 **Modes:**
-- `/test-helpers [system-name]` — generate helpers for a specific system
+- `/test-helpers [system-name]` â€” generate helpers for a specific system
   (e.g., `/test-helpers combat`)
-- `/test-helpers all` — generate helpers for all systems with test files
-- `/test-helpers scaffold` — generate only the base helper library (no
+- `/test-helpers all` â€” generate helpers for all systems with test files
+- `/test-helpers scaffold` â€” generate only the base helper library (no
   system-specific helpers); use this on first run
-- No argument — run `scaffold` if no helpers exist, else `all`
+- No argument â€” run `scaffold` if no helpers exist, else `all`
 
 ---
 
@@ -64,9 +64,9 @@ This ensures generated helpers match the project's existing style, not a
 generic template.
 
 Also read:
-- `design/gdd/systems-index.md` — to know which systems exist
-- In-scope GDD(s) — to understand what data types and values need testing
-- `docs/architecture/tr-registry.yaml` — to map requirements to tested systems
+- `design/gdd/systems-index.md` â€” to know which systems exist
+- In-scope GDD(s) â€” to understand what data types and values need testing
+- `docs/architecture/tr-registry.yaml` â€” to map requirements to tested systems
 
 ---
 
@@ -359,19 +359,19 @@ Base helpers (engine: [engine]):
 [engine-specific extras]
 
 System helpers ([mode]):
-- tests/helpers/[system]_factory.[ext]  ← from [system] GDD
+- tests/helpers/[system]_factory.[ext]  â† from [system] GDD
 ```
 
 Ask: "May I write these helper files to `tests/helpers/`?"
 
 **Never overwrite existing files.** If a file already exists, report:
-"Skipping `[path]` — already exists. Remove the file manually if you want it
+"Skipping `[path]` â€” already exists. Remove the file manually if you want it
 regenerated."
 
-After writing: Verdict: **COMPLETE** — helper files created.
+After writing: Verdict: **COMPLETE** â€” helper files created.
 
 "Helper files created. To use them in a test:
-- Godot: `class_name` is auto-imported — no explicit import needed
+- Godot: `class_name` is auto-imported â€” no explicit import needed
 - Unity: Add `using` directive or reference the test assembly
 - Unreal: `#include \"tests/helpers/GameTestHelpers.h\"`"
 
@@ -379,17 +379,17 @@ After writing: Verdict: **COMPLETE** — helper files created.
 
 ## Collaborative Protocol
 
-- **Never overwrite existing helpers** — they may contain hand-written
+- **Never overwrite existing helpers** â€” they may contain hand-written
   customisations. Only generate new files that don't exist yet
-- **Generated code is a starting point** — the generated factory functions use
+- **Generated code is a starting point** â€” the generated factory functions use
   metadata patterns for simplicity; adapt to the actual class structure once
   the code exists
-- **Helpers should reflect the GDD** — bounds and constants in helpers should
+- **Helpers should reflect the GDD** â€” bounds and constants in helpers should
   trace to GDD Formulas sections, not invented values
-- **Ask before writing** — always confirm before creating files in `tests/`
+- **Ask before writing** â€” always confirm before creating files in `tests/`
 
 ## Next Steps
 
 - Run `/test-setup` if the test framework has not been scaffolded yet.
-- Use `/dev-story` to implement stories — helpers reduce boilerplate in new test files.
+- Use `/dev-story` to implement stories â€” helpers reduce boilerplate in new test files.
 - Run `/skill-test` to validate other skills that may need helper coverage.

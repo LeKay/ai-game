@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites id="2026-05-25" name="report_65" tests="17" failures="0" skipped="0" flaky="0" time="0.000">
+	<testsuite id="0" name="registry_loading_test" package="tests/unit/resource" timestamp="2026-05-24T22:02:02" hostname="localhost" tests="17" failures="0" errors="0" skipped="0" flaky="0" time="0.916">
+		<testcase name="test_registry_load_valid_file_returns_true" classname="registry_loading_test" time="0.037">
+		</testcase>
+		<testcase name="test_registry_load_valid_file_caches_wood" classname="registry_loading_test" time="0.032">
+		</testcase>
+		<testcase name="test_registry_load_valid_file_caches_all_seven_resources" classname="registry_loading_test" time="0.031">
+		</testcase>
+		<testcase name="test_registry_get_definition_display_name_correct" classname="registry_loading_test" time="0.023">
+		</testcase>
+		<testcase name="test_registry_get_definition_stack_limit_correct" classname="registry_loading_test" time="0.032">
+		</testcase>
+		<testcase name="test_registry_get_definition_optional_weight_loaded" classname="registry_loading_test" time="0.024">
+		</testcase>
+		<testcase name="test_registry_get_definition_category_production_good" classname="registry_loading_test" time="0.031">
+		</testcase>
+		<testcase name="test_registry_get_definition_category_consumable" classname="registry_loading_test" time="0.025">
+		</testcase>
+		<testcase name="test_registry_get_definition_unknown_id_returns_null" classname="registry_loading_test" time="0.031">
+		</testcase>
+		<testcase name="test_registry_get_definition_before_load_returns_null" classname="registry_loading_test" time="0.024">
+		</testcase>
+		<testcase name="test_registry_missing_file_returns_false" classname="registry_loading_test" time="0.042">
+		</testcase>
+		<testcase name="test_registry_missing_file_leaves_definitions_empty" classname="registry_loading_test" time="0.035">
+		</testcase>
+		<testcase name="test_registry_malformed_json_returns_false" classname="registry_loading_test" time="0.050">
+		</testcase>
+		<testcase name="test_registry_malformed_json_leaves_definitions_empty" classname="registry_loading_test" time="0.035">
+		</testcase>
+		<testcase name="test_registry_version_stored_after_valid_load" classname="registry_loading_test" time="0.025">
+		</testcase>
+		<testcase name="test_registry_version_zero_before_any_load" classname="registry_loading_test" time="0.024">
+		</testcase>
+		<testcase name="test_registry_version_unchanged_after_failed_load" classname="registry_loading_test" time="0.044">
+		</testcase>
+	</testsuite>
+</testsuites>

@@ -76,8 +76,6 @@ func _ready() -> void:
 	var tween := create_tween()
 	tween.tween_property(background, "modulate", Color.WHITE, FADE_IN_DURATION).set_trans(Tween.TRANS_SINE)
 
-	# Scale title font size to screen density per AC-2
-	title_label.add_theme_font_size_override("font_size", 24)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -124,8 +122,8 @@ func _on_continue_pressed() -> void:
 		return
 	_is_transitioning = true
 
-	# Show loading overlay within 200ms (AC-10)
 	_show_loading()
+	await get_tree().process_frame
 
 	if WorldSaveManager:
 		var success: bool = WorldSaveManager.load_last()
@@ -163,6 +161,8 @@ func _on_quit_pressed() -> void:
 
 ## Try Again: retry the failed load.
 func _on_try_again_pressed() -> void:
+	if _is_transitioning:
+		return
 	_hide_overlays()
 	_on_continue_pressed()
 
@@ -193,9 +193,12 @@ func _load_game_scene() -> void:
 	if game_scene:
 		var instance: Node = game_scene.instantiate()
 		get_tree().root.add_child(instance)
+		queue_free()
 	else:
 		push_error("[MainMenu] Failed to load game scene: " + GAME_SCENE)
-	queue_free()
+		_try_push_ui_context()
+		_hide_overlays()
+		_is_transitioning = false
 
 
 ## Quit to desktop — clean process exit.

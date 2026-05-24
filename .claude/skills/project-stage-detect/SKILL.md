@@ -1,11 +1,11 @@
----
+﻿---
 name: project-stage-detect
-model: qwen-3.6-35b-sovereign
+model: claude-haiku-4-5-20251001
 description: "Automatically analyze project state, detect stage, identify gaps, and recommend next steps based on existing artifacts. Use when user asks 'where are we in development', 'what stage are we in', 'full project audit'."
 argument-hint: "[optional: role filter like 'programmer' or 'designer']"
 user-invocable: true
 allowed-tools: Read, Glob, Grep, Bash, Write
-# Read-only diagnostic skill — no specialist agent delegation needed
+# Read-only diagnostic skill â€” no specialist agent delegation needed
 ---
 
 # Project Stage Detection
@@ -59,7 +59,7 @@ Analyze project structure and content:
 
 ### 2. Classify Project Stage
 
-Based on scanned artifacts, determine stage. Check `production/stage.txt` first —
+Based on scanned artifacts, determine stage. Check `production/stage.txt` first â€”
 if it exists, use its value (explicit override from `/gate-check`). Otherwise,
 auto-detect using these heuristics (check from most-advanced backward):
 
@@ -70,8 +70,8 @@ auto-detect using these heuristics (check from most-advanced backward):
 | **Technical Setup** | Systems index exists, engine not configured |
 | **Pre-Production** | Engine configured, `src/` has <10 source files |
 | **Production** | `src/` has 10+ source files, active development |
-| **Polish** | Explicit only (set by `/gate-check` Production → Polish gate) |
-| **Release** | Explicit only (set by `/gate-check` Polish → Release gate) |
+| **Polish** | Explicit only (set by `/gate-check` Production â†’ Polish gate) |
+| **Release** | Explicit only (set by `/gate-check` Polish â†’ Release gate) |
 
 ### 3. Collaborative Gap Identification
 
@@ -93,7 +93,7 @@ Use template: `.claude/docs/templates/project-stage-report.md`
 
 **Date**: [date]
 **Stage**: [Concept/Systems Design/Technical Setup/Pre-Production/Production/Polish/Release]
-**Stage Confidence**: [PASS — clearly detected / CONCERNS — ambiguous signals / FAIL — critical gaps block progress]
+**Stage Confidence**: [PASS â€” clearly detected / CONCERNS â€” ambiguous signals / FAIL â€” critical gaps block progress]
 
 ## Completeness Overview
 - Design: [X%] ([N] docs, [gaps])
@@ -173,12 +173,12 @@ Wait for user approval before creating the file.
 
 After generating the report, suggest relevant next steps:
 
-- **Concept exists but no systems index?** → `/map-systems` to decompose into systems
-- **Missing design docs?** → `/reverse-document design src/[system]`
-- **Missing architecture docs?** → `/architecture-decision` or `/reverse-document architecture`
-- **Prototypes need documentation?** → `/reverse-document concept prototypes/[name]`
-- **No sprint plan?** → `/sprint-plan`
-- **Approaching milestone?** → `/milestone-review`
+- **Concept exists but no systems index?** â†’ `/map-systems` to decompose into systems
+- **Missing design docs?** â†’ `/reverse-document design src/[system]`
+- **Missing architecture docs?** â†’ `/architecture-decision` or `/reverse-document architecture`
+- **Prototypes need documentation?** â†’ `/reverse-document concept prototypes/[name]`
+- **No sprint plan?** â†’ `/sprint-plan`
+- **Approaching milestone?** â†’ `/milestone-review`
 
 ---
 

@@ -23,8 +23,11 @@ func get_available_slots() -> Array[int]:
 	DirAccess.make_dir_absolute(SAVE_PATH)
 	var files: PackedStringArray = DirAccess.get_files_at(SAVE_PATH)
 	for file_name in files:
-		if file_name.begins_with("save_") and file_name.ends_with(".meta.json"):
-			var slot_str := file_name.trim_prefix("save_").trim_suffix(".meta.json")
+		# Match save_N.json but not save_N.meta.json — iterate data files directly
+		# so slots orphaned by a crash (no .meta.json) remain accessible.
+		if file_name.begins_with("save_") and file_name.ends_with(".json") \
+				and not file_name.ends_with(".meta.json"):
+			var slot_str := file_name.trim_prefix("save_").trim_suffix(".json")
 			if slot_str.is_valid_int():
 				slots.append(slot_str.to_int())
 	return slots
@@ -52,7 +55,7 @@ func save_game(slot: int) -> bool:
 	DirAccess.make_dir_absolute(SAVE_PATH)
 
 	# Collect serialize data from all registered systems
-	var data := {"schema_version": SCHEMA_VERSION, "timestamp": Time.get_ticks_msec()}
+	var data := {"schema_version": SCHEMA_VERSION, "timestamp": int(Time.get_unix_time_from_system())}
 
 	for system_name in _registered_systems:
 		var system: Object = Engine.get_singleton(system_name)
@@ -68,9 +71,15 @@ func save_game(slot: int) -> bool:
 	if tmp_file:
 		tmp_file.store_string(JSON.stringify(data))
 		tmp_file.close()
+	else:
+		printerr("[WorldSaveManager] Failed to open temp file for writing: ", tmp_path)
+		return false
 
-	# Rename (atomic on most filesystems)
-	DirAccess.rename_absolute(tmp_path, final_path)
+	var rename_err := DirAccess.rename_absolute(tmp_path, final_path)
+	if rename_err != OK:
+		printerr("[WorldSaveManager] Failed to rename temp file to final path: ", rename_err)
+		DirAccess.remove_absolute(tmp_path)
+		return false
 
 	# Write metadata
 	var meta_path := SAVE_PATH + "save_" + str(slot) + ".meta.json"
@@ -87,6 +96,9 @@ func save_game(slot: int) -> bool:
 			meta["tick_count"] = tick_data.get("tick_count", 0)
 		meta_file.store_string(JSON.stringify(meta))
 		meta_file.close()
+	else:
+		printerr("[WorldSaveManager] Failed to open meta file for writing: ", meta_path)
+		return false
 
 	print("[WorldSaveManager] Saved slot ", slot)
 	return true
@@ -129,15 +141,26 @@ func load_game(slot: int) -> bool:
 	return true
 
 
-## Convenience: load the last available save slot.
+## Convenience: load the most recently written save slot.
 func load_last() -> bool:
 	var slots := get_available_slots()
 	if slots.is_empty():
 		return false
 
-	# Load the highest slot number
-	slots.sort()
-	return load_game(slots.back())
+	var best_slot: int = slots[0]
+	var best_timestamp: int = -1
+	for slot in slots:
+		var info := get_save_info(slot)
+		var ts: int = info.get("timestamp", -1)
+		if ts > best_timestamp:
+			best_timestamp = ts
+			best_slot = slot
+
+	if best_timestamp == -1:
+		slots.sort()
+		best_slot = slots.back()
+
+	return load_game(best_slot)
 
 
 ## Delete a save slot.

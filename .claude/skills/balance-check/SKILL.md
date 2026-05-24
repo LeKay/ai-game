@@ -1,6 +1,6 @@
----
+﻿---
 name: balance-check
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Analyzes game balance data files, formulas, and configuration to identify outliers, broken progressions, degenerate strategies, and economy imbalances. Use after modifying any balance-related data or design. Use when user says 'balance report', 'check game balance', 'run a balance check'."
 argument-hint: "[system-name|path-to-data-file]"
 user-invocable: true
@@ -12,11 +12,11 @@ agent: economy-designer
 
 Determine the balance domain from `$ARGUMENTS[0]`:
 
-- **Combat** → weapon/ability DPS, time-to-kill, damage type interactions
-- **Economy** → resource faucets/sinks, acquisition rates, item pricing
-- **Progression** → XP/power curves, dead zones, power spikes
-- **Loot** → rarity distribution, pity timers, inventory pressure
-- **File path given** → load that file directly and infer domain from content
+- **Combat** â†’ weapon/ability DPS, time-to-kill, damage type interactions
+- **Economy** â†’ resource faucets/sinks, acquisition rates, item pricing
+- **Progression** â†’ XP/power curves, dead zones, power spikes
+- **Loot** â†’ rarity distribution, pity timers, inventory pressure
+- **File path given** â†’ load that file directly and infer domain from content
 
 If no argument, ask the user which system to check.
 
@@ -25,7 +25,7 @@ If no argument, ask the user which system to check.
 ## Phase 2: Read Data Files
 
 Read relevant files from `assets/data/` and `design/balance/` for the identified domain.
-Note every file read — they will appear in the Data Sources section of the report.
+Note every file read â€” they will appear in the Data Sources section of the report.
 
 ---
 

@@ -1,6 +1,6 @@
----
+﻿---
 name: playtest-report
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Generates a structured playtest report template or analyzes existing playtest notes into a structured format. Use this to standardize playtest feedback collection and analysis."
 argument-hint: "[new|analyze path-to-notes] [--review full|lean|solo]"
 user-invocable: true
@@ -10,16 +10,16 @@ allowed-tools: Read, Glob, Grep, Write, Task, AskUserQuestion
 ## Phase 1: Parse Arguments
 
 Resolve the review mode (once, store for all gate spawns this run):
-1. If `--review [full|lean|solo]` was passed → use that
-2. Else read `production/review-mode.txt` → use that value
-3. Else → default to `lean`
+1. If `--review [full|lean|solo]` was passed â†’ use that
+2. Else read `production/review-mode.txt` â†’ use that value
+3. Else â†’ default to `lean`
 
 See `.claude/docs/director-gates.md` for the full check pattern.
 
 Determine the mode:
 
-- `new` → generate a blank playtest report template
-- `analyze [path]` → read raw notes and fill in the template with structured findings
+- `new` â†’ generate a blank playtest report template
+- `analyze [path]` â†’ read raw notes and fill in the template with structured findings
 
 ---
 
@@ -101,10 +101,10 @@ Read the raw notes at the provided path. Cross-reference with existing design do
 
 Categorize all findings into four buckets:
 
-- **Design changes needed** — fun issues, player confusion, broken mechanics, observations that conflict with the GDD's intended experience
-- **Balance adjustments** — numbers feel wrong, difficulty too spiked or too flat
-- **Bug reports** — clear implementation defects that are reproducible
-- **Polish items** — not blocking progress, but friction or feel issues for later
+- **Design changes needed** â€” fun issues, player confusion, broken mechanics, observations that conflict with the GDD's intended experience
+- **Balance adjustments** â€” numbers feel wrong, difficulty too spiked or too flat
+- **Bug reports** â€” clear implementation defects that are reproducible
+- **Polish items** â€” not blocking progress, but friction or feel issues for later
 
 Present the categorized list, then route:
 
@@ -117,10 +117,10 @@ Present the categorized list, then route:
 
 ## Phase 3b: Creative Director Player Experience Review
 
-**Review mode check** — apply before spawning CD-PLAYTEST:
-- `solo` → skip. Note: "CD-PLAYTEST skipped — Solo mode." Proceed to Phase 4 (save the report).
-- `lean` → skip (not a PHASE-GATE). Note: "CD-PLAYTEST skipped — Lean mode." Proceed to Phase 4 (save the report).
-- `full` → spawn as normal.
+**Review mode check** â€” apply before spawning CD-PLAYTEST:
+- `solo` â†’ skip. Note: "CD-PLAYTEST skipped â€” Solo mode." Proceed to Phase 4 (save the report).
+- `lean` â†’ skip (not a PHASE-GATE). Note: "CD-PLAYTEST skipped â€” Lean mode." Proceed to Phase 4 (save the report).
+- `full` â†’ spawn as normal.
 
 After categorising findings, spawn `creative-director` via Task using gate **CD-PLAYTEST** (`.claude/docs/director-gates.md`).
 
@@ -140,7 +140,7 @@ If yes, write the file, creating the directory if needed.
 
 ## Phase 5: Next Steps
 
-Verdict: **COMPLETE** — playtest report generated.
+Verdict: **COMPLETE** â€” playtest report generated.
 
 - Act on the highest-priority finding category first.
 - After addressing design changes: re-run `/design-review` on the updated GDD.

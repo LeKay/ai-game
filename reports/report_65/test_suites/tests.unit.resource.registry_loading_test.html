@@ -34,12 +34,12 @@
 		<div class="report-container">
 			<h1>Testsuite Report</h1>
 			<div>
-				<span class="label">res://tests/unit/tick/manual_advancement_test.gd</span>
+				<span class="label">res://tests/unit/resource/registry_loading_test.gd</span>
 			</div>
 			<div class="summary">
 				<div class="summary-item">
 					<span class="label">Tests</span>
-					<span class="value">10</span>
+					<span class="value">17</span>
 				</div>
 				<div class="summary-item">
 					<span class="label">Skipped</span>
@@ -51,7 +51,7 @@
 				</div>
 				<div class="summary-item">
 					<span class="label">Failures</span>
-					<span class="value">2</span>
+					<span class="value">0</span>
 				</div>
 				<div class="summary-item">
 					<span class="label">Orphans</span>
@@ -59,21 +59,21 @@
 				</div>
 				<div class="summary-item">
 					<span class="label">Duration</span>
-					<span class="value">493ms</span>
+					<span class="value">916ms</span>
 				</div>
 				<div class="success-rate">
-					<div class="check-icon status-failed">✓</div>
+					<div class="check-icon status-passed">✓</div>
 					<div class="rate-text">
 						<span class="label">Success Rate</span>
-						<span class="value">80%</span>
+						<span class="value">100%</span>
 					</div>
 				</div>
 			</div>
 		</div>
 		<div class="breadcrumb">
 			<a href="../index.html"><span>All</span></a>
-			<a href="../path/tests.unit.tick.html"><span>tests/unit/tick</span></a>
-			<a class="active" href="#"><span>manual_advancement_test</span></a>
+			<a href="../path/tests.unit.resource.html"><span>tests/unit/resource</span></a>
+			<a class="active" href="#"><span>registry_loading_test</span></a>
 		</div>
 	</header>
 
@@ -94,11 +94,11 @@
 					<tbody>
 						
 								<tr class="testcase-group">
-									<td>test_initial_current_day</td>
+									<td>test_registry_load_valid_file_returns_true</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
-									<td>38ms</td>
+									<td>37ms</td>
 									<td class="report-column">
 										<pre>
 
@@ -108,11 +108,11 @@
 
 
 								<tr class="testcase-group">
-									<td>test_initial_speed_multiplier</td>
+									<td>test_registry_load_valid_file_caches_wood</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
-									<td>13ms</td>
+									<td>32ms</td>
 									<td class="report-column">
 										<pre>
 
@@ -122,11 +122,11 @@
 
 
 								<tr class="testcase-group">
-									<td>test_manual_advancement_while_paused</td>
+									<td>test_registry_load_valid_file_caches_all_seven_resources</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
-									<td>18ms</td>
+									<td>31ms</td>
 									<td class="report-column">
 										<pre>
 
@@ -136,11 +136,11 @@
 
 
 								<tr class="testcase-group">
-									<td>test_pause_state_preserved_after_manual_action</td>
+									<td>test_registry_get_definition_display_name_correct</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
-									<td>46ms</td>
+									<td>23ms</td>
 									<td class="report-column">
 										<pre>
 
@@ -150,11 +150,11 @@
 
 
 								<tr class="testcase-group">
-									<td>test_manual_action_respects_no_speed_multiplier</td>
+									<td>test_registry_get_definition_stack_limit_correct</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
-									<td>15ms</td>
+									<td>32ms</td>
 									<td class="report-column">
 										<pre>
 
@@ -164,57 +164,7 @@
 
 
 								<tr class="testcase-group">
-									<td>test_multiple_manual_actions_accumulate</td>
-									<td><span class="status status-passed">PASSED</span></td>
-									<td>0</td>
-									<td>0</td>
-									<td>34ms</td>
-									<td class="report-column">
-										<pre>
-
-										</pre>
-									</td>
-								</tr>
-
-
-								<tr class="testcase-group">
-									<td>test_manual_day_transition_on_overflow</td>
-									<td><span class="status status-passed">PASSED</span></td>
-									<td>0</td>
-									<td>0</td>
-									<td>30ms</td>
-									<td class="report-column">
-										<pre>
-
-										</pre>
-									</td>
-								</tr>
-
-
-								<tr class="testcase-group">
-									<td>test_manual_multi_day_overflow_on_large_cost</td>
-									<td><span class="status status-failed">FAILED</span></td>
-									<td>0</td>
-									<td>0</td>
-									<td>29ms</td>
-									<td class="report-column">
-										<pre>
-line 122: Expecting:
- '3'
- but was
- '2'
-line 123: Expecting:
- '2'
- but was
- '1'
-
-										</pre>
-									</td>
-								</tr>
-
-
-								<tr class="testcase-group">
-									<td>test_manual_overflow_from_near_end_of_day</td>
+									<td>test_registry_get_definition_optional_weight_loaded</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
@@ -228,11 +178,151 @@ line 123: Expecting:
 
 
 								<tr class="testcase-group">
-									<td>test_manual_negative_cost_ignored</td>
+									<td>test_registry_get_definition_category_production_good</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
-									<td>19ms</td>
+									<td>31ms</td>
+									<td class="report-column">
+										<pre>
+
+										</pre>
+									</td>
+								</tr>
+
+
+								<tr class="testcase-group">
+									<td>test_registry_get_definition_category_consumable</td>
+									<td><span class="status status-passed">PASSED</span></td>
+									<td>0</td>
+									<td>0</td>
+									<td>25ms</td>
+									<td class="report-column">
+										<pre>
+
+										</pre>
+									</td>
+								</tr>
+
+
+								<tr class="testcase-group">
+									<td>test_registry_get_definition_unknown_id_returns_null</td>
+									<td><span class="status status-passed">PASSED</span></td>
+									<td>0</td>
+									<td>0</td>
+									<td>31ms</td>
+									<td class="report-column">
+										<pre>
+
+										</pre>
+									</td>
+								</tr>
+
+
+								<tr class="testcase-group">
+									<td>test_registry_get_definition_before_load_returns_null</td>
+									<td><span class="status status-passed">PASSED</span></td>
+									<td>0</td>
+									<td>0</td>
+									<td>24ms</td>
+									<td class="report-column">
+										<pre>
+
+										</pre>
+									</td>
+								</tr>
+
+
+								<tr class="testcase-group">
+									<td>test_registry_missing_file_returns_false</td>
+									<td><span class="status status-passed">PASSED</span></td>
+									<td>0</td>
+									<td>0</td>
+									<td>42ms</td>
+									<td class="report-column">
+										<pre>
+
+										</pre>
+									</td>
+								</tr>
+
+
+								<tr class="testcase-group">
+									<td>test_registry_missing_file_leaves_definitions_empty</td>
+									<td><span class="status status-passed">PASSED</span></td>
+									<td>0</td>
+									<td>0</td>
+									<td>35ms</td>
+									<td class="report-column">
+										<pre>
+
+										</pre>
+									</td>
+								</tr>
+
+
+								<tr class="testcase-group">
+									<td>test_registry_malformed_json_returns_false</td>
+									<td><span class="status status-passed">PASSED</span></td>
+									<td>0</td>
+									<td>0</td>
+									<td>50ms</td>
+									<td class="report-column">
+										<pre>
+
+										</pre>
+									</td>
+								</tr>
+
+
+								<tr class="testcase-group">
+									<td>test_registry_malformed_json_leaves_definitions_empty</td>
+									<td><span class="status status-passed">PASSED</span></td>
+									<td>0</td>
+									<td>0</td>
+									<td>35ms</td>
+									<td class="report-column">
+										<pre>
+
+										</pre>
+									</td>
+								</tr>
+
+
+								<tr class="testcase-group">
+									<td>test_registry_version_stored_after_valid_load</td>
+									<td><span class="status status-passed">PASSED</span></td>
+									<td>0</td>
+									<td>0</td>
+									<td>25ms</td>
+									<td class="report-column">
+										<pre>
+
+										</pre>
+									</td>
+								</tr>
+
+
+								<tr class="testcase-group">
+									<td>test_registry_version_zero_before_any_load</td>
+									<td><span class="status status-passed">PASSED</span></td>
+									<td>0</td>
+									<td>0</td>
+									<td>24ms</td>
+									<td class="report-column">
+										<pre>
+
+										</pre>
+									</td>
+								</tr>
+
+
+								<tr class="testcase-group">
+									<td>test_registry_version_unchanged_after_failed_load</td>
+									<td><span class="status status-passed">PASSED</span></td>
+									<td>0</td>
+									<td>0</td>
+									<td>44ms</td>
 									<td class="report-column">
 										<pre>
 
@@ -251,7 +341,7 @@ line 123: Expecting:
 	</main>
 
 	<footer>
-		<p>Generated by <a href="https://github.com/MikeSchulze/gdUnit4">GdUnit4</a> at 2026-05-23 19:57:53</p>
+		<p>Generated by <a href="https://github.com/MikeSchulze/gdUnit4">GdUnit4</a> at 2026-05-24 22:02:03</p>
 		<div class="status-legend">
 			<span class="status-legend-item">
 				<span class="status-box status-skipped"></span> Skipped

@@ -34,12 +34,12 @@
 		<div class="report-container">
 			<h1>Testsuite Report</h1>
 			<div>
-				<span class="label">res://tests/unit/tick/tick_accumulator_test.gd</span>
+				<span class="label">res://tests/unit/tick/speed_pause_test.gd</span>
 			</div>
 			<div class="summary">
 				<div class="summary-item">
 					<span class="label">Tests</span>
-					<span class="value">15</span>
+					<span class="value">10</span>
 				</div>
 				<div class="summary-item">
 					<span class="label">Skipped</span>
@@ -59,7 +59,7 @@
 				</div>
 				<div class="summary-item">
 					<span class="label">Duration</span>
-					<span class="value">789ms</span>
+					<span class="value">517ms</span>
 				</div>
 				<div class="success-rate">
 					<div class="check-icon status-passed">✓</div>
@@ -73,7 +73,7 @@
 		<div class="breadcrumb">
 			<a href="../index.html"><span>All</span></a>
 			<a href="../path/tests.unit.tick.html"><span>tests/unit/tick</span></a>
-			<a class="active" href="#"><span>tick_accumulator_test</span></a>
+			<a class="active" href="#"><span>speed_pause_test</span></a>
 		</div>
 	</header>
 
@@ -94,11 +94,11 @@
 					<tbody>
 						
 								<tr class="testcase-group">
-									<td>test_tick_accumulator_hundred_seconds_thousand_ticks</td>
+									<td>test_pause_no_accumulation</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
-									<td>31ms</td>
+									<td>43ms</td>
 									<td class="report-column">
 										<pre>
 
@@ -108,11 +108,11 @@
 
 
 								<tr class="testcase-group">
-									<td>test_tick_accumulator_frame_rate_independent_60fps</td>
+									<td>test_speed_2x_50s_1000_ticks</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
-									<td>46ms</td>
+									<td>32ms</td>
 									<td class="report-column">
 										<pre>
 
@@ -122,11 +122,11 @@
 
 
 								<tr class="testcase-group">
-									<td>test_tick_accumulator_frame_rate_independent_144fps</td>
+									<td>test_speed_05x_200s_1000_ticks</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
-									<td>39ms</td>
+									<td>32ms</td>
 									<td class="report-column">
 										<pre>
 
@@ -136,11 +136,11 @@
 
 
 								<tr class="testcase-group">
-									<td>test_tick_accumulator_frame_rate_independent_30fps</td>
+									<td>test_no_duplicate_speed_signals</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
-									<td>29ms</td>
+									<td>24ms</td>
 									<td class="report-column">
 										<pre>
 
@@ -150,11 +150,11 @@
 
 
 								<tr class="testcase-group">
-									<td>test_tick_accumulator_lag_spike_clamped_to_100</td>
+									<td>test_rapid_pause_toggle_stability</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
-									<td>26ms</td>
+									<td>32ms</td>
 									<td class="report-column">
 										<pre>
 
@@ -164,105 +164,7 @@
 
 
 								<tr class="testcase-group">
-									<td>test_tick_accumulator_speed_2x_under_cap</td>
-									<td><span class="status status-passed">PASSED</span></td>
-									<td>0</td>
-									<td>0</td>
-									<td>22ms</td>
-									<td class="report-column">
-										<pre>
-
-										</pre>
-									</td>
-								</tr>
-
-
-								<tr class="testcase-group">
-									<td>test_tick_accumulator_zero_delta_no_ticks</td>
-									<td><span class="status status-passed">PASSED</span></td>
-									<td>0</td>
-									<td>0</td>
-									<td>31ms</td>
-									<td class="report-column">
-										<pre>
-
-										</pre>
-									</td>
-								</tr>
-
-
-								<tr class="testcase-group">
-									<td>test_tick_accumulator_negative_delta_treated_as_zero</td>
-									<td><span class="status status-passed">PASSED</span></td>
-									<td>0</td>
-									<td>0</td>
-									<td>19ms</td>
-									<td class="report-column">
-										<pre>
-
-										</pre>
-									</td>
-								</tr>
-
-
-								<tr class="testcase-group">
-									<td>test_tick_accumulator_nan_delta_treated_as_zero</td>
-									<td><span class="status status-passed">PASSED</span></td>
-									<td>0</td>
-									<td>0</td>
-									<td>18ms</td>
-									<td class="report-column">
-										<pre>
-
-										</pre>
-									</td>
-								</tr>
-
-
-								<tr class="testcase-group">
-									<td>test_tick_accumulator_speed_zero_produces_zero_ticks</td>
-									<td><span class="status status-passed">PASSED</span></td>
-									<td>0</td>
-									<td>0</td>
-									<td>22ms</td>
-									<td class="report-column">
-										<pre>
-
-										</pre>
-									</td>
-								</tr>
-
-
-								<tr class="testcase-group">
-									<td>test_tick_accumulator_signal_emits_correct_count</td>
-									<td><span class="status status-passed">PASSED</span></td>
-									<td>0</td>
-									<td>0</td>
-									<td>17ms</td>
-									<td class="report-column">
-										<pre>
-
-										</pre>
-									</td>
-								</tr>
-
-
-								<tr class="testcase-group">
-									<td>test_tick_accumulator_no_signal_on_zero_ticks</td>
-									<td><span class="status status-passed">PASSED</span></td>
-									<td>0</td>
-									<td>0</td>
-									<td>16ms</td>
-									<td class="report-column">
-										<pre>
-
-										</pre>
-									</td>
-								</tr>
-
-
-								<tr class="testcase-group">
-									<td>test_tick_accumulator_signal_emits_once_for_batched_ticks</td>
+									<td>test_idempotent_set_pause_already_paused</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
@@ -276,11 +178,11 @@
 
 
 								<tr class="testcase-group">
-									<td>test_tick_accumulator_remainder_carry_prevents_drift</td>
+									<td>test_invalid_speed_clamps_to_options</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
-									<td>21ms</td>
+									<td>31ms</td>
 									<td class="report-column">
 										<pre>
 
@@ -290,7 +192,35 @@
 
 
 								<tr class="testcase-group">
-									<td>test_tick_accumulator_remainder_high_value_carry</td>
+									<td>test_ticks_advanced_signal_emits_with_correct_delta</td>
+									<td><span class="status status-passed">PASSED</span></td>
+									<td>0</td>
+									<td>0</td>
+									<td>24ms</td>
+									<td class="report-column">
+										<pre>
+
+										</pre>
+									</td>
+								</tr>
+
+
+								<tr class="testcase-group">
+									<td>test_remainder_preserved_across_pause_unpause</td>
+									<td><span class="status status-passed">PASSED</span></td>
+									<td>0</td>
+									<td>0</td>
+									<td>31ms</td>
+									<td class="report-column">
+										<pre>
+
+										</pre>
+									</td>
+								</tr>
+
+
+								<tr class="testcase-group">
+									<td>test_set_pause_public_api</td>
 									<td><span class="status status-passed">PASSED</span></td>
 									<td>0</td>
 									<td>0</td>
@@ -313,7 +243,7 @@
 	</main>
 
 	<footer>
-		<p>Generated by <a href="https://github.com/MikeSchulze/gdUnit4">GdUnit4</a> at 2026-05-23 19:59:43</p>
+		<p>Generated by <a href="https://github.com/MikeSchulze/gdUnit4">GdUnit4</a> at 2026-05-24 16:41:40</p>
 		<div class="status-legend">
 			<span class="status-legend-item">
 				<span class="status-box status-skipped"></span> Skipped

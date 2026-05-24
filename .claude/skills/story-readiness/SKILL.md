@@ -1,6 +1,6 @@
----
+﻿---
 name: story-readiness
-model: qwen-3.6-35b-sovereign
+model: claude-haiku-4-5-20251001
 description: "Validate that a story file is implementation-ready. Checks for embedded GDD requirements, ADR references, engine notes, clear acceptance criteria, and no open design questions. Produces READY / NEEDS WORK / BLOCKED verdict with specific gaps. Use when user says 'is this story ready', 'can I start on this story', 'is story X ready to implement'."
 argument-hint: "[story-file-path or 'all' or 'sprint']"
 user-invocable: true
@@ -10,7 +10,7 @@ allowed-tools: Read, Glob, Grep, AskUserQuestion, Task
 # Story Readiness
 
 This skill validates that a story file contains everything a developer needs
-to begin implementation — no mid-sprint design interruptions, no guessing,
+to begin implementation â€” no mid-sprint design interruptions, no guessing,
 no ambiguous acceptance criteria. Run it before assigning a story.
 
 **This skill is read-only.** It never edits story files. It reports findings
@@ -25,9 +25,9 @@ gap list for each non-ready story.
 
 Resolve the review mode once at startup (store for all gate spawns this run):
 
-1. If skill was called with `--review [full|lean|solo]` → use that value
-2. Else read `production/review-mode.txt` → use that value
-3. Else → default to `lean`
+1. If skill was called with `--review [full|lean|solo]` â†’ use that value
+2. Else read `production/review-mode.txt` â†’ use that value
+3. Else â†’ default to `lean`
 
 See `.claude/docs/director-gates.md` for the full check pattern and mode definitions.
 
@@ -58,18 +58,18 @@ Report the scope before proceeding: "Validating [N] story files."
 
 Before checking any stories, load reference documents once (not per-story):
 
-- `design/gdd/systems-index.md` — to know which systems have approved GDDs
-- `docs/architecture/control-manifest.md` — to know which manifest rules exist
+- `design/gdd/systems-index.md` â€” to know which systems have approved GDDs
+- `docs/architecture/control-manifest.md` â€” to know which manifest rules exist
   (if the file does not exist, note it as missing once; do not re-flag per story)
   Also extract the `Manifest Version:` date from the header block if the file exists.
-- `docs/architecture/tr-registry.yaml` — index all entries by `id`. Used to
+- `docs/architecture/tr-registry.yaml` â€” index all entries by `id`. Used to
   validate TR-IDs in stories. If the file does not exist, note it once; TR-ID
   checks will auto-pass for all stories (registry predates stories, so missing
   registry means stories are from before TR tracking was introduced).
-- All ADR status fields — for each unique ADR referenced across the stories being
+- All ADR status fields â€” for each unique ADR referenced across the stories being
   checked, read the ADR file and note its `Status:` field. Cache these so you
   don't re-read the same ADR for every story.
-- The current sprint file (if scope is `sprint`) — to identify Must Have /
+- The current sprint file (if scope is `sprint`) â€” to identify Must Have /
   Should Have priority for escalation decisions
 
 ---
@@ -83,13 +83,13 @@ items pass or are explicitly marked N/A with a stated reason.
 
 - [ ] **GDD requirement referenced**: The story includes a `design/gdd/` path
   and quotes or links a specific requirement, acceptance criterion, or rule from
-  that GDD — not just the GDD filename. A link to the document without tracing
+  that GDD â€” not just the GDD filename. A link to the document without tracing
   to a specific requirement does not pass.
 - [ ] **Requirement is self-contained**: The acceptance criteria in the story
   are understandable without opening the GDD. A developer should not need to
   read a separate document to understand what DONE means.
 - [ ] **Acceptance criteria are testable**: Each criterion is a specific,
-  observable condition — not "implement X" or "the system works correctly".
+  observable condition â€” not "implement X" or "the system works correctly".
   Bad example: "Implement the jump mechanic." Good example: "Jump reaches
   max height of 5 units within 0.3 seconds when jump is held."
 - [ ] **No acceptance criteria require judgment calls**: Criteria like
@@ -104,25 +104,25 @@ items pass or are explicitly marked N/A with a stated reason.
   A story with no ADR reference and no explicit N/A note fails this check.
 - [ ] **ADR is Accepted (not Proposed)**: For each referenced ADR, check its
   `Status:` field using the cached ADR statuses loaded in Section 2.
-  - If `Status: Accepted` → pass.
-  - If `Status: Proposed` → **BLOCKED**: the ADR may change before it is accepted,
+  - If `Status: Accepted` â†’ pass.
+  - If `Status: Proposed` â†’ **BLOCKED**: the ADR may change before it is accepted,
     and the story's implementation guidance could be wrong.
-    Fix: `BLOCKED: ADR-NNNN is Proposed — wait for acceptance before implementing.`
-  - If the ADR file does not exist → **BLOCKED**: referenced ADR is missing.
+    Fix: `BLOCKED: ADR-NNNN is Proposed â€” wait for acceptance before implementing.`
+  - If the ADR file does not exist â†’ **BLOCKED**: referenced ADR is missing.
   - Auto-pass if story has an explicit "No ADR applies" N/A note.
 - [ ] **TR-ID is valid and active**: If the story contains a `TR-[system]-NNN`
   reference, look it up in the TR registry loaded in Section 2.
-  - If the ID exists and `status: active` → pass.
-  - If the ID exists and `status: deprecated` or `status: superseded-by: ...` →
+  - If the ID exists and `status: active` â†’ pass.
+  - If the ID exists and `status: deprecated` or `status: superseded-by: ...` â†’
     NEEDS WORK: the requirement was removed or replaced.
     Fix: update the story to reference the current requirement ID or remove if no longer applicable.
-  - If the ID does not exist in the registry → NEEDS WORK: ID was not registered
+  - If the ID does not exist in the registry â†’ NEEDS WORK: ID was not registered
     (story may predate registry, or registry needs an `/architecture-review` run).
   - Auto-pass if the story has no TR-ID reference OR if the registry does not exist.
 - [ ] **Manifest version is current**: If the story has a `Manifest Version:` date
   in its header AND `docs/architecture/control-manifest.md` exists:
-  - If story version matches current manifest `Manifest Version:` → pass.
-  - If story version is older than current manifest → NEEDS WORK: new rules may
+  - If story version matches current manifest `Manifest Version:` â†’ pass.
+  - If story version is older than current manifest â†’ NEEDS WORK: new rules may
     apply. Fix: review changed manifest rules, update story if any forbidden/required
     entries changed, then update the story's `Manifest Version:` to current.
   - Auto-pass if either the story has no `Manifest Version:` field OR the manifest
@@ -130,9 +130,9 @@ items pass or are explicitly marked N/A with a stated reason.
 - [ ] **Engine notes present**: For any post-cutoff engine API this story
   is likely to touch, implementation notes or a verification requirement are
   included. If the story clearly does not touch engine APIs (e.g., it is a
-  pure data/config change), "N/A — no engine API involved" is acceptable.
+  pure data/config change), "N/A â€” no engine API involved" is acceptable.
 - [ ] **Control manifest rules noted**: Relevant layer rules from the control
-  manifest are referenced, OR "N/A — manifest not yet created" is stated.
+  manifest are referenced, OR "N/A â€” manifest not yet created" is stated.
   This item auto-passes if `docs/architecture/control-manifest.md` does not
   exist yet (do not penalize stories written before the manifest was created).
 
@@ -164,14 +164,14 @@ items pass or are explicitly marked N/A with a stated reason.
   (paths containing `assets/`, or file extensions `.png`, `.jpg`, `.svg`,
   `.wav`, `.ogg`, `.mp3`, `.glb`, `.gltf`, `.tres`, `.tscn`, `.res`).
   - For each asset path found: use Glob to check whether the file exists.
-  - If any referenced asset does not exist: **NEEDS WORK** — note the missing
+  - If any referenced asset does not exist: **NEEDS WORK** â€” note the missing
     path(s). (The story references assets that have not been created yet.
     Either remove the reference, create a placeholder, or mark it as an
     explicit dependency on an asset creation story.)
   - If all referenced assets exist: note "Referenced assets verified:
     [count] found."
   - If no asset paths are referenced in the story: note "No asset references
-    found in story — skipping asset check." This item auto-passes.
+    found in story â€” skipping asset check." This item auto-passes.
   - This is an existence-only check. Do not validate file format or content.
 
 ### Definition of Done
@@ -180,7 +180,7 @@ items pass or are explicitly marked N/A with a stated reason.
   the story is either trivially small (should it be a story?) or under-specified.
 - [ ] **Performance budget noted if applicable**: If this story touches any
   part of the gameplay loop, rendering, or physics, a performance budget or
-  a "no performance impact expected — [reason]" note is present.
+  a "no performance impact expected â€” [reason]" note is present.
 - [ ] **Story Type declared**: The story includes a `Type:` field in its header
   identifying the test category (Logic / Integration / Visual/Feel / UI / Config/Data).
   Without this, test evidence requirements cannot be enforced at story close.
@@ -196,16 +196,16 @@ items pass or are explicitly marked N/A with a stated reason.
 
 Assign one of three verdicts per story:
 
-**READY** — All checklist items pass or have explicit N/A justifications.
+**READY** â€” All checklist items pass or have explicit N/A justifications.
 The story can be assigned immediately.
 
-**NEEDS WORK** — One or more checklist items fail, but all dependency stories
+**NEEDS WORK** â€” One or more checklist items fail, but all dependency stories
 exist and are not DRAFT. The story can be fixed before assignment.
 
-**BLOCKED** — One or more dependency stories are missing or in DRAFT state,
+**BLOCKED** â€” One or more dependency stories are missing or in DRAFT state,
 OR a critical design question (flagged UNRESOLVED in a criterion or rule) has
 no owner. The story cannot be assigned until the blocker is resolved. Note:
-a story that is BLOCKED may also have NEEDS WORK items — list both.
+a story that is BLOCKED may also have NEEDS WORK items â€” list both.
 
 ---
 
@@ -232,7 +232,7 @@ Verdict: [READY / NEEDS WORK / BLOCKED]
 ### Multiple story aggregate output
 
 ```
-## Story Readiness Summary — [scope] — [date]
+## Story Readiness Summary â€” [scope] â€” [date]
 
 Ready:      [N] stories
 Needs Work: [N] stories
@@ -242,8 +242,8 @@ Blocked:    [N] stories
 - [story title] ([path])
 
 ### Needs Work
-- [story title]: [primary gap — one line]
-- [story title]: [primary gap — one line]
+- [story title]: [primary gap â€” one line]
+- [story title]: [primary gap â€” one line]
 
 ### Blocked Stories
 - [story title]: Blocked by [story ID / design question]
@@ -275,7 +275,7 @@ After reporting findings, offer:
 draft the missing sections for your approval."
 
 If the user says yes for a specific story, draft only the missing sections
-in conversation. Do not use Write or Edit tools — the user (or
+in conversation. Do not use Write or Edit tools â€” the user (or
 `/create-stories`) handles writing.
 
 **Redirect rules:**
@@ -307,8 +307,8 @@ If any are found, surface up to 3:
 ```
 ### Other Ready Stories in This Sprint
 
-1. [Story name] — [1-line description] — Est: [X hrs]
-2. [Story name] — [1-line description] — Est: [X hrs]
+1. [Story name] â€” [1-line description] â€” Est: [X hrs]
+2. [Story name] â€” [1-line description] â€” Est: [X hrs]
 
 Run `/story-readiness [path]` to validate before starting.
 ```
@@ -317,13 +317,13 @@ If no sprint file exists or no other ready stories are found, skip this section 
 
 ---
 
-## Phase 8: Director Gate — Story Readiness Review
+## Phase 8: Director Gate â€” Story Readiness Review
 
 Apply the review mode resolved in Phase 0 before spawning QL-STORY-READY:
 
-- `solo` → skip. Note: "QL-STORY-READY skipped — Solo mode." Proceed to close.
-- `lean` → skip. Note: "QL-STORY-READY skipped — Lean mode." Proceed to close.
-- `full` → spawn as normal.
+- `solo` â†’ skip. Note: "QL-STORY-READY skipped â€” Solo mode." Proceed to close.
+- `lean` â†’ skip. Note: "QL-STORY-READY skipped â€” Lean mode." Proceed to close.
+- `full` â†’ spawn as normal.
 
 Spawn `qa-lead` via Task using gate **QL-STORY-READY** (`.claude/docs/director-gates.md`).
 
@@ -334,10 +334,10 @@ Pass the following context:
 - Overall verdict (READY / NEEDS WORK / BLOCKED) from Phase 4
 
 Handle the verdict per standard rules in `director-gates.md`:
-- **ADEQUATE** → story is cleared. Proceed to close.
-- **GAPS [list]** → surface the specific gaps to the user via `AskUserQuestion`:
+- **ADEQUATE** â†’ story is cleared. Proceed to close.
+- **GAPS [list]** â†’ surface the specific gaps to the user via `AskUserQuestion`:
   options: `Update story with suggested gaps` / `Accept and proceed anyway` / `Discuss further`.
-- **INADEQUATE** → surface the specific gaps; ask user whether to update the story or proceed anyway.
+- **INADEQUATE** â†’ surface the specific gaps; ask user whether to update the story or proceed anyway.
 
 ---
 

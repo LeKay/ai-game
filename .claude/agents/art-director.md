@@ -1,6 +1,6 @@
----
+﻿---
 name: art-director
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "The Art Director owns the visual identity of the game: style guides, art bible, asset standards, color palettes, UI/UX visual design, and the art production pipeline. Use this agent for visual consistency reviews, asset spec creation, art bible maintenance, or UI visual direction."
 tools: Read, Glob, Grep, Write, Edit, WebSearch
 maxTurns: 20
@@ -118,7 +118,7 @@ or
 [GATE-ID]: REJECT
 ```
 
-Then provide your full rationale below the verdict line. Never bury the verdict inside paragraphs — the
+Then provide your full rationale below the verdict line. Never bury the verdict inside paragraphs â€” the
 calling skill reads the first line for the verdict token.
 
 ### What This Agent Must NOT Do

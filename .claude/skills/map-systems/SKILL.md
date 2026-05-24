@@ -1,6 +1,6 @@
----
+﻿---
 name: map-systems
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Decompose a game concept into individual systems, map dependencies, prioritize design order, and create the systems index."
 argument-hint: "[next | system-name] [--review full|lean|solo]"
 user-invocable: true
@@ -13,15 +13,15 @@ When this skill is invoked:
 
 Two modes:
 
-- **No argument**: `/map-systems` — Run the full decomposition workflow (Phases 1-5)
+- **No argument**: `/map-systems` â€” Run the full decomposition workflow (Phases 1-5)
   to create or update the systems index.
-- **`next`**: `/map-systems next` — Pick the highest-priority undesigned system
+- **`next`**: `/map-systems next` â€” Pick the highest-priority undesigned system
   from the index and hand off to `/design-system` (Phase 6).
 
 Also resolve the review mode (once, store for all gate spawns this run):
-1. If `--review [full|lean|solo]` was passed → use that
-2. Else read `production/review-mode.txt` → use that value
-3. Else → default to `lean`
+1. If `--review [full|lean|solo]` was passed â†’ use that
+2. Else read `production/review-mode.txt` â†’ use that value
+3. Else â†’ default to `lean`
 
 See `.claude/docs/director-gates.md` for the full check pattern.
 
@@ -33,15 +33,15 @@ Read the game concept and any existing design work. This provides the raw materi
 for systems decomposition.
 
 **Required:**
-- Read `design/gdd/game-concept.md` — **fail with a clear message if missing**:
+- Read `design/gdd/game-concept.md` â€” **fail with a clear message if missing**:
   > "No game concept found at `design/gdd/game-concept.md`. Run `/brainstorm` first
   > to create one, then come back to decompose it into systems."
 
 **Optional (read if they exist):**
-- Read `design/gdd/game-pillars.md` — pillars constrain priority and scope
-- Read `design/gdd/systems-index.md` — if exists, **resume** from where it left off
+- Read `design/gdd/game-pillars.md` â€” pillars constrain priority and scope
+- Read `design/gdd/systems-index.md` â€” if exists, **resume** from where it left off
   (update, don't recreate from scratch)
-- Glob `design/gdd/*.md` — check which system GDDs already exist
+- Glob `design/gdd/*.md` â€” check which system GDDs already exist
 
 **If the systems index already exists:**
 - Read it and present current status to the user
@@ -56,7 +56,7 @@ for systems decomposition.
 ## Phase 2: Systems Enumeration (Collaborative)
 
 Extract and identify all systems the game needs. This is the creative core of the
-skill — it requires human judgment because concept docs rarely enumerate every
+skill â€” it requires human judgment because concept docs rarely enumerate every
 system explicitly.
 
 ### Step 2a: Extract Explicit Systems
@@ -139,16 +139,16 @@ Check for cycles in the dependency graph. If found:
 
 Show the dependency map as a layered list. Highlight:
 - Any circular dependencies
-- Any "bottleneck" systems (many others depend on them — these are high-risk)
-- Any systems with no dependents (leaf nodes — lower risk, can be designed late)
+- Any "bottleneck" systems (many others depend on them â€” these are high-risk)
+- Any systems with no dependents (leaf nodes â€” lower risk, can be designed late)
 
 Use `AskUserQuestion` to ask: "Does this dependency ordering look right? Any
 dependencies I'm missing or that should be removed?"
 
-**Review mode check** — apply before spawning TD-SYSTEM-BOUNDARY:
-- `solo` → skip. Note: "TD-SYSTEM-BOUNDARY skipped — Solo mode." Proceed to priority assignment.
-- `lean` → skip (not a PHASE-GATE). Note: "TD-SYSTEM-BOUNDARY skipped — Lean mode." Proceed to priority assignment.
-- `full` → spawn as normal.
+**Review mode check** â€” apply before spawning TD-SYSTEM-BOUNDARY:
+- `solo` â†’ skip. Note: "TD-SYSTEM-BOUNDARY skipped â€” Solo mode." Proceed to priority assignment.
+- `lean` â†’ skip (not a PHASE-GATE). Note: "TD-SYSTEM-BOUNDARY skipped â€” Lean mode." Proceed to priority assignment.
+- `full` â†’ spawn as normal.
 
 **After dependency mapping is approved, spawn `technical-director` via Task using gate TD-SYSTEM-BOUNDARY (`.claude/docs/director-gates.md`) before proceeding to priority assignment.**
 
@@ -180,23 +180,23 @@ Use `AskUserQuestion` to ask: "Do these priority assignments match your vision?
 Which systems should be higher or lower priority?"
 
 Explain reasoning in conversation: "I placed [system] in MVP because the core loop
-requires it — without [system], the 30-second loop can't function."
+requires it â€” without [system], the 30-second loop can't function."
 
-**"Why" column guidance**: When explaining why each system was placed in a priority tier, mix technical necessity with player-experience reasoning. Do not use purely technical justifications like "Combat needs damage math" — connect to player experience where relevant. Examples of good "Why" entries:
-- "Required for the core loop — without it, placement decisions have no consequence (Pillar 2: Placement is the Puzzle)"
-- "Ballista's punch-through identity is established here — this stat definition is what makes it feel different from Archer"
-- "Foundation for all economy decisions — players must understand upgrade costs to make meaningful placement choices"
+**"Why" column guidance**: When explaining why each system was placed in a priority tier, mix technical necessity with player-experience reasoning. Do not use purely technical justifications like "Combat needs damage math" â€” connect to player experience where relevant. Examples of good "Why" entries:
+- "Required for the core loop â€” without it, placement decisions have no consequence (Pillar 2: Placement is the Puzzle)"
+- "Ballista's punch-through identity is established here â€” this stat definition is what makes it feel different from Archer"
+- "Foundation for all economy decisions â€” players must understand upgrade costs to make meaningful placement choices"
 
 Pure technical necessity ("X depends on Y") is insufficient alone when the system directly shapes player experience.
 
-**Review mode check** — apply before spawning PR-SCOPE:
-- `solo` → skip. Note: "PR-SCOPE skipped — Solo mode." Proceed to writing the systems index.
-- `lean` → skip (not a PHASE-GATE). Note: "PR-SCOPE skipped — Lean mode." Proceed to writing the systems index.
-- `full` → spawn as normal.
+**Review mode check** â€” apply before spawning PR-SCOPE:
+- `solo` â†’ skip. Note: "PR-SCOPE skipped â€” Solo mode." Proceed to writing the systems index.
+- `lean` â†’ skip (not a PHASE-GATE). Note: "PR-SCOPE skipped â€” Lean mode." Proceed to writing the systems index.
+- `full` â†’ spawn as normal.
 
 **After priorities are approved, spawn `producer` via Task using gate PR-SCOPE (`.claude/docs/director-gates.md`) before writing the index.**
 
-Pass: total system count per milestone tier, estimated implementation volume per tier (system count × average complexity), team size, stated project timeline.
+Pass: total system count per milestone tier, estimated implementation volume per tier (system count Ã— average complexity), team size, stated project timeline.
 
 Present the assessment. If UNREALISTIC, offer to revise priority tier assignments before writing the index. If CONCERNS, note them and continue.
 
@@ -237,10 +237,10 @@ Ask: "May I write the systems index to `design/gdd/systems-index.md`?"
 
 Wait for approval. Write the file only after "yes."
 
-**Review mode check** — apply before spawning CD-SYSTEMS:
-- `solo` → skip. Note: "CD-SYSTEMS skipped — Solo mode." Proceed to Phase 7 next steps.
-- `lean` → skip (not a PHASE-GATE). Note: "CD-SYSTEMS skipped — Lean mode." Proceed to Phase 7 next steps.
-- `full` → spawn as normal.
+**Review mode check** â€” apply before spawning CD-SYSTEMS:
+- `solo` â†’ skip. Note: "CD-SYSTEMS skipped â€” Solo mode." Proceed to Phase 7 next steps.
+- `lean` â†’ skip (not a PHASE-GATE). Note: "CD-SYSTEMS skipped â€” Lean mode." Proceed to Phase 7 next steps.
+- `full` â†’ spawn as normal.
 
 **After the systems index is written, spawn `creative-director` via Task using gate CD-SYSTEMS (`.claude/docs/director-gates.md`).**
 
@@ -256,8 +256,8 @@ After writing, create `production/session-state/active.md` if it does not exist,
 - File: design/gdd/systems-index.md
 - Next: Design individual system GDDs
 
-**Verdict: COMPLETE** — systems index written to `design/gdd/systems-index.md`.
-If the user declined: **Verdict: BLOCKED** — user did not approve the write.
+**Verdict: COMPLETE** â€” systems index written to `design/gdd/systems-index.md`.
+If the user declined: **Verdict: BLOCKED** â€” user did not approve the write.
 
 ---
 
@@ -312,8 +312,8 @@ If continuing, return to Step 6a.
 After the systems index is created (or after designing some systems), present next actions using `AskUserQuestion`:
 
 - "Systems index is written. What would you like to do next?"
-  - [A] Start designing GDDs — run `/design-system [first-system-in-order]`
-  - [B] Ask a director to review the index first — ask `creative-director` or `technical-director` to validate the system set before committing to 10+ GDD sessions
+  - [A] Start designing GDDs â€” run `/design-system [first-system-in-order]`
+  - [B] Ask a director to review the index first â€” ask `creative-director` or `technical-director` to validate the system set before committing to 10+ GDD sessions
   - [C] Stop here for this session
 
 **The director review option ([B]) is worth highlighting**: having a Creative Director or Technical Director review the completed systems index before starting GDD authoring catches scope issues, missing systems, and boundary problems before they're locked in across many documents. It is optional but recommended for new projects.
@@ -350,9 +350,9 @@ This skill follows the collaborative design principle at every phase:
 
 If context reaches or exceeds 70% at any point, append this notice:
 
-> **Context is approaching the limit (≥70%).** The systems index is saved to
+> **Context is approaching the limit (â‰¥70%).** The systems index is saved to
 > `design/gdd/systems-index.md`. Open a fresh Claude Code session to continue
-> designing individual GDDs — run `/map-systems next` to pick up where you left off.
+> designing individual GDDs â€” run `/map-systems next` to pick up where you left off.
 
 ---
 

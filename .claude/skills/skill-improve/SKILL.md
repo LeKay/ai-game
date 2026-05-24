@@ -1,6 +1,6 @@
----
+﻿---
 name: skill-improve
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Improve a skill using a test-fix-retest loop. Runs static checks, proposes targeted fixes, rewrites the skill, re-tests, and keeps or reverts based on score change."
 argument-hint: "[skill-name]"
 user-invocable: true
@@ -10,7 +10,7 @@ allowed-tools: Read, Glob, Grep, Write, Bash
 # Skill Improve
 
 Runs an improvement loop on a single skill:
-test → fix → retest → keep or revert.
+test â†’ fix â†’ retest â†’ keep or revert.
 
 ---
 
@@ -33,7 +33,7 @@ Verify `.claude/skills/[name]/SKILL.md` exists. If not, stop with:
 Run `/skill-test static [name]` and record the baseline score:
 - Count of FAILs
 - Count of WARNs
-- Which specific checks failed (Check 1–7)
+- Which specific checks failed (Check 1â€“7)
 
 Display to the user:
 ```
@@ -48,7 +48,7 @@ If baseline is 0 FAILs and 0 WARNs, note it and proceed to Phase 2b.
 Look up the skill's `category:` field in `CCGS Skill Testing Framework/catalog.yaml`.
 
 If no `category:` field is found, display:
-"Category: not yet assigned — skipping category checks."
+"Category: not yet assigned â€” skipping category checks."
 and skip to Phase 3.
 
 If category is found, run `/skill-test category [name]` and record the category baseline:
@@ -72,13 +72,13 @@ Read the full skill file at `.claude/skills/[name]/SKILL.md`.
 
 For each failing or warning **static** check, identify the exact gap:
 
-- **Check 1 fail** → which frontmatter field is missing
-- **Check 2 fail** → how many phases found vs. minimum required
-- **Check 3 fail** → no verdict keywords anywhere in the skill body
-- **Check 4 fail** → Write or Edit in allowed-tools but no ask-before-write language
-- **Check 5 warn** → no follow-up or next-step section at the end
-- **Check 6 warn** → `context: fork` set but fewer than 5 phases found
-- **Check 7 warn** → argument-hint is empty or doesn't match documented modes
+- **Check 1 fail** â†’ which frontmatter field is missing
+- **Check 2 fail** â†’ how many phases found vs. minimum required
+- **Check 3 fail** â†’ no verdict keywords anywhere in the skill body
+- **Check 4 fail** â†’ Write or Edit in allowed-tools but no ask-before-write language
+- **Check 5 warn** â†’ no follow-up or next-step section at the end
+- **Check 6 warn** â†’ `context: fork` set but fewer than 5 phases found
+- **Check 7 warn** â†’ argument-hint is empty or doesn't match documented modes
 
 For each failing or warning **category** check (if category was assigned in Phase 2b),
 identify the exact gap in the skill's text. For example:
@@ -95,7 +95,7 @@ Show the full combined diagnosis to the user before proposing any changes.
 ## Phase 4: Propose Fix
 
 Write a targeted fix for each failure and warning. Show the proposed changes
-as clearly marked before/after blocks. Only change what is failing — do not
+as clearly marked before/after blocks. Only change what is failing â€” do not
 rewrite sections that are passing.
 
 Ask: "May I write this improved version to `.claude/skills/[name]/SKILL.md`?"
@@ -115,8 +115,8 @@ If a category was assigned, also re-run `/skill-test category [name]` and record
 
 Display the comparison:
 ```
-Static:   Before [N] failures, [M] warnings  →  After [N'] failures, [M'] warnings
-Category: Before [N] failures, [M] warnings  →  After [N'] failures, [M'] warnings  (if applicable)
+Static:   Before [N] failures, [M] warnings  â†’  After [N'] failures, [M'] warnings
+Category: Before [N] failures, [M] warnings  â†’  After [N'] failures, [M'] warnings  (if applicable)
 Combined change: improved / no change / worse
 ```
 

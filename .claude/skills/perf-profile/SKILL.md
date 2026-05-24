@@ -1,6 +1,6 @@
----
+﻿---
 name: perf-profile
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Structured performance profiling workflow. Identifies bottlenecks, measures against budgets, and generates optimization recommendations with priority rankings."
 argument-hint: "[system-name or 'full']"
 user-invocable: true
@@ -12,8 +12,8 @@ allowed-tools: Read, Glob, Grep, Bash
 
 Read the argument:
 
-- System name → focus profiling on that specific system
-- `full` → run a comprehensive profile across all systems
+- System name â†’ focus profiling on that specific system
+- `full` â†’ run a comprehensive profile across all systems
 
 ---
 
@@ -32,7 +32,7 @@ Check for existing performance targets in design docs or CLAUDE.md:
 ## Phase 3: Analyze Codebase
 
 **CPU Profiling Targets:**
-- `_process()` / `Update()` / `Tick()` functions — list all and estimate cost
+- `_process()` / `Update()` / `Tick()` functions â€” list all and estimate cost
 - Nested loops over large collections
 - String operations in hot paths
 - Allocation patterns in per-frame code
@@ -79,7 +79,7 @@ Generated: [Date]
 |---|----------|-------|------------------|------------|
 
 ### Optimization Recommendations (Priority Order)
-1. **[Title]** — [Description]
+1. **[Title]** â€” [Description]
    - Location: [file:line]
    - Expected gain: [estimate]
    - Risk: [Low/Med/High]
@@ -109,7 +109,7 @@ Present significant-effort items and ask the user to choose for each:
 
 If multiple items are deferred to Polish (choice C), record them under `### Deferred to Polish`.
 
-This skill is read-only — no files are written. Verdict: **COMPLETE** — performance profile generated.
+This skill is read-only â€” no files are written. Verdict: **COMPLETE** â€” performance profile generated.
 
 ---
 
@@ -120,7 +120,7 @@ This skill is read-only — no files are written. Verdict: **COMPLETE** — perf
 - To schedule optimizations: run `/sprint-plan update`.
 
 ### Rules
-- Never optimize without measuring first — gut feelings about performance are unreliable
-- Recommendations must include estimated impact — "make it faster" is not actionable
+- Never optimize without measuring first â€” gut feelings about performance are unreliable
+- Recommendations must include estimated impact â€” "make it faster" is not actionable
 - Profile on target hardware, not just development machines
 - Static analysis (this skill) identifies candidates; runtime profiling confirms

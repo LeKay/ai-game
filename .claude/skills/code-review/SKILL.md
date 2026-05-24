@@ -1,6 +1,6 @@
----
+﻿---
 name: code-review
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Performs an architectural and quality code review on a specified file or set of files. Checks for coding standard compliance, architectural pattern adherence, SOLID principles, testability, and performance concerns."
 argument-hint: "[path-to-file-or-directory]"
 user-invocable: true
@@ -23,7 +23,7 @@ Read `.claude/docs/technical-preferences.md`, section `## Engine Specialists`. N
 - The **Shader Specialist** (used when reviewing shader files)
 - The **UI Specialist** (used when reviewing UI code)
 
-If the section reads `[TO BE CONFIGURED]`, no engine is pinned — skip engine specialist steps.
+If the section reads `[TO BE CONFIGURED]`, no engine is pinned â€” skip engine specialist steps.
 
 ---
 
@@ -31,7 +31,7 @@ If the section reads `[TO BE CONFIGURED]`, no engine is pinned — skip engine s
 
 Search for ADR references in the story file, commit messages, and header comments. Look for patterns like `ADR-NNN` or `docs/architecture/ADR-`.
 
-If no ADR references found, note: "No ADR references found — skipping ADR compliance check."
+If no ADR references found, note: "No ADR references found â€” skipping ADR compliance check."
 
 For each referenced ADR: read the file, extract the **Decision** and **Consequences** sections, then classify any deviation:
 
@@ -84,16 +84,16 @@ Identify the system category (engine, gameplay, AI, networking, UI, tools) and e
 
 ## Phase 7: Specialist Reviews (Parallel)
 
-Spawn all applicable specialists simultaneously via Task — do not wait for one before starting the next.
+Spawn all applicable specialists simultaneously via Task â€” do not wait for one before starting the next.
 
 ### Engine Specialists
 
 If an engine is configured, determine which specialist applies to each file and spawn in parallel:
 
-- Primary language files (`.gd`, `.cs`, `.cpp`) → Language/Code Specialist
-- Shader files (`.gdshader`, `.hlsl`, shader graph) → Shader Specialist
-- UI screen/widget code → UI Specialist
-- Cross-cutting or unclear → Primary Specialist
+- Primary language files (`.gd`, `.cs`, `.cpp`) â†’ Language/Code Specialist
+- Shader files (`.gdshader`, `.hlsl`, shader graph) â†’ Shader Specialist
+- UI screen/widget code â†’ UI Specialist
+- Cross-cutting or unclear â†’ Primary Specialist
 
 Also spawn the **Primary Specialist** for any file touching engine architecture (scene structure, node hierarchy, lifecycle hooks).
 
@@ -111,7 +111,7 @@ Ask the qa-tester to evaluate:
 - [ ] Does the implementation introduce any new edge cases not covered by the existing QA test cases?
 - [ ] Are there any observable side effects that should have a test but don't?
 
-For Visual/Feel and UI stories: qa-tester reviews whether the manual verification steps in `## QA Test Cases` are achievable with the implementation as written — e.g., "is the state the manual checker needs to reach actually reachable?"
+For Visual/Feel and UI stories: qa-tester reviews whether the manual verification steps in `## QA Test Cases` are achievable with the implementation as written â€” e.g., "is the state the manual checker needs to reach actually reachable?"
 
 Collect all specialist findings before producing output.
 
@@ -122,10 +122,10 @@ Collect all specialist findings before producing output.
 ```
 ## Code Review: [File/System Name]
 
-### Engine Specialist Findings: [N/A — no engine configured / CLEAN / ISSUES FOUND]
+### Engine Specialist Findings: [N/A â€” no engine configured / CLEAN / ISSUES FOUND]
 [Findings from engine specialist(s), or "No engine configured." if skipped]
 
-### Testability: [N/A — Visual/Feel or Config story / TESTABLE / GAPS / BLOCKING]
+### Testability: [N/A â€” Visual/Feel or Config story / TESTABLE / GAPS / BLOCKING]
 [qa-tester findings: test hooks, coverage gaps, untestable paths, new edge cases]
 [If BLOCKING: implementation must expose [X] before tests in ## QA Test Cases can run]
 
@@ -148,7 +148,7 @@ Collect all specialist findings before producing output.
 [What is done well -- always include this section]
 
 ### Required Changes
-[Must-fix items before approval — ARCHITECTURAL VIOLATIONs always appear here]
+[Must-fix items before approval â€” ARCHITECTURAL VIOLATIONs always appear here]
 
 ### Suggestions
 [Nice-to-have improvements]
@@ -156,7 +156,7 @@ Collect all specialist findings before producing output.
 ### Verdict: [APPROVED / APPROVED WITH SUGGESTIONS / CHANGES REQUIRED]
 ```
 
-This skill is read-only — no files are written.
+This skill is read-only â€” no files are written.
 
 ---
 

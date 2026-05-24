@@ -1,6 +1,6 @@
----
+﻿---
 name: regression-suite
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Map test coverage to GDD critical paths, identify fixed bugs without regression tests, flag coverage drift from new features, and maintain tests/regression-suite.md. Run after implementing a bug fix or before a release gate."
 argument-hint: "[update | audit | report]"
 user-invocable: true
@@ -10,11 +10,11 @@ allowed-tools: Read, Glob, Grep, Write, Edit
 # Regression Suite
 
 This skill ensures that every bug fix is backed by a test that would have
-caught the original bug — and that the regression suite stays current as the
+caught the original bug â€” and that the regression suite stays current as the
 game evolves. It also detects when new features have been added without
 corresponding regression coverage.
 
-A regression suite is not a new test category — it is a **curated list of
+A regression suite is not a new test category â€” it is a **curated list of
 tests already in `tests/`** that collectively cover the game's critical paths
 and known failure points. This skill maintains that list.
 
@@ -30,28 +30,28 @@ and known failure points. This skill maintains that list.
 ## 1. Parse Arguments
 
 **Modes:**
-- `/regression-suite update` — scan new bug fixes this sprint and check
+- `/regression-suite update` â€” scan new bug fixes this sprint and check
   for regression test presence; add new tests to the suite manifest
-- `/regression-suite audit` — full audit of all GDD critical paths vs.
+- `/regression-suite audit` â€” full audit of all GDD critical paths vs.
   existing test coverage; flag paths with no regression test
-- `/regression-suite report` — read-only status report (no writes); suitable
+- `/regression-suite report` â€” read-only status report (no writes); suitable
   for sprint reviews
-- No argument — run `update` if a sprint is active, else `audit`
+- No argument â€” run `update` if a sprint is active, else `audit`
 
 ---
 
 ## 2. Load Context
 
-### Step 2a — Load existing regression suite
+### Step 2a â€” Load existing regression suite
 
 Read `tests/regression-suite.md` if it exists. Extract:
 - Total registered regression tests
 - Last updated date
 - Any tests flagged as `STALE` or `QUARANTINED`
 
-If it does not exist: note "No regression suite found — will create one."
+If it does not exist: note "No regression suite found â€” will create one."
 
-### Step 2b — Load test inventory
+### Step 2b â€” Load test inventory
 
 Glob all test files:
 ```
@@ -63,7 +63,7 @@ tests/regression/**/*
 For each file, note the system (from directory path) and file name.
 Do not read test file contents unless needed for name-to-test mapping.
 
-### Step 2c — Load GDD critical paths
+### Step 2c â€” Load GDD critical paths
 
 For `audit` mode: read `design/gdd/systems-index.md` to get all systems.
 For each MVP-tier system, read its GDD and extract:
@@ -74,7 +74,7 @@ For each MVP-tier system, read its GDD and extract:
 For `update` mode: skip full GDD scan. Instead read the current sprint plan
 and story files to find stories with Status: Complete this sprint.
 
-### Step 2d — Load closed bugs
+### Step 2d â€” Load closed bugs
 
 Glob `production/qa/bugs/*.md` and filter for bugs with a `Status: Closed`
 or `Status: Fixed` field. Note:
@@ -83,7 +83,7 @@ or `Status: Fixed` field. Note:
 
 ---
 
-## 3. Map Coverage — Critical Paths
+## 3. Map Coverage â€” Critical Paths
 
 For `audit` mode only:
 
@@ -98,14 +98,14 @@ For each GDD acceptance criterion, determine whether a test exists:
 | **COVERED** | A test file exists that targets this criterion's logic |
 | **PARTIAL** | A test exists but doesn't cover all cases (e.g. happy path only) |
 | **MISSING** | No test found for this critical path |
-| **EXEMPT** | Visual/Feel or UI criterion — not automatable by design |
+| **EXEMPT** | Visual/Feel or UI criterion â€” not automatable by design |
 
 3. Elevate MISSING items that correspond to formulas or state machines to
-   **HIGH PRIORITY** gap — these are the most likely regression sources.
+   **HIGH PRIORITY** gap â€” these are the most likely regression sources.
 
 ---
 
-## 4. Map Coverage — Fixed Bugs
+## 4. Map Coverage â€” Fixed Bugs
 
 For each closed bug:
 
@@ -113,8 +113,8 @@ For each closed bug:
 2. Grep `tests/unit/[system]/` and `tests/integration/[system]/` for a test
    that references the bug ID or the specific failure scenario
 3. Assign:
-   - **HAS REGRESSION TEST** — a test was found that would catch this bug
-   - **MISSING REGRESSION TEST** — bug was fixed but no test guards against recurrence
+   - **HAS REGRESSION TEST** â€” a test was found that would catch this bug
+   - **MISSING REGRESSION TEST** â€” bug was fixed but no test guards against recurrence
 
 For MISSING REGRESSION TEST items:
 - Flag them as regression gaps
@@ -132,7 +132,7 @@ Check for drift indicators:
 - New systems added to `systems-index.md` since the last regression-suite update
 - GDD sections added or revised since the regression suite was last updated
   (use Grep on GDD file modification hints if available, or ask the user)
-- `tests/regression-suite.md` last-updated date vs. current date — if gap >
+- `tests/regression-suite.md` last-updated date vs. current date â€” if gap >
   2 sprints, flag as likely stale
 
 ---
@@ -158,7 +158,7 @@ Check for drift indicators:
 ### Bug Regression Coverage
 | Bug ID | System | Severity | Has Regression Test? |
 |--------|--------|----------|----------------------|
-| BUG-NNN | [system] | S[N] | YES / NO ⚠ |
+| BUG-NNN | [system] | S[N] | YES / NO âš  |
 
 **Bugs without regression tests**: [N]
 
@@ -174,7 +174,7 @@ Check for drift indicators:
 
 ### Suite manifest format (`tests/regression-suite.md`)
 
-The manifest is a curated index — not the tests themselves, but a registry
+The manifest is a curated index â€” not the tests themselves, but a registry
 of which tests should always pass before a release:
 
 ```markdown
@@ -234,18 +234,18 @@ After writing (if approved):
 - If coverage drift detected: "Regression suite may be drifting. Consider
   running `/regression-suite audit` at the next sprint boundary."
 
-Verdict: **COMPLETE** — regression suite updated. (If user declined write: Verdict: **BLOCKED**.)
+Verdict: **COMPLETE** â€” regression suite updated. (If user declined write: Verdict: **BLOCKED**.)
 
 ---
 
 ## Collaborative Protocol
 
 - **Never remove existing regression tests from the manifest** without
-  explicit user approval — removing a test that was deliberately written is a
+  explicit user approval â€” removing a test that was deliberately written is a
   regression risk itself
-- **Gaps are advisory, not blocking** — surface them clearly but do not prevent
+- **Gaps are advisory, not blocking** â€” surface them clearly but do not prevent
   other work from proceeding (except at release gate where regression suite is required)
-- **Quarantine is not deletion** — tests with intermittent failures should be
+- **Quarantine is not deletion** â€” tests with intermittent failures should be
   quarantined (noted in manifest) but not removed; they should be fixed by
   `/test-flakiness`
-- **Ask before writing** — always confirm before creating or updating the manifest
+- **Ask before writing** â€” always confirm before creating or updating the manifest

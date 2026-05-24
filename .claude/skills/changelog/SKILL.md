@@ -1,6 +1,6 @@
----
+﻿---
 name: changelog
-model: qwen-3.6-35b-sovereign
+model: claude-haiku-4-5-20251001
 description: "Auto-generates a changelog from git commits, sprint data, and design documents. Produces both internal and player-facing versions."
 argument-hint: "[version|sprint-number]"
 user-invocable: true
@@ -148,7 +148,7 @@ After presenting the changelogs, ask the user:
 > "May I write this changelog to `docs/CHANGELOG.md`?
 > [A] Yes, append this entry (recommended if the file already exists)
 > [B] Yes, overwrite the file entirely
-> [C] No — I'll copy it manually"
+> [C] No â€” I'll copy it manually"
 
 - Check whether `docs/CHANGELOG.md` exists before asking. If it does, default the
   recommendation to **[A] append**.
@@ -157,8 +157,8 @@ After presenting the changelogs, ask the user:
 - If the user selects [B]: overwrite the file with the new changelog.
 - If the user selects [C]: stop here without writing.
 
-After a successful write: Verdict: **CHANGELOG WRITTEN** — changelog saved to `docs/CHANGELOG.md`.
-If the user declines: Verdict: **COMPLETE** — changelog generated.
+After a successful write: Verdict: **CHANGELOG WRITTEN** â€” changelog saved to `docs/CHANGELOG.md`.
+If the user declines: Verdict: **COMPLETE** â€” changelog generated.
 
 ---
 
@@ -173,5 +173,5 @@ If the user declines: Verdict: **COMPLETE** — changelog generated.
 - Group related changes together rather than listing individual commits
 - If a commit message is unclear, check the associated files and sprint data for context
 - Balance changes should always include the design reasoning, not just the numbers
-- Known issues should be honest — players appreciate transparency
+- Known issues should be honest â€” players appreciate transparency
 - If the git history is messy (merge commits, reverts, fixup commits), clean up the narrative rather than listing every commit literally

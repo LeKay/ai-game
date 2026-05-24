@@ -1,6 +1,6 @@
----
+﻿---
 name: onboard
-model: qwen-3.6-35b-sovereign
+model: claude-haiku-4-5-20251001
 description: "Generates a contextual onboarding document for a new contributor or agent joining the project. Summarizes project state, architecture, conventions, and current priorities relevant to the specified role or area."
 argument-hint: "[role|area]"
 user-invocable: true
@@ -89,7 +89,7 @@ If yes, write the file, creating the directory if needed.
 
 ## Phase 5: Next Steps
 
-Verdict: **COMPLETE** — onboarding document generated.
+Verdict: **COMPLETE** â€” onboarding document generated.
 
 - Share the onboarding doc with the new contributor before their first session.
 - Run `/sprint-status` to show the new contributor current progress.

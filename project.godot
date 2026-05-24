@@ -17,6 +17,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+ResourceRegistry="*res://src/systems/resource_registry.gd"
 TickSystem="*res://src/systems/tick_system.gd"
 InputContext="*res://src/systems/input_context.gd"
 WorldSaveManager="*res://src/systems/save_world_save_manager.gd"

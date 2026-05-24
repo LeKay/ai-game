@@ -1,6 +1,6 @@
----
+﻿---
 name: estimate
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Estimates task effort by analyzing complexity, dependencies, historical velocity, and risk factors. Produces a structured estimate with confidence levels."
 argument-hint: "[task-description]"
 user-invocable: true
@@ -114,7 +114,7 @@ Generated: [Date]
 
 Output the estimate with a brief summary: recommended budget, confidence level, and the single biggest risk factor.
 
-This skill is read-only — no files are written. Verdict: **COMPLETE** — estimate generated.
+This skill is read-only â€” no files are written. Verdict: **COMPLETE** â€” estimate generated.
 
 ---
 
@@ -128,5 +128,5 @@ This skill is read-only — no files are written. Verdict: **COMPLETE** — esti
 
 - Always give a range (optimistic / expected / pessimistic), never a single number
 - The recommended budget should be the expected estimate, not the optimistic one
-- Round to half-day increments — estimating in hours implies false precision for tasks longer than a day
-- Do not pad estimates silently — call out risk explicitly so the team can decide
+- Round to half-day increments â€” estimating in hours implies false precision for tasks longer than a day
+- Do not pad estimates silently â€” call out risk explicitly so the team can decide

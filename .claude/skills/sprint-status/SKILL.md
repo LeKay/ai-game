@@ -1,6 +1,6 @@
----
+﻿---
 name: sprint-status
-model: qwen-3.6-35b-sovereign
+model: claude-haiku-4-5-20251001
 description: "Fast sprint status check. Reads the current sprint plan, scans story files for status, and produces a concise progress snapshot with burndown assessment and emerging risks. Run at any time during a sprint for quick situational awareness. Use when user asks 'how is the sprint going', 'sprint update', 'show sprint progress'."
 argument-hint: "[sprint-number or blank for current]"
 user-invocable: true
@@ -48,7 +48,7 @@ Using today's date and the sprint end date from the sprint file, calculate:
 - Percentage of time consumed
 
 If the sprint file does not include explicit dates, note "Sprint dates not
-found — burndown assessment skipped."
+found â€” burndown assessment skipped."
 
 ---
 
@@ -56,7 +56,7 @@ found — burndown assessment skipped."
 
 **First: check for `production/sprint-status.yaml`.**
 
-If it exists, read it directly — it is the authoritative source of truth.
+If it exists, read it directly â€” it is the authoritative source of truth.
 Extract status for each story from the `status` field. No markdown scanning needed.
 Use its `sprint`, `goal`, `start`, `end` fields instead of re-parsing the sprint plan.
 
@@ -72,9 +72,9 @@ fall back to markdown scanning:
 4. If a file is referenced but does not exist, classify as MISSING and note it.
 
 When using the fallback, add a note at the bottom of the output:
-"⚠ No `sprint-status.yaml` found — status inferred from markdown. Run `/sprint-plan update` to generate one."
+"âš  No `sprint-status.yaml` found â€” status inferred from markdown. Run `/sprint-plan update` to generate one."
 
-Optionally (fast check only — do not do a deep scan): grep `src/` for a
+Optionally (fast check only â€” do not do a deep scan): grep `src/` for a
 directory or file name that matches the story's system slug to check for
 implementation evidence. This is a hint only, not a definitive status.
 
@@ -88,15 +88,15 @@ After collecting status for all stories, check each IN PROGRESS story for stalen
   `Updated`, `last-updated`, `updated_at`.
 - Calculate days since that date using today's date.
 - If the date is more than 2 days ago, flag the story as **STALE**.
-- If no date field is found in the story file, note "no timestamp — cannot check staleness."
-- If the story has no referenced file (inline task), note "inline task — cannot check staleness."
+- If no date field is found in the story file, note "no timestamp â€” cannot check staleness."
+- If the story has no referenced file (inline task), note "inline task â€” cannot check staleness."
 
 STALE stories are included in the output table and collected into an "Attention Needed"
 section (see Phase 5 output format).
 
 **Stale story escalation**: If any IN PROGRESS story is flagged STALE, the burndown verdict
-is upgraded to at least **At Risk** — even if the completion percentage is within the normal
-On Track window. Record this escalation reason: "At Risk — [N] story(ies) with no progress in
+is upgraded to at least **At Risk** â€” even if the completion percentage is within the normal
+On Track window. Record this escalation reason: "At Risk â€” [N] story(ies) with no progress in
 [N] days."
 
 ---
@@ -117,7 +117,7 @@ Assess burndown by comparing completion percentage to time consumed percentage:
 - **Behind**: completion % is more than 25 points behind time consumed %
 
 If dates are unavailable, skip the burndown assessment and report "On Track /
-At Risk / Behind: unknown — sprint dates not found."
+At Risk / Behind: unknown â€” sprint dates not found."
 
 ---
 
@@ -126,7 +126,7 @@ At Risk / Behind: unknown — sprint dates not found."
 Keep the total output to 30 lines or fewer. Use this format:
 
 ```markdown
-## Sprint [N] Status — [Today's Date]
+## Sprint [N] Status â€” [Today's Date]
 **Sprint Goal**: [from sprint plan]
 **Days Remaining**: [N] of [total] ([% time consumed])
 
@@ -142,7 +142,7 @@ Keep the total output to 30 lines or fewer. Use this format:
 ### Attention Needed
 | Story / Task         | Status      | Last Updated   | Days Stale | Note           |
 |----------------------|-------------|----------------|------------|----------------|
-| [title]              | IN PROGRESS | [date or N/A]  | [N days]   | [STALE / no timestamp — cannot check staleness / inline task — cannot check staleness] |
+| [title]              | IN PROGRESS | [date or N/A]  | [N days]   | [STALE / no timestamp â€” cannot check staleness / inline task â€” cannot check staleness] |
 
 *(Omit this section entirely if no IN PROGRESS stories are stale or have timestamp concerns.)*
 
@@ -159,7 +159,7 @@ and note any Should Haves the team could pull.]
 stories with no owner. If none, write "None identified."]
 
 ### Recommendation
-[One concrete action, or "Sprint is on track — no action needed."]
+[One concrete action, or "Sprint is on track â€” no action needed."]
 ```
 
 ---
@@ -169,7 +169,7 @@ stories with no owner. If none, write "None identified."]
 Apply these rules before outputting, and place the flag at the TOP of the
 output if triggered (above the status table):
 
-**Critical flag** — if Must Have stories are BLOCKED or NOT STARTED and
+**Critical flag** â€” if Must Have stories are BLOCKED or NOT STARTED and
 less than 40% of the sprint time remains:
 
 ```
@@ -177,13 +177,13 @@ SPRINT AT RISK: [N] Must Have stories are not complete with [X]% of sprint
 time remaining. Recommend replanning with `/sprint-plan update`.
 ```
 
-**Completion flag** — if all Must Have stories are DONE:
+**Completion flag** â€” if all Must Have stories are DONE:
 
 ```
 All Must Haves complete. Team can pull from Should Have backlog.
 ```
 
-**Missing stories flag** — if any referenced story files do not exist:
+**Missing stories flag** â€” if any referenced story files do not exist:
 
 ```
 NOTE: [N] story files referenced in the sprint plan are missing.

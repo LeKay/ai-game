@@ -1,11 +1,11 @@
----
+﻿---
 name: asset-audit
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Audits game assets for compliance with naming conventions, file size budgets, format standards, and pipeline requirements. Identifies orphaned assets, missing references, and standard violations."
 argument-hint: "[category|all]"
 user-invocable: true
 allowed-tools: Read, Glob, Grep
-# Read-only diagnostic skill — no specialist agent delegation needed
+# Read-only diagnostic skill â€” no specialist agent delegation needed
 ---
 
 ## Phase 1: Read Standards
@@ -84,7 +84,7 @@ Scan the target asset directory using Glob:
 ## Verdict: [COMPLIANT / WARNINGS / NON-COMPLIANT]
 ```
 
-This skill is read-only — it produces a report but does not write files.
+This skill is read-only â€” it produces a report but does not write files.
 
 ---
 
