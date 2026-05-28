@@ -6,7 +6,10 @@ extends Node
 enum ResourceCategory { CONSUMABLE, PRODUCTION_GOOD }
 
 const REGISTRY_PATH: String = "res://data/resources.json"
+const CURRENT_SCHEMA_VERSION: int = 1
 const _CATEGORY_CONSUMABLE: String = "consumable"
+const _CATEGORY_PRODUCTION_GOOD: String = "production_good"
+const _VALID_CATEGORY_STRINGS: Array[String] = ["consumable", "production_good"]
 
 var _definitions: Dictionary = {}  # StringName -> _ResourceDefinition
 var _registry_version: int = 0
@@ -15,7 +18,7 @@ var _registry_version: int = 0
 class _ResourceDefinition:
 	var id: StringName
 	var display_name: String
-	var category: int  # ResourceCategory value
+	var category: ResourceCategory
 	var stack_limit: int
 	var icon_path: String
 	var subcategory: String = ""
@@ -42,6 +45,7 @@ func load_from_file(path: String) -> bool:
 		return false
 
 	var json_text: String = file.get_as_text()
+	file.close()
 	var json: JSON = JSON.new()
 	var err: Error = json.parse(json_text)
 	if err != OK:
@@ -61,6 +65,16 @@ func load_from_file(path: String) -> bool:
 	# Read the candidate version but do NOT write to _registry_version yet —
 	# state is only updated after _parse_resources confirms full success (atomic).
 	var new_version: int = int(data.get("version", 0))
+
+	if new_version > CURRENT_SCHEMA_VERSION:
+		push_error("ResourceRegistry: Save version %d exceeds game version %d — cannot load" % [
+				new_version, CURRENT_SCHEMA_VERSION])
+		return false
+
+	if new_version < CURRENT_SCHEMA_VERSION:
+		push_warning("ResourceRegistry: Migrating registry from v%d to v%d — applying defaults" % [
+				new_version, CURRENT_SCHEMA_VERSION])
+
 	if not _parse_resources(data["resources"]):
 		return false
 
@@ -69,9 +83,24 @@ func load_from_file(path: String) -> bool:
 
 
 ## Returns the _ResourceDefinition for id, or null if not found. O(1).
-## Full API (is_valid_id, get_all_by_category) implemented in Story 003.
 func get_definition(id: StringName) -> _ResourceDefinition:
 	return _definitions.get(id, null)
+
+
+## Returns true if id is present in the registry, false otherwise. O(1).
+func is_valid_id(id: StringName) -> bool:
+	return id in _definitions
+
+
+## Returns a fresh Array of all definitions matching category. O(n).
+## Intended for startup-only queries — callers that need repeated results should
+## cache the returned Array. Mutating the Array does not affect _definitions.
+func get_all_by_category(category: ResourceCategory) -> Array:
+	var result: Array = []
+	for def in _definitions.values():
+		if def.category == category:
+			result.append(def)
+	return result
 
 
 ## Returns the schema version number stored in the loaded JSON file.
@@ -92,6 +121,11 @@ func _parse_resources(entries: Variant) -> bool:
 		if not entry is Dictionary:
 			push_error("ResourceRegistry: Resource at index %d is not an object" % i)
 			return false
+		var errors: Array[String] = _validate_resource(entry, i)
+		if not errors.is_empty():
+			for err: String in errors:
+				push_error("ResourceRegistry validation: " + err)
+			return false
 		var def: _ResourceDefinition = _build_definition(entry)
 		if def == null:
 			return false
@@ -104,42 +138,61 @@ func _parse_resources(entries: Variant) -> bool:
 	return true
 
 
-func _build_definition(entry: Dictionary) -> _ResourceDefinition:
-	# Use the 1-arg form of .get() so both absent keys and explicit JSON nulls
-	# are treated as null — the 2-arg default is only used when the key is absent,
-	# but JSON null bypasses it and produces int(null)=0 / str(null)="Null".
+## Validates a single resource entry Dictionary against the schema.
+## Returns an Array of error strings; empty means valid.
+## Recoverable errors (invalid category) emit push_warning; _build_definition defaults to PRODUCTION_GOOD.
+## Fatal errors (missing required fields, invalid max_charge, stack_limit < 1) are returned as error strings.
+func _validate_resource(entry: Dictionary, index: int) -> Array[String]:
+	var errors: Array[String] = []
 	var raw_id: Variant = entry.get("id")
-	var id_str: String = str(raw_id) if raw_id != null else ""
-	if id_str.is_empty():
-		push_error("ResourceRegistry: Resource entry has missing or empty 'id' field")
-		return null
+	var resource_id: String = str(raw_id) if raw_id != null else "???"
 
-	var def := _ResourceDefinition.new()
-	def.id = StringName(id_str)
+	if raw_id == null or (raw_id is String and (raw_id as String).is_empty()):
+		errors.append("Resource at index %d: missing or invalid 'id'" % index)
 
-	var raw_display_name: Variant = entry.get("display_name")
-	def.display_name = str(raw_display_name) if raw_display_name != null else ""
+	if not entry.has("display_name") or entry.get("display_name") == null:
+		errors.append("Resource at index %d: missing or invalid 'display_name'" % index)
 
-	var raw_cat: Variant = entry.get("category")
-	var cat: String = str(raw_cat) if raw_cat != null else "production_good"
-	if cat == _CATEGORY_CONSUMABLE:
-		def.category = ResourceCategory.CONSUMABLE
-	elif cat == "production_good":
-		def.category = ResourceCategory.PRODUCTION_GOOD
-	else:
-		push_warning("ResourceRegistry: Unknown category '%s' on resource '%s', defaulting to PRODUCTION_GOOD" % [cat, id_str])
-		def.category = ResourceCategory.PRODUCTION_GOOD
+	if not entry.has("category") or entry.get("category") == null:
+		errors.append("Resource at index %d: missing 'category'" % index)
+	elif entry["category"] not in _VALID_CATEGORY_STRINGS:
+		# Invalid category is recoverable — _build_definition defaults to PRODUCTION_GOOD.
+		push_warning("ResourceRegistry: Resource '%s' has invalid category '%s' — defaulting to 'production_good'" % [
+				resource_id, entry["category"]])
 
 	var raw_stack: Variant = entry.get("stack_limit")
-	var stack_val: int = int(raw_stack) if raw_stack != null else 1
-	if stack_val < 1:
-		push_warning("ResourceRegistry: 'stack_limit' on resource '%s' is %d (< 1), clamping to 1" % [id_str, stack_val])
-		stack_val = 1
-	def.stack_limit = stack_val
+	if raw_stack == null or not ((raw_stack is int or raw_stack is float) and raw_stack >= 1):
+		errors.append("Resource at index %d: 'stack_limit' must be int >= 1 (got %s)" % [index, raw_stack])
 
-	var raw_icon: Variant = entry.get("icon_path")
-	def.icon_path = str(raw_icon) if raw_icon != null else ""
+	if not entry.has("icon_path") or entry.get("icon_path") == null:
+		errors.append("Resource at index %d: missing or invalid 'icon_path'" % index)
 
+	if entry.has("max_charge") and entry.get("max_charge") != null:
+		var charge_val: Variant = entry.get("max_charge")
+		if not (charge_val is float or charge_val is int):
+			errors.append("Resource '%s': 'max_charge' must be a number" % resource_id)
+		elif float(charge_val) <= 0.0:
+			errors.append("Resource '%s': 'max_charge' must be > 0.0 (got %s)" % [resource_id, charge_val])
+
+	return errors
+
+
+## Builds a _ResourceDefinition from a validated entry. All required fields are
+## guaranteed present and valid by _validate_resource — direct key access is safe.
+func _build_definition(entry: Dictionary) -> _ResourceDefinition:
+	var def := _ResourceDefinition.new()
+	def.id = StringName(str(entry["id"]))
+	def.display_name = str(entry["display_name"])
+	var cat: String = str(entry["category"])
+	def.category = ResourceCategory.CONSUMABLE if cat == _CATEGORY_CONSUMABLE else ResourceCategory.PRODUCTION_GOOD
+	def.stack_limit = int(entry["stack_limit"])
+	def.icon_path = str(entry["icon_path"])
+	_apply_optional_fields(def, entry)
+	return def
+
+
+## Applies optional fields from entry onto an already-constructed definition.
+func _apply_optional_fields(def: _ResourceDefinition, entry: Dictionary) -> void:
 	var raw_sub: Variant = entry.get("subcategory")
 	def.subcategory = str(raw_sub) if raw_sub != null else ""
 
@@ -161,7 +214,7 @@ func _build_definition(entry: Dictionary) -> _ResourceDefinition:
 	elif raw_deprecated is bool:
 		def.deprecated = raw_deprecated
 	else:
-		push_warning("ResourceRegistry: 'deprecated' on resource '%s' is not a boolean (got %s), treating as false" % [id_str, type_string(typeof(raw_deprecated))])
+		push_warning("ResourceRegistry: 'deprecated' on resource '%s' is not a boolean (got %s), treating as false" % [def.id, type_string(typeof(raw_deprecated))])
 		def.deprecated = false
 
 	var raw_tags: Variant = entry.get("tags")
@@ -169,5 +222,3 @@ func _build_definition(entry: Dictionary) -> _ResourceDefinition:
 		for tag: Variant in raw_tags:
 			if tag is String:
 				def.tags.append(str(tag))
-
-	return def

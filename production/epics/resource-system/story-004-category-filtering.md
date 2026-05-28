@@ -1,10 +1,10 @@
 # Story 004: Category System and Filtering
 
 > **Epic**: Resource System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Foundation
 > **Type**: Logic
-> **Manifest Version**: Not yet created
+> **Manifest Version**: 2026-05-14
 
 ## Context
 
@@ -47,11 +47,11 @@ Add the enum and `get_all_by_category()` to ResourceRegistry:
 enum ResourceCategory { CONSUMABLE, PRODUCTION_GOOD }
 
 func get_all_by_category(category: ResourceCategory) -> Array:
-    var result: Array = []
-    for def in _definitions.values():
-        if def.category == category:
-            result.append(def)
-    return result  # Fresh Array — callers cannot affect internal cache by mutating this
+	var result: Array = []
+	for def in _definitions.values():
+		if def.category == category:
+			result.append(def)
+	return result  # Fresh Array — callers cannot affect internal cache by mutating this
 ```
 
 The `ResourceCategory` enum must be defined at class scope (not inside a function) so consumers can reference it as `ResourceRegistry.ResourceCategory.CONSUMABLE`.
@@ -83,7 +83,7 @@ If a future performance concern arises (> 500 resources), maintain a secondary `
 - **AC-2**: PRODUCTION_GOOD filter returns only production goods
   - Given: Same registry as AC-1
   - When: `get_all_by_category(ResourceRegistry.ResourceCategory.PRODUCTION_GOOD)` called
-  - Then: returns Array of length 1 containing wood; berry and bread not present
+  - Then: returns Array of length 2 containing wood and stone; berry and bread not present
 
 - **AC-3**: Empty category returns empty Array (not null)
   - Given: Registry has only production_good resources
@@ -107,7 +107,7 @@ If a future performance concern arises (> 500 resources), maintain a secondary `
 **Story Type**: Logic
 **Required evidence**: `tests/unit/resource/category_filter_test.gd` — must exist and pass
 
-**Status**: [ ] Not yet created
+**Status**: [x] PASSED — 7/7 tests (2026-05-25)
 
 ---
 
@@ -115,3 +115,12 @@ If a future performance concern arises (> 500 resources), maintain a secondary `
 
 - Depends on: Story 003 must be DONE (cache populated; category parsed and stored in definitions)
 - Unlocks: Story 005 (deprecated filtering via the same API), downstream epics (Hunger System uses CONSUMABLE filter; Trading uses PRODUCTION_GOOD + base_value)
+
+---
+
+## Completion Notes
+**Completed**: 2026-05-25
+**Criteria**: 5/5 passing
+**Deviations**: Untyped `Array` return (pre-approved, Godot 4.6 inner class typed array edge case). Cross-cutting bug fixed: `stack_limit` validator now accepts `float` for Godot 4.6 JSON parser compatibility (was `is int` only).
+**Test Evidence**: Logic — `tests/unit/resource/category_filter_test.gd` — 7/7 PASSED
+**Code Review**: APPROVED (lean mode — LP-CODE-REVIEW skipped)

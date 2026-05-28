@@ -580,6 +580,12 @@ Grid → Resource System: Grid's `resource_id` strings reference the Resource Sy
 | `TICKS_PER_TILE` | 5 | 1–20 | Transport ticks per tile crossed (used by Logistics) | Below 1: instant transport, no spatial strategy. Above 15: short-distance transport takes forever, player frustration. |
 | `road_bonus` | 0.0 | 0.0–0.5 | Fractional reduction in transport time for road tiles | 0: roads have no effect (why build them?). 0.5+: roads are too powerful, all routes converge on roads. Enforced by UI — value is clamped to [0.0, 0.5] on the settings slider. No runtime clamp in formula. |
 | `seed` | 42 | 0–999999 | Procedural generation seed | Changing seed regenerates entire map. Same seed = identical map (deterministic). |
+| `_ICON_SCALE_BY_COUNT` | [0.60, 0.40, 0.35, 0.31] | 0.20–0.70 per slot | Icon size as fraction of tile width, indexed by resource count (1–4) | Too small: icons unreadable. Too large: icons overlap even with maximum scatter spread; also clip outside tile at high counts. |
+| `badge_float_amplitude` | 4 px | 1–8 px | Vertical bob range of the floating badge animation | Too small: animation imperceptible. Too large: icons feel frantic; can visually overlap adjacent tile content. |
+| `badge_float_period` | 2.5 s | 1.5–5.0 s | Full cycle duration of the floating animation | Too short: animation feels jittery. Too long: nearly imperceptible movement. |
+| `badge_scatter_spread` | 0.28 × tile_px | 0.15–0.40 × tile_px | Maximum offset of a resource icon from the tile centre | Too small: all icons stack on top of each other regardless of min separation. Too large: icons drift visibly outside the tile bounds. |
+| `badge_min_separation` | 0.85 × icon_px | 0.5–1.2 × icon_px | Minimum centre-to-centre distance between icons on the same tile | Below 0.5: icons visually overlap. Above 1.0: at high counts the rejection sampler fails to place all icons within spread; fallback stacks them. |
+| `backdrop_opacity` | 0.30 | 0.15–0.60 | Alpha of the black per-icon backdrop circle | Too low: backdrop invisible, icons blend into terrain. Too high: backdrop dominates, icons hard to distinguish from terrain layer. |
 
 **Cross-knob interactions:**
 - `GRID_SIZE × TILE_SIZE`: Together determine total map pixel dimensions. `GRID_SIZE × TILE_SIZE` should not exceed ~1600px per axis at default zoom (fits 1080p with UI). At 30×48 = 1440px — safe. At 50×48 (MVP) = 2400px — requires camera zoom or scrolling.
@@ -599,11 +605,12 @@ The Grid/Map System is the most prominent visual element in the game — it IS t
 - Each terrain type has a distinct silhouette and color — identifiable from across the map
 - Test: "Can I identify a terrain type from across the room without zooming in?"
 
-**Resource Overlay Layer (TileMapLayer — atlas tiles):**
-- Trees: brown trunk + green canopy, distinct from terrain grass
-- Stone outcrops: gray rock texture, slightly raised appearance
-- Berry bushes: green bush with small red dots (berries)
-- Grass patches: slightly different grass shade (for fiber-rich tiles)
+**Resource Overlay Layer (Sprite2D badges — not TileMapLayer):**
+- Resources are rendered as floating badge nodes, not TileMapLayer atlas tiles. The `ResourceOverlay` TileMapLayer node remains in the scene but has no TileSet assigned and renders nothing.
+- Each resource on a tile is displayed as one icon Sprite2D with its own circular black backdrop (opacity 30%) behind it, providing contrast against any terrain.
+- When a tile holds multiple resources (up to 4), the icons are scattered randomly within the tile bounds. Scatter positions are deterministic per tile (seeded by tile coordinate hash) with a minimum separation of 85% of icon width to avoid excessive overlap.
+- Icon size scales with the number of resources on the tile: 1 → 60%, 2 → 40%, 3 → 35%, 4 → 31% of tile width. All icons on a tile use the same scale.
+- All badges animate with a continuous sine-wave vertical float (amplitude ±4 px, period 2.5 s). Each tile's badge has a unique phase offset (derived from tile position) so icons across the map do not bob in lockstep.
 - Resources use slightly saturated colors vs terrain (actionable = higher saturation)
 
 **Building Slots Layer (TileMapLayer — simple 1×1 indicator tiles):**

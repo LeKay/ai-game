@@ -62,11 +62,11 @@ The following items were pulled from GDD UI Requirements across all 11 game syst
 ## Layout Zones
 
 ### Zone 1 — Top Band (full width)
-Fixed horizontal strip at the top of the screen. Contains:
-- Day counter (left-aligned)
-- Tick speed + play/pause buttons (left-center)
-- NPC count (right of tick controls)
-- Energy bar (right-aligned, horizontal fill bar)
+Fixed horizontal strip at the top of the screen. Single row, 48px height. Contains:
+- Day label "Day N" (far left, after 10px padding)
+- Tick speed + play/pause buttons (left, after day label)
+- Clock display "⏰ HH:MM" (right-aligned, before energy bar)
+- Energy bar (far right, before 10px padding)
 
 ### Zone 2 — Gameplay View
 Unobstructed area below the top band. The center 60% horizontal and 40% vertical must never contain HUD elements. All world-space HUD icons (NPC hunger alerts, building production warnings, construction previews) render over this area with camera-relative positioning.
@@ -87,10 +87,17 @@ Transient notification zone. Toast messages (resource warnings, building complet
 
 ### Element 1: Day Display
 - **Category:** Must Show
-- **Content:** Day number ("Day 12") + tick progress bar (fills 0→1000, resets on day transition)
-- **Visual:** Day number: Silkscreen 16px, `#F0EDE6`. Progress bar: horizontal fill, background `#3A3A3A`, fill `#D4A85C` (golden). Height: 24px.
-- **Update:** Progress bar subscribes to `ticks_advanced` event from Tick System — fills incrementally
-- **Position:** Day number on left, progress bar immediately adjacent
+- **Content:** Day number label only ("Day 12"). No progress bar — day progress is shown by the clock (Element 1b).
+- **Visual:** Silkscreen 14px, `#F0EDE6`. Min-width 52px, horizontally centered text.
+- **Update:** Subscribes to `ticks_advanced` from Tick System — increments when `get_current_day()` changes.
+- **Position:** Far left in top band, after 10px left padding.
+
+### Element 1b: Clock Display
+- **Category:** Must Show
+- **Content:** ⏰ emoji + time string "HH:MM". Maps within-day tick count (0 → TICKS_PER_DAY) to 00:00 → 24:00. Resets to 00:00 on day rollover.
+- **Visual:** ⏰ emoji at 16px, time label Silkscreen 14px, `#F0EDE6`. Min-width 44px for time label, centered.
+- **Update:** Subscribes to `ticks_advanced` from Tick System — recomputes time string each tick.
+- **Position:** Right side of top band, immediately left of energy bar.
 
 ### Element 2: Tick Speed + Play/Pause
 - **Category:** Must Show
@@ -107,18 +114,12 @@ Transient notification zone. Toast messages (resource warnings, building complet
 
 ### Element 4: Energy Bar
 - **Category:** Must Show
-- **Content:** Player energy / max energy (horizontal fill bar)
-- **Visual:** Background `#3A3A3A`. Fill thresholds: green `#4CAF50` (50–100%), yellow `#FFC107` (30–49%), orange `#FF9800` (10–29%), red `#E05555` (0–9%). Border `#5A5A5A`. Height: 24px. Color transitions use 300ms ease-out animation.
-- **Colorblind-safe encoding:** In addition to color, a pattern overlay encodes urgency:
-  - **>50%:** solid fill (no pattern)
-  - **15–50%:** diagonal hatch lines overlaid on fill
-  - **<15%:** crosshatch pattern overlaid on fill
-  - **0%:** pulsing X pattern (same as depleted state, combined with skull icon)
-- **Depleted state (0 energy):** Bar is solid red with pulsing X pattern (2Hz). Adjacent skull icon (24×24px, flat-shaded) + text "DEPLETED" in `#E05555`.
-- **Interaction:** Hover tooltip shows: "~X actions remaining until 50% threshold", "~Y actions until empty at current consumption rate"
-- **Update:** Signal-driven — subscribes to `energy_changed(current, max)` from PlayerCharacter system (no polling)
-- **Position:** Right-aligned in top band, Row 2
-- **GDD cross-reference:** Visual treatment (icon style, tooltip, audio) defined in `design/gdd/hud-system.md` Visual/Audio Requirements → Energy Bar section.
+- **Content:** Player energy as segmented bar (10 discrete segments). No numeric label. Prefixed by ⚡ emoji.
+- **Visual:** ⚡ emoji at 16px. Bar: 120px wide × 8px tall. 10 equal segments separated by 2px gaps. Background `#333333`. Filled segment colors: green `#4CAF50` (≥50%), yellow `#FFC107` (30–49%), orange `#FF9800` (10–29%), red `#E05555` (0–9%). Empty segments: `#333333` (32, 32, 32). No numeric text on the bar.
+- **Colorblind-safe encoding (future):** Pattern overlays on segments are deferred — segment count already encodes urgency through fill level independently of color.
+- **Update:** Signal-driven — subscribes to `energy_changed(current, max)` from PlayerCharacter system via `get_first_node_in_group("player_character")` (PlayerCharacter is a scene node, not an Autoload).
+- **Position:** Far right in top band, before 10px right padding.
+- **GDD cross-reference:** Visual treatment defined in `design/gdd/hud-system.md` Visual/Audio Requirements → Energy Bar section.
 
 ### Element 4b: Food Status Indicator
 - **Category:** Must Show
@@ -371,7 +372,7 @@ Specifies which elements hide, show, or change behavior in each gameplay context
 
 ### Resolution & Aspect Ratio
 - PC desktop only — no console/mobile considerations
-- HUD anchored to screen edges; top band fixed at 64px height
+- HUD anchored to screen edges; top band fixed at 48px height
 - Bottom-right toast zone avoids the bottom 120px
 - Works on 1080p and wider aspect ratios (no HUD elements near screen left/right edges)
 
@@ -382,11 +383,11 @@ Specifies which elements hide, show, or change behavior in each gameplay context
 ---
 
 ## Top Band Height
-- Fixed at **64px** (2 rows of 32px each) on all supported resolutions
-- Row 1 (top 32px): day counter + tick progress bar + tick speed + play/pause + NPC count
-- Row 2 (bottom 32px): food status + debuff indicator + resource warnings + energy bar
-- At 1920×1080 this occupies 3.3% of screen height
-- Supersedes the 48px value in `design/gdd/hud-system.md` Visual Style section — the HUD Design is the authoritative specification for pixel-level layout
+- Fixed at **48px** (single row) on all supported resolutions
+- Left group: [10px pad] Day N | − Nx + ▶
+- Right group: ⏰ HH:MM | ⚡ [10 segments] [10px pad]
+- At 1920×1080 this occupies 2.5% of screen height
+- This value supersedes any earlier 64px reference in design documents — 48px is the implemented and authoritative value
 
 ## Pattern Library References
 
@@ -434,7 +435,7 @@ All criteria are independently testable. A QA tester who has not read the design
 | # | Criterion | Test | Expected |
 |---|-----------|------|----------|
 | AC-HUD-01 | No HUD element occupies the center 60% horizontal × 40% vertical of the gameplay view at any resolution | Visual inspection at 1920×1080 and 2560×1440 | Zero HUD pixel in safe zone |
-| AC-HUD-02 | Top band is exactly 64px height on all supported resolutions | Measure top band at 1920×1080 and 2560×1440 | Height = 64px ± 0px (supersedes HUD GDD 48px value) |
+| AC-HUD-02 | Top band is exactly 48px height on all supported resolutions | Measure top band at 1920×1080 and 2560×1440 | Height = 48px ± 0px |
 | AC-HUD-03 | All screen-space HUD elements remain anchored to screen edges during window resize | Resize window from 1920×1080 to 1280×720 and back | Elements re-anchor, no clipping or overlap |
 
 ### Performance

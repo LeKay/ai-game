@@ -12,9 +12,9 @@ var _registered_systems: Array[String] = []
 
 
 ## Register a system's save handler. Called by each system in _ready().
-func register_save_system(name: String) -> void:
-	if not _registered_systems.has(name):
-		_registered_systems.append(name)
+func register_save_system(system_name: String) -> void:
+	if not _registered_systems.has(system_name):
+		_registered_systems.append(system_name)
 
 
 ## Returns list of available (non-empty) save slot numbers.

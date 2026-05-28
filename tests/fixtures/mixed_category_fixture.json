@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "resources": [
+    {
+      "id": "berry",
+      "display_name": "Berry",
+      "category": "consumable",
+      "stack_limit": 50,
+      "base_value": 1,
+      "icon_path": "assets/ui/icons/resources/berry.png"
+    },
+    {
+      "id": "bread",
+      "display_name": "Bread",
+      "category": "consumable",
+      "stack_limit": 20,
+      "base_value": 5,
+      "icon_path": "assets/ui/icons/resources/bread.png"
+    },
+    {
+      "id": "wood",
+      "display_name": "Wood",
+      "category": "production_good",
+      "stack_limit": 99,
+      "base_value": 2,
+      "icon_path": "assets/ui/icons/resources/wood.png"
+    },
+    {
+      "id": "stone",
+      "display_name": "Stone",
+      "category": "production_good",
+      "stack_limit": 99,
+      "base_value": 0,
+      "icon_path": "assets/ui/icons/resources/stone.png"
+    }
+  ]
+}

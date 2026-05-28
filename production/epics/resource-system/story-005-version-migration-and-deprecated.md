@@ -1,10 +1,10 @@
 # Story 005: Version Migration and Deprecated Resources
 
 > **Epic**: Resource System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Foundation
 > **Type**: Integration
-> **Manifest Version**: Not yet created
+> **Manifest Version**: 2026-05-14
 
 ## Context
 
@@ -47,20 +47,20 @@ Add version comparison and migration support to `load_from_file()`:
 const CURRENT_SCHEMA_VERSION: int = 1  # Increment when adding required fields
 
 func load_from_file(path: String) -> bool:
-    # ... (file open + JSON parse from Story 001) ...
-    _registry_version = int(data.get("version", 0))
+	# ... (file open + JSON parse from Story 001) ...
+	_registry_version = int(data.get("version", 0))
 
-    if _registry_version > CURRENT_SCHEMA_VERSION:
-        push_error("ResourceRegistry: Save version %d exceeds game version %d — cannot load" % [
-            _registry_version, CURRENT_SCHEMA_VERSION])
-        return false
+	if _registry_version > CURRENT_SCHEMA_VERSION:
+		push_error("ResourceRegistry: Save version %d exceeds game version %d — cannot load" % [
+			_registry_version, CURRENT_SCHEMA_VERSION])
+		return false
 
-    if _registry_version < CURRENT_SCHEMA_VERSION:
-        push_warning("ResourceRegistry: Migrating registry from v%d to v%d — applying defaults" % [
-            _registry_version, CURRENT_SCHEMA_VERSION])
-        # Migration: defaults are applied in _cache_resource() via .get(key, default)
+	if _registry_version < CURRENT_SCHEMA_VERSION:
+		push_warning("ResourceRegistry: Migrating registry from v%d to v%d — applying defaults" % [
+			_registry_version, CURRENT_SCHEMA_VERSION])
+		# Migration: defaults are applied in _cache_resource() via .get(key, default)
 
-    return _parse_resources(data.get("resources", []))
+	return _parse_resources(data.get("resources", []))
 ```
 
 **Deprecated flag**: The `deprecated` field is already handled by `_cache_resource()` in Story 003 (`def.deprecated = bool(entry.get("deprecated", false))`). No additional caching logic needed — deprecated definitions sit in `_definitions` like any other entry.
@@ -126,3 +126,15 @@ func load_from_file(path: String) -> bool:
 
 - Depends on: Story 004 must be DONE (full ResourceRegistry implementation — all fields cached, all API methods present)
 - Unlocks: Save/Load System epic (WorldSaveManager can rely on ResourceRegistry handling deprecated/versioned entries correctly)
+
+---
+
+## Completion Notes
+**Completed**: 2026-05-28
+**Criteria**: 5/5 passing
+**Deviations**:
+- ADVISORY: ADR-0002 and ADR-0006 referenced but not yet created (pre-existing gap)
+- ADVISORY: push_warning emission in AC-1 migration path exercised but not directly asserted in tests
+- ADVISORY: test_version_downgrade_definitions_remain_empty accesses private _definitions field; public API proxy preferred
+**Test Evidence**: Integration — `tests/integration/resource/version_migration_test.gd` (8 tests, all ACs covered)
+**Code Review**: APPROVED WITH SUGGESTIONS (lean mode — LP-CODE-REVIEW skipped)

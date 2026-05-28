@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "resources": [
+    {
+      "display_name": "Wood",
+      "category": "production_good",
+      "stack_limit": 99,
+      "icon_path": "assets/ui/icons/resources/wood.png"
+    }
+  ]
+}

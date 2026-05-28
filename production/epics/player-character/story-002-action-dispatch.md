@@ -1,7 +1,7 @@
 # Story 002: Action Dispatch
 
 > **Epic**: Player Character System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Core
 > **Type**: Integration — ADR-0007
 > **Manifest Version**: N/A — control manifest not yet created
@@ -160,7 +160,7 @@ ticks_advanced(n):
 **Story Type**: Integration
 **Required evidence**: `tests/integration/player_character/action_dispatch_test.gd` — must exist and pass
 
-**Status**: [ ] Not yet created
+**Status**: [x] `tests/integration/player_character/action_dispatch_test.gd` — 30 tests, all 7 ACs covered
 
 ---
 
@@ -168,3 +168,15 @@ ticks_advanced(n):
 
 - Depends on: Story 001 (EnergyPool must be DONE)
 - Unlocks: Story 003 (drag-and-drop needs ActionSlot in TRANSPORT state)
+
+---
+
+## Completion Notes
+**Completed**: 2026-05-28
+**Criteria**: 7/7 passing
+**Deviations**:
+- ADVISORY: ADR-0007 referenced but file does not exist — pre-existing gap from Story 001
+- ADVISORY: `_action_configs`, `FOOD_ENERGY`, `FORAGE_TABLE` hardcoded — pre-existing; address in Story 004
+- ADVISORY: `DepletionMod`/`get_depletion_modifier()` defined in Story 001 unused by this story — review in Story 004
+**Test Evidence**: Integration — `tests/integration/player_character/action_dispatch_test.gd` (30 tests)
+**Code Review**: Complete — dead `_is_gathering()` removed, misleading comment fixed, progress signal tests added

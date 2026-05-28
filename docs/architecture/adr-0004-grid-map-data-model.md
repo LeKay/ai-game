@@ -99,7 +99,7 @@ No GridMap ADR exists. The architecture document defines the module ownership an
 │  │  ├─ remove_building(pos) -> bool                  │  │
 │  │  ├─ harvest_resource(pos, amount) -> int          │  │
 │  │  ├─ get_terrain(pos) -> TileType                  │  │
-│  │  ├─ get_resource(pos) -> ResourceTileData?        │  │
+│  │  ├─ get_resources(pos) -> Array[ResourceTileData]  │  │
 │  │  ├─ get_building(pos) -> String?                  │  │
 │  │  ├─ get_tile_view(pos) -> TileView                │  │
 │  │  ├─ world_to_tile(world_pos) -> Vector2i          │  │
@@ -156,7 +156,7 @@ func harvest_resource(tile: Vector2i, amount: int) -> int
 # --- Reads ---
 
 func get_terrain(tile: Vector2i) -> TileType
-func get_resource(tile: Vector2i) -> ResourceTileData?
+func get_resources(tile: Vector2i) -> Array[ResourceTileData]  # empty = no resource
 func get_building(tile: Vector2i) -> String?
 func get_tile_view(tile: Vector2i) -> TileView  # composite read-only snapshot
 
@@ -269,6 +269,11 @@ func deserialize(data: Dictionary) -> void
 - 30×30 grid is fixed at instantiation — changing to 50×50 requires creating a new Grid instance, not resizing.
 - Resource tiles are permanently removed when buildings are placed — no regeneration or replenishment.
 - TerrainLayer becomes immutable after `_ready()` — enforced by assertion, not by data structure.
+
+### Post-acceptance amendments (2026-05-28)
+
+- **Resource data model broadened**: `_resources[x][y]` stores `Array[ResourceTileData]` instead of `ResourceTileData|null`. `get_resource()` renamed to `get_resources()` returning `Array[ResourceTileData]` (empty = no resource). `TileView.resource` renamed to `TileView.resources: Array`. Enables multiple resources per tile without changing the three-layer architecture.
+- **ResourceOverlay TileMapLayer unused for rendering**: Resources are now displayed as runtime-spawned Sprite2D badge nodes in a `ResourceBadges` Node2D container (z_index 1) rather than via `ResourceOverlay.set_cell()`. `ResourceOverlay` remains in the scene tree with no TileSet assigned. The invariant that TileMapLayer is a pure rendering target (not queried by gameplay code) is unchanged.
 
 ## Risks
 

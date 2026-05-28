@@ -1,7 +1,7 @@
 # Story 002: Input Debounce System
 
 > **Epic**: Input System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Foundation
 > **Type**: Logic
 > **Manifest Version**: N/A
@@ -107,3 +107,10 @@
 
 - Depends on: Story 001 must be DONE
 - Unlocks: None
+
+## Completion Notes
+**Completed**: 2026-05-27
+**Criteria**: 5/5 passing
+**Deviations**: ADVISORY — implementation uses `DEBOUNCE_DELAY_MSEC: int = 250` (ms) instead of `DEBOUNCE_DELAY: float = 0.25` (s) per story notes; functionally equivalent, no fix required. ADR-0003.md not yet created; decision inlined in story.
+**Test Evidence**: Logic — `tests/unit/input/debounce_test.gd` (12 tests, post-code-review flakiness fix applied)
+**Code Review**: Complete (Lean mode — LP gate skipped; manual /code-review run pre-completion)

@@ -44,12 +44,12 @@ Add to TickSystem (alongside Story 001/002 implementation):
 
 ```gdscript
 func advance_ticks_manual(cost: int) -> void:
-    tick_count += cost
-    ticks_advanced.emit(cost)
-    while tick_count >= TICKS_PER_DAY:
-        tick_count -= TICKS_PER_DAY
-        current_day += 1
-        day_transition.emit(1)
+	tick_count += cost
+	ticks_advanced.emit(cost)
+	while tick_count >= TICKS_PER_DAY:
+		tick_count -= TICKS_PER_DAY
+		current_day += 1
+		day_transition.emit(1)
 ```
 
 The day transition `while` loop must be present in `advance_ticks_manual()` — a manual action costing more than 1000 ticks can push through a day boundary. Each day transition also sets pause state via `set_pause(true)`.

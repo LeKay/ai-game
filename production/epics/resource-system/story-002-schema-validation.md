@@ -1,10 +1,10 @@
 # Story 002: Schema Validation and Fail-Fast
 
 > **Epic**: Resource System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Foundation
 > **Type**: Logic
-> **Manifest Version**: Not yet created
+> **Manifest Version**: 2026-05-14
 
 ## Context
 
@@ -13,7 +13,7 @@
 *(Requirement text lives in `docs/architecture/tr-registry.yaml` — read fresh at review time)*
 
 **ADR Governing Implementation**: ADR-0002: Resource Data Registry Format and Loading
-**ADR Decision Summary**: `_validate_resource()` checks each resource entry for required fields (`id`, `display_name`, `category`, `stack_limit`, `icon_path`) and cross-field constraints (`max_charge` must be > 0.0 when provided). Any validation failure halts loading with a clear error (`push_error()`). Invalid category strings default to `"produktionsware"` with a logged warning rather than halting load entirely.
+**ADR Decision Summary**: `_validate_resource()` checks each resource entry for required fields (`id`, `display_name`, `category`, `stack_limit`, `icon_path`) and cross-field constraints (`max_charge` must be > 0.0 when provided). Any validation failure halts loading with a clear error (`push_error()`). Invalid category strings default to `"production_good"` with a logged warning rather than halting load entirely.
 
 **Engine**: Godot 4.6 | **Risk**: HIGH (engine version beyond LLM training data)
 **Engine Notes**: No post-cutoff APIs. GDScript `Dictionary.has()` and type-checking via `is` operator are stable. `push_error()` vs `push_warning()` distinction matters — validation errors that halt load use `push_error()`; recoverable issues (invalid category default) use `push_warning()`.
@@ -47,39 +47,39 @@ Add `_validate_resource()` to ResourceRegistry and wire it into `_parse_resource
 const _VALID_CATEGORY_STRINGS: Array[String] = ["consumable", "production_good"]
 
 func _validate_resource(entry: Dictionary, index: int) -> Array[String]:
-    var errors: Array[String] = []
-    if not entry.has("id") or not entry["id"] is String:
-        errors.append("Resource at index %d: missing or invalid 'id'" % index)
-    if not entry.has("display_name") or not entry["display_name"] is String:
-        errors.append("Resource at index %d: missing or invalid 'display_name'" % index)
-    if not entry.has("category"):
-        errors.append("Resource at index %d: missing 'category'" % index)
-    elif entry["category"] not in _VALID_CATEGORY_STRINGS:
-        # Recoverable: default to production_good, log warning, do not add to errors
-        push_warning("ResourceRegistry: Resource '%s' has invalid category '%s' — defaulting to 'production_good'" % [
-            entry.get("id", "???"), entry["category"]])
-        entry["category"] = "production_good"
-    if not entry.has("stack_limit") or not (entry["stack_limit"] is int and entry["stack_limit"] >= 1):
-        errors.append("Resource at index %d: 'stack_limit' must be int >= 1" % index)
-    if not entry.has("icon_path") or not entry["icon_path"] is String:
-        errors.append("Resource at index %d: missing or invalid 'icon_path'" % index)
-    # Cross-field constraint: max_charge must be > 0.0 when provided
-    if entry.has("max_charge"):
-        if not entry["max_charge"] is float and not entry["max_charge"] is int:
-            errors.append("Resource '%s': 'max_charge' must be a number" % entry.get("id", "???"))
-        elif float(entry["max_charge"]) <= 0.0:
-            errors.append("Resource '%s': 'max_charge' must be > 0.0 (got %s)" % [entry.get("id", "???"), entry["max_charge"]])
-    return errors
+	var errors: Array[String] = []
+	if not entry.has("id") or not entry["id"] is String:
+		errors.append("Resource at index %d: missing or invalid 'id'" % index)
+	if not entry.has("display_name") or not entry["display_name"] is String:
+		errors.append("Resource at index %d: missing or invalid 'display_name'" % index)
+	if not entry.has("category"):
+		errors.append("Resource at index %d: missing 'category'" % index)
+	elif entry["category"] not in _VALID_CATEGORY_STRINGS:
+		# Recoverable: default to production_good, log warning, do not add to errors
+		push_warning("ResourceRegistry: Resource '%s' has invalid category '%s' — defaulting to 'production_good'" % [
+			entry.get("id", "???"), entry["category"]])
+		entry["category"] = "production_good"
+	if not entry.has("stack_limit") or not (entry["stack_limit"] is int and entry["stack_limit"] >= 1):
+		errors.append("Resource at index %d: 'stack_limit' must be int >= 1" % index)
+	if not entry.has("icon_path") or not entry["icon_path"] is String:
+		errors.append("Resource at index %d: missing or invalid 'icon_path'" % index)
+	# Cross-field constraint: max_charge must be > 0.0 when provided
+	if entry.has("max_charge"):
+		if not entry["max_charge"] is float and not entry["max_charge"] is int:
+			errors.append("Resource '%s': 'max_charge' must be a number" % entry.get("id", "???"))
+		elif float(entry["max_charge"]) <= 0.0:
+			errors.append("Resource '%s': 'max_charge' must be > 0.0 (got %s)" % [entry.get("id", "???"), entry["max_charge"]])
+	return errors
 
 func _parse_resources(resources_array: Array) -> bool:
-    for i in resources_array.size():
-        var errors: Array[String] = _validate_resource(resources_array[i], i)
-        if not errors.is_empty():
-            for err in errors:
-                push_error("ResourceRegistry validation: " + err)
-            return false  # Fail-fast: first invalid resource halts load
-        _cache_resource(resources_array[i])
-    return true
+	for i in resources_array.size():
+		var errors: Array[String] = _validate_resource(resources_array[i], i)
+		if not errors.is_empty():
+			for err in errors:
+				push_error("ResourceRegistry validation: " + err)
+			return false  # Fail-fast: first invalid resource halts load
+		_cache_resource(resources_array[i])
+	return true
 ```
 
 The invalid-category case mutates `entry["category"]` in-place before caching (since the entry is a dictionary reference). This is safe — the entry is not stored anywhere else.
@@ -140,3 +140,10 @@ The invalid-category case mutates `entry["category"]` in-place before caching (s
 
 - Depends on: Story 001 must be DONE (ResourceRegistry Autoload skeleton + `_parse_resources()` entry point exists)
 - Unlocks: Story 003 (lookup API can trust that all cached definitions have been validated)
+
+## Completion Notes
+**Completed**: 2026-05-25
+**Criteria**: 5/5 passing
+**Deviations**: None
+**Test Evidence**: Logic — `tests/unit/resource/validation_test.gd` (27 tests; 5 added post-code-review covering float stack_limit, missing stack_limit key, empty id, multi-entry caching)
+**Code Review**: Complete — APPROVED WITH SUGGESTIONS (all suggestions applied: `file.close()` after `get_as_text()`, extracted `resource_id` local var in `_validate_resource`)

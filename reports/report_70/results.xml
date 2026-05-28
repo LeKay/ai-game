@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites id="2026-05-28" name="report_70" tests="15" failures="4" skipped="0" flaky="0" time="0.000">
+	<testsuite id="0" name="pan_input_test" package="tests/unit/camera" timestamp="2026-05-27T23:49:44" hostname="localhost" tests="15" failures="4" errors="0" skipped="0" flaky="0" time="0.550">
+		<testcase name="test_pan_wasd_right_key_displacement" classname="pan_input_test" time="0.025">
+			<failure message="FAILED: res://tests/unit/camera/pan_input_test.gd:42" type="FAILURE">
+<![CDATA[
+Expecting:
+ '0.000000'
+ in range between
+ '6.389000' <> '6.409000'
+]]>
+			</failure>
+		</testcase>
+		<testcase name="test_pan_wasd_diagonal_both_axes_advance" classname="pan_input_test" time="0.015">
+			<failure message="FAILED: res://tests/unit/camera/pan_input_test.gd:52" type="FAILURE">
+<![CDATA[
+Expecting:
+ '0.000000'
+ in range between
+ '6.389000' <> '6.409000'
+]]>
+			</failure>
+		</testcase>
+		<testcase name="test_pan_wasd_zero_delta_no_movement" classname="pan_input_test" time="0.015">
+		</testcase>
+		<testcase name="test_pan_wasd_zero_speed_no_movement" classname="pan_input_test" time="0.015">
+		</testcase>
+		<testcase name="test_pan_wasd_no_keys_held_no_movement" classname="pan_input_test" time="0.022">
+		</testcase>
+		<testcase name="test_pan_wasd_left_key_negative_x" classname="pan_input_test" time="0.013">
+			<failure message="FAILED: res://tests/unit/camera/pan_input_test.gd:83" type="FAILURE">
+<![CDATA[
+Expecting:
+ '0.000000'
+ in range between
+ '-6.409000' <> '-6.389000'
+]]>
+			</failure>
+		</testcase>
+		<testcase name="test_pan_wasd_up_key_negative_y" classname="pan_input_test" time="0.016">
+			<failure message="FAILED: res://tests/unit/camera/pan_input_test.gd:91" type="FAILURE">
+<![CDATA[
+Expecting:
+ '0.000000'
+ in range between
+ '-6.409000' <> '-6.389000'
+]]>
+			</failure>
+		</testcase>
+		<testcase name="test_pan_wasd_down_key_positive_y" classname="pan_input_test" time="0.016">
+		</testcase>
+		<testcase name="test_edge_scroll_bottom_zone_displacement" classname="pan_input_test" time="0.024">
+		</testcase>
+		<testcase name="test_edge_scroll_boundary_exclusive_no_scroll" classname="pan_input_test" time="0.015">
+		</testcase>
+		<testcase name="test_edge_scroll_ui_hovered_suppresses_scroll" classname="pan_input_test" time="0.019">
+		</testcase>
+		<testcase name="test_mouse_leave_stops_edge_scroll" classname="pan_input_test" time="0.019">
+		</testcase>
+		<testcase name="test_mouse_reenter_near_edge_resumes_scroll" classname="pan_input_test" time="0.019">
+		</testcase>
+		<testcase name="test_edge_scroll_blocked_in_ui_active_context" classname="pan_input_test" time="0.020">
+		</testcase>
+		<testcase name="test_pan_blocked_in_ui_active_context" classname="pan_input_test" time="0.029">
+		</testcase>
+	</testsuite>
+</testsuites>

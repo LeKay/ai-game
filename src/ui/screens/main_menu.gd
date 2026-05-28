@@ -21,7 +21,7 @@ extends CanvasLayer
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-const GAME_SCENE: String = "res://scenes/game.tscn"
+const GAME_SCENE: String = "res://src/scenes/game.tscn"
 const FADE_IN_DURATION: float = 0.3
 const FADE_OUT_DURATION: float = 0.3
 
