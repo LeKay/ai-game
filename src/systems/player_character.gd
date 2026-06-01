@@ -38,10 +38,11 @@ enum StartResult {
 
 enum RelocationResult {
 	SUCCESS,
-	SNAP_BACK_ENERGY,   ## insufficient energy
+	SUCCESS_LOW_ENERGY, ## moved but energy was insufficient — tick penalty applied
+	SNAP_BACK_ENERGY,   ## (unused for transport — kept for API compatibility)
 	SNAP_BACK_INVALID,  ## target impassable / out-of-bounds
 	SNAP_BACK_FULL,     ## target tile already at MAX_RESOURCES_PER_TILE
-	SNAP_BACK_SAME_TILE, ## distance 0 — paid 1 energy, icon stays
+	SNAP_BACK_SAME_TILE, ## distance 0 — icon stays
 	NOT_DRAGGING,       ## commit called when state is IDLE
 }
 
@@ -214,7 +215,7 @@ const FORAGE_TABLE: Array = [
 var _energy_pool: EnergyPool
 var _action_slot: ActionSlot
 var _architect_mode: ArchitectMode
-var _action_configs: Dictionary  ## int (ManualActionType) -> ManualActionConfig
+var _action_configs: Dictionary[int, ManualActionConfig]
 var _rng: RandomNumberGenerator
 
 var _inventory: Node = null   ## injected via init_dependencies()
@@ -246,11 +247,16 @@ func _ready() -> void:
 ## Wire up Foundation system dependencies. Called by scene root or WorldSaveManager.
 func init_dependencies(tick: Node, inventory: Node, _grid: Node, _input_ctx: Node) -> void:
 	_inventory = inventory
-	if _tick_system != null and _tick_system.ticks_advanced.is_connected(_on_ticks_advanced):
-		_tick_system.ticks_advanced.disconnect(_on_ticks_advanced)
+	if _tick_system != null:
+		if _tick_system.ticks_advanced.is_connected(_on_ticks_advanced):
+			_tick_system.ticks_advanced.disconnect(_on_ticks_advanced)
+		if _tick_system.day_transition.is_connected(_on_day_transition):
+			_tick_system.day_transition.disconnect(_on_day_transition)
 	_tick_system = tick
 	if _tick_system != null:
 		_tick_system.ticks_advanced.connect(_on_ticks_advanced)
+		if not _tick_system.day_transition.is_connected(_on_day_transition):
+			_tick_system.day_transition.connect(_on_day_transition)
 
 # ---- Energy API (Story 001) -------------------------------------------------
 
@@ -267,6 +273,18 @@ func get_max_energy() -> int:
 ## Returns true when energy is at 0.
 func is_depleted() -> bool:
 	return _energy_pool.is_depleted()
+
+
+## Deducts amount from energy pool. Drains to 0 if insufficient.
+## Returns false when energy was insufficient; true when fully paid.
+## Called by BuildingRegistry (placement cost) and MapRoot (transport cost).
+func consume_energy(amount: int) -> bool:
+	if amount <= 0:
+		return true
+	if _energy_pool.try_spend(amount):
+		return true
+	_energy_pool.spend_unchecked(amount)
+	return false
 
 # ---- Action API (Story 002) -------------------------------------------------
 
@@ -304,20 +322,24 @@ func try_start_action(action_type: int) -> int:
 		action_failed.emit(action_type, _start_result_to_reason(StartResult.TOOL_REQUIRED))
 		return StartResult.TOOL_REQUIRED
 
-	var depleted := _energy_pool.is_depleted()
-	if not depleted:
-		if not _energy_pool.try_spend(config.energy_cost):
-			action_failed.emit(action_type, _start_result_to_reason(StartResult.INSUFFICIENT_ENERGY))
-			return StartResult.INSUFFICIENT_ENERGY
+	var has_energy := _energy_pool.current >= config.energy_cost
+	var is_food_action := FOOD_ENERGY.has(config.output_resource)
+
+	if not has_energy and not is_food_action:
+		action_failed.emit(action_type, _start_result_to_reason(StartResult.INSUFFICIENT_ENERGY))
+		return StartResult.INSUFFICIENT_ENERGY
+
+	if has_energy:
+		_energy_pool.try_spend(config.energy_cost)
 	else:
-		_energy_pool.spend_unchecked(config.energy_cost)  # no-op at 0
+		_energy_pool.spend_unchecked(config.energy_cost)  # ADR-0007: cost deducted at start, clamps to 0
 
 	_action_slot.action_type = action_type
 	_action_slot.config = config
 	_action_slot.accumulated_ticks = 0
 	_action_slot.state = ActionSlot.State.WORKING
 
-	if depleted:
+	if not has_energy:
 		_action_slot.total_ticks = config.tick_cost * 2
 		_action_slot.effective_output = maxi(1, ceili(config.base_output * 0.5))
 	else:
@@ -347,24 +369,30 @@ func get_cost_preview(action_type: int) -> Dictionary:
 			depleted = false,
 		}
 
-	var depleted := _energy_pool.is_depleted()
-	var tick_cost: int = config.tick_cost * 2 if depleted else config.tick_cost
-	var output_qty: int = maxi(1, ceili(config.base_output * 0.5)) if depleted else config.base_output
+	var is_depleted := _energy_pool.current == 0
+	var has_energy := _energy_pool.current >= config.energy_cost
+	var is_food_action := FOOD_ENERGY.has(config.output_resource)
+	var is_blocked := not has_energy and not is_food_action
+	var tick_cost: int = config.tick_cost * 2 if not has_energy else config.tick_cost
+	var output_qty: int = maxi(1, ceili(config.base_output * 0.5)) if not has_energy else config.base_output
 
 	return {
-		blocked = false,
-		reason = "",
-		energy_cost = config.energy_cost,
+		blocked = is_blocked,
+		reason = "Not enough energy" if is_blocked else "",
+		energy_cost = config.energy_cost if has_energy else 0,
 		tick_cost = tick_cost,
 		output_qty = output_qty,
 		output_resource = config.output_resource,
-		depleted = depleted,
+		depleted = is_depleted,
 	}
 
 
-## Restore energy by consuming a food item. Returns false if food type is unknown.
+## Restore energy by consuming a food item. Returns false if food type is unknown
+## or the action slot is already occupied. Occupies the slot until the next tick.
 ## Emits food_consumed on success.
 func consume_food(food_type: StringName) -> bool:
+	if _action_slot.state != ActionSlot.State.FREE:
+		return false
 	var energy_amount: int = FOOD_ENERGY.get(food_type, 0)
 	if energy_amount == 0:
 		return false
@@ -396,11 +424,23 @@ func get_relocation_preview(target_tile: Vector2i) -> Dictionary:
 	var dist: int = (abs(target_tile.x - _relocation_drag.source_tile.x)
 		+ abs(target_tile.y - _relocation_drag.source_tile.y))
 	var base_cost: int = maxi(1, dist)
-	var depleted := _energy_pool.is_depleted()
-	var energy_cost: int = base_cost * 2 if depleted else base_cost
-	var tick_cost: int = base_cost
-	_relocation_drag.cached_cost = energy_cost
-	return {energy_cost = energy_cost, tick_cost = tick_cost}
+	var has_energy := _energy_pool.current >= base_cost
+	var is_food := FOOD_ENERGY.has(_relocation_drag.resource_id)
+	var energy_cost: int
+	var tick_cost: int
+	var energy_insufficient := false
+	if has_energy:
+		energy_cost = base_cost
+		tick_cost = base_cost * 5
+	elif is_food:
+		energy_cost = 0
+		tick_cost = base_cost * 15
+	else:
+		energy_cost = base_cost
+		tick_cost = base_cost * 5
+		energy_insufficient = true
+	_relocation_drag.cached_cost = base_cost
+	return {energy_cost = energy_cost, tick_cost = tick_cost, energy_insufficient = energy_insufficient}
 
 
 ## Called on LMB release. Validates energy, calls WorldGrid.move_one_resource(),
@@ -413,18 +453,19 @@ func try_commit_relocation(target_tile: Vector2i, grid: Node) -> int:
 	var src_idx: int = _relocation_drag.source_idx
 	var res_id: StringName = _relocation_drag.resource_id
 
-	# Compute cost with depletion applied.
 	var dist: int = abs(target_tile.x - source.x) + abs(target_tile.y - source.y)
 	var base_cost: int = maxi(1, dist)
-	var depleted := _energy_pool.is_depleted()
-	var cost: int = base_cost * 2 if depleted else base_cost
+	var has_energy := _energy_pool.current >= base_cost
+	var is_food := FOOD_ENERGY.has(res_id)
 
-	# Same-tile drop: pay 1 energy (min cost), no WorldGrid mutation.
+	# Same-tile drop: spend energy if available, no WorldGrid mutation.
 	if dist == 0:
-		if not _energy_pool.try_spend(cost):
+		if not has_energy and not is_food:
 			_relocation_drag.state = RelocationDrag.DragState.IDLE
 			relocation_cancelled.emit(source)
 			return RelocationResult.SNAP_BACK_ENERGY
+		if has_energy:
+			_energy_pool.try_spend(base_cost)
 		_relocation_drag.state = RelocationDrag.DragState.IDLE
 		relocation_completed.emit(source, target_tile, res_id)
 		return RelocationResult.SNAP_BACK_SAME_TILE
@@ -445,17 +486,19 @@ func try_commit_relocation(target_tile: Vector2i, grid: Node) -> int:
 		relocation_cancelled.emit(source)
 		return RelocationResult.SNAP_BACK_FULL
 
-	# Check energy before committing.
-	if not _energy_pool.try_spend(cost):
+	if not has_energy and not is_food:
 		_relocation_drag.state = RelocationDrag.DragState.IDLE
 		relocation_cancelled.emit(source)
 		return RelocationResult.SNAP_BACK_ENERGY
+
+	if has_energy:
+		_energy_pool.try_spend(base_cost)
 
 	# Commit — mutate WorldGrid.
 	grid.move_one_resource(source, src_idx, target_tile)
 	_relocation_drag.state = RelocationDrag.DragState.IDLE
 	relocation_completed.emit(source, target_tile, res_id)
-	return RelocationResult.SUCCESS
+	return RelocationResult.SUCCESS if has_energy else RelocationResult.SUCCESS_LOW_ENERGY
 
 
 ## Cancels an in-progress drag. No energy spent.
@@ -474,6 +517,10 @@ func is_relocating() -> bool:
 
 # ---- Tick handler -----------------------------------------------------------
 
+func _on_day_transition(_day: int) -> void:
+	pass  # PC state is unaffected by day boundaries (AC9 — running actions continue uninterrupted)
+
+
 func _on_ticks_advanced(n: int) -> void:
 	if _action_slot.state == ActionSlot.State.FREE:
 		return
@@ -488,11 +535,14 @@ func _complete_current_action() -> void:
 	var completed_type: int = _action_slot.action_type
 	var output := _build_output(_action_slot)
 	_action_slot.free_slot()
-	action_completed.emit(completed_type, output)
+	if completed_type != -1:
+		action_completed.emit(completed_type, output)
 
 
 func _build_output(slot: ActionSlot) -> Array:
 	var qty: int = slot.effective_output
+	if slot.config == null:
+		return []
 	if slot.action_type == ManualActionType.FORAGE:
 		return [{resource_id = _roll_forage_loot(), quantity = qty}]
 	return [{resource_id = slot.config.output_resource, quantity = qty}]

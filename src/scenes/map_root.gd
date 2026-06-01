@@ -125,6 +125,7 @@ var _terrain_type_variant_counts: Array[int] = []
 @onready var grid: WorldGrid = $WorldGrid
 
 @onready var _player: PlayerCharacter = $PlayerCharacter
+@onready var _registry: Node = get_node("/root/BuildingRegistry")
 
 ## Tracks each spawned resource icon for per-frame float animation and drag hit-testing.
 ## One entry per resource instance: {node: Node2D, tile: Vector2i, resource_idx: int,
@@ -139,11 +140,14 @@ var _drag_icon_entry: Dictionary = {}  ## reference into _resource_icons
 
 ## Drag visual overlays (AC2: cost label, AC3: path line). Initialized in _ready().
 var _drag_cost_label: Label = null
+var _drag_energy_label: Label = null
 var _drag_path_line: Line2D = null
 var _drag_path_dots: Array = []
 var _drag_path_dst_marker: Sprite2D = null
 var _drag_src_tile: Vector2i = Vector2i(-1, -1)
 var _drag_path_phase: float = 0.0
+
+var _inventory_screen: InventoryScreen = null
 
 const _PATH_LINE_WIDTH: float = 2.5
 const _PATH_DOT_COUNT: int = 5
@@ -164,10 +168,17 @@ func _ready() -> void:
 	_interaction_panel = _TILE_PANEL_SCENE.instantiate() as TileInteractionPanel
 	add_child(_interaction_panel)
 	_interaction_panel.world_click_at.connect(_on_panel_world_click)
+	_registry.connect("building_placed", _on_building_placed)
 	_player.init_dependencies(TickSystem, null, grid, null)
+	_registry.init_dependencies(grid, _player)
+	_registry.place_starter_building(1, Vector2i(15, 15))  # 1 = BuildingType.STORAGE_BUILDING
 	_player.action_started.connect(_on_action_started)
 	_player.action_completed.connect(_on_action_completed)
 	_setup_drag_overlays()
+	_inventory_screen = InventoryScreen.new()
+	_inventory_screen.name = "InventoryScreen"
+	add_child(_inventory_screen)
+	call_deferred(&"_wire_inventory_hud")
 
 
 ## Creates the cost label (AC2) and path line overlay (AC3) used during drag.
@@ -180,6 +191,14 @@ func _setup_drag_overlays() -> void:
 	_drag_cost_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.9))
 	_drag_cost_label.add_theme_constant_override("outline_size", 3)
 	add_child(_drag_cost_label)
+
+	_drag_energy_label = Label.new()
+	_drag_energy_label.visible = false
+	_drag_energy_label.z_index = 20
+	_drag_energy_label.add_theme_font_size_override("font_size", 16)
+	_drag_energy_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.9))
+	_drag_energy_label.add_theme_constant_override("outline_size", 3)
+	add_child(_drag_energy_label)
 
 	_drag_path_line = Line2D.new()
 	_drag_path_line.width = _PATH_LINE_WIDTH
@@ -395,30 +414,19 @@ func _spawn_badge(tile: Vector2i, resource_ids: Array[StringName], parent: Node2
 			tween.tween_property(icon_node, "scale", Vector2(1.0, 1.0), 0.08)
 
 
-## Returns count random positions within a tile.
-## Deterministic when seed_offset=0 (map generation); unique per spawn when offset varies.
-## Spread is 28% of tile size; positions are separated by at least 85% of icon_px.
-func _random_icon_positions(tile: Vector2i, count: int, icon_px: int, seed_offset: int = 0) -> Array:
+## Returns count evenly-spaced positions within a tile arranged in a circle.
+## Deterministic: same tile+seed_offset always produces the same layout.
+## A random angle offset is applied so icons don't always face the same direction.
+func _random_icon_positions(tile: Vector2i, count: int, _icon_px: int, seed_offset: int = 0) -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(tile) ^ seed_offset
 	var spread: float = float(WorldGrid.TILE_SIZE) * 0.28
-	var min_dist: float = float(icon_px) * 0.85
+	var radius: float = spread * (0.0 if count == 1 else 0.7)
+	var angle_offset: float = rng.randf() * TAU
 	var positions: Array = []
-	for _i in range(count):
-		var pos := Vector2.ZERO
-		for _attempt in range(30):
-			var angle: float = rng.randf() * TAU
-			var radius: float = rng.randf() * spread
-			var candidate := Vector2(cos(angle) * radius, sin(angle) * radius)
-			var ok := true
-			for existing: Vector2 in positions:
-				if candidate.distance_to(existing) < min_dist:
-					ok = false
-					break
-			if ok:
-				pos = candidate
-				break
-		positions.append(pos)
+	for i in range(count):
+		var angle: float = angle_offset + (float(i) / float(count)) * TAU
+		positions.append(Vector2(cos(angle) * radius, sin(angle) * radius))
 	return positions
 
 
@@ -443,6 +451,7 @@ func _process(delta: float) -> void:
 func _update_drag_overlays() -> void:
 	if _drag_icon == null:
 		_drag_cost_label.visible = false
+		_drag_energy_label.visible = false
 		_drag_path_line.visible = false
 		_drag_path_dst_marker.visible = false
 		for dot: Sprite2D in _drag_path_dots:
@@ -452,9 +461,19 @@ func _update_drag_overlays() -> void:
 	var cursor_world: Vector2 = get_global_mouse_position()
 	var hovered_tile: Vector2i = grid.world_to_tile(cursor_world)
 	var preview: Dictionary = _player.get_relocation_preview(hovered_tile)
-	_drag_cost_label.text = "⏱️%d  ⚡%d" % [preview.tick_cost, preview.energy_cost]
+	_drag_cost_label.text = "⏱️%d" % preview.tick_cost
 	_drag_cost_label.position = cursor_world + Vector2(16.0, -32.0)
 	_drag_cost_label.visible = true
+
+	_drag_energy_label.text = "⚡%d" % preview.energy_cost
+	var insufficient: bool = preview.get(&"energy_insufficient", false)
+	_drag_energy_label.add_theme_color_override(
+		"font_color",
+		Color(0.769, 0.353, 0.290) if insufficient else Color(1.0, 1.0, 0.8)
+	)
+	var tick_w: float = _drag_cost_label.get_minimum_size().x
+	_drag_energy_label.position = cursor_world + Vector2(16.0 + tick_w + 6.0, -32.0)
+	_drag_energy_label.visible = true
 
 	if not grid.is_in_bounds(hovered_tile) or _drag_src_tile == Vector2i(-1, -1):
 		_drag_path_line.visible = false
@@ -606,9 +625,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		var world_pos: Vector2 = get_global_mouse_position()
 		var target_tile: Vector2i = terrain_layer.local_to_map(terrain_layer.to_local(world_pos))
+
+		# If the target tile has a storage building, deposit instead of relocate.
+		var building_id: String = grid.get_building(target_tile)
+		if building_id != "":
+			_try_deposit_to_building(target_tile, building_id)
+			get_viewport().set_input_as_handled()
+			return
+
 		var result: int = _player.try_commit_relocation(target_tile, grid)
 		match result:
-			PlayerCharacter.RelocationResult.SUCCESS:
+			PlayerCharacter.RelocationResult.SUCCESS, \
+			PlayerCharacter.RelocationResult.SUCCESS_LOW_ENERGY:
 				var src_tile: Vector2i = _drag_icon_entry.tile
 				var src_idx: int = _drag_icon_entry.resource_idx
 				var tile_px: int = WorldGrid.TILE_SIZE
@@ -625,9 +653,9 @@ func _unhandled_input(event: InputEvent) -> void:
 						entry.resource_idx -= 1
 				var move_dist: int = (abs(target_tile.x - src_tile.x)
 					+ abs(target_tile.y - src_tile.y))
-				TickSystem.advance_ticks_manual(maxi(1, move_dist))
+				var tick_mult: int = 15 if result == PlayerCharacter.RelocationResult.SUCCESS_LOW_ENERGY else 5
+				TickSystem.advance_ticks_manual(maxi(1, move_dist) * tick_mult)
 			PlayerCharacter.RelocationResult.SNAP_BACK_SAME_TILE:
-				# Paid energy but icon stays — animate back to source.
 				_snap_back_drag_icon()
 			_:
 				# All SNAP_BACK_* and NOT_DRAGGING cases.
@@ -704,6 +732,7 @@ func _on_panel_world_click(screen_pos: Vector2) -> void:
 	if action_type < 0:
 		_interaction_panel.close()
 		return
+	_last_action_tile = tile
 	_interaction_panel.show_at(screen_pos, action_type)
 
 
@@ -743,6 +772,77 @@ func _spawn_pickup_float(world_pos: Vector2, text: String) -> void:
 	tween.tween_property(label, "position:y", label.position.y - 52.0, 1.4)
 	tween.tween_property(label, "modulate:a", 0.0, 1.4)
 	tween.finished.connect(label.queue_free)
+
+
+## Attempts to deposit the currently-dragged resource into a building's storage container.
+## Pays energy proportional to drag distance. Snaps back if deposit fails or energy is short.
+func _try_deposit_to_building(target_tile: Vector2i, building_id: String) -> void:
+	var instance: Object = _registry.get_building_instance(building_id)
+	var container_id: StringName = instance.assigned_container_id if instance != null else &""
+	var src_tile: Vector2i = _drag_icon_entry.tile
+	var src_idx: int = _drag_icon_entry.resource_idx
+	var res_id: StringName = _drag_icon_entry.resource_id
+	var dist: int = abs(target_tile.x - src_tile.x) + abs(target_tile.y - src_tile.y)
+	var cost: int = maxi(1, dist)
+
+	if container_id == &"":
+		_player.cancel_relocation()
+		_snap_back_drag_icon()
+		_drag_icon = null
+		_drag_icon_entry = {}
+		_drag_src_tile = Vector2i(-1, -1)
+		return
+
+	var has_energy := _player.get_current_energy() >= cost
+	var is_food := PlayerCharacter.FOOD_ENERGY.has(res_id)
+
+	if not has_energy and not is_food:
+		_player.cancel_relocation()
+		_snap_back_drag_icon()
+		_drag_icon = null
+		_drag_icon_entry = {}
+		_drag_src_tile = Vector2i(-1, -1)
+		return
+
+	if has_energy:
+		_player.consume_energy(cost)
+
+	var deposit_result: int = InventorySystem.try_deposit(container_id, res_id, 1)
+	if deposit_result == InventoryContainer.DepositResult.SUCCESS:
+		grid.remove_one_resource(src_tile, src_idx)
+		_drag_icon.queue_free()
+		_resource_icons.erase(_drag_icon_entry)
+		for entry: Dictionary in _resource_icons:
+			if entry.tile == src_tile and entry.resource_idx > src_idx:
+				entry.resource_idx -= 1
+		TickSystem.advance_ticks_manual(cost * (5 if has_energy else 15))
+	else:
+		_snap_back_drag_icon()
+	_player.cancel_relocation()
+	_drag_icon = null
+	_drag_icon_entry = {}
+	_drag_src_tile = Vector2i(-1, -1)
+
+
+## Spawns the building visual sprite when BuildingRegistry confirms placement.
+func _on_building_placed(_building_id: String, _type: int, tile: Vector2i) -> void:
+	var sprite := Sprite2D.new()
+	sprite.texture = load("res://assets/art/tiles/bld_tile_storage.png")
+	var tile_px: int = WorldGrid.TILE_SIZE
+	sprite.position = Vector2(tile) * tile_px + Vector2(tile_px, tile_px) * 0.5
+	sprite.z_index = 2
+	add_child(sprite)
+
+
+## Connects inventory screen signals to the HUD storage panel after all _ready() calls complete.
+## Deferred so the HUD CanvasLayer has added itself to the "hud" group first.
+func _wire_inventory_hud() -> void:
+	var hud: HUD = get_tree().get_first_node_in_group(&"hud") as HUD
+	if hud == null:
+		push_warning("[MapRoot] HUD not found in group 'hud' — inventory↔HUD signals not wired")
+		return
+	_inventory_screen.inventory_opened.connect(hud.hide_storage_panel)
+	_inventory_screen.inventory_closed.connect(hud.show_storage_panel)
 
 
 ## Maps WorldGrid.TileType to the correct ManualActionType.
