@@ -396,6 +396,46 @@ mid brown. Everything outside the building is fully transparent.
 
 ---
 
+### 12. Holzfäller-Hütte / Lumber Camp — `bld_tile_lumber_camp.png`
+
+Kleines rustikales Holzfäller-Gebäude. Gleiche Bauweise wie das Lagergebäude, aber mit Holzstapel an der Seite als erkennbarem Hinweis auf den Betrieb.
+
+**Prompt:**
+```
+A small rustic wooden lumberjack cabin perfectly centered in the tile with equal empty
+space on all four sides, viewed from a slightly elevated angle — about 60 to 70 degrees
+above the horizon, like a classic top-down RPG perspective. The entire building is fully
+visible — no part touches or crosses any edge of the tile. Because of the slight angle,
+you can see both the sloped roof from above and a narrow strip of the front wall, giving
+the building clear visible height and mass.
+
+The cabin has solid log walls on all sides — the walls are built from stacked horizontal
+round logs, each log 2 pixels tall with a dark gap line between them, in warm mid brown.
+The building footprint is roughly square, 18 to 20 pixels wide and 14 to 16 pixels tall
+on the tile — the same size as a storage barn.
+
+The roof is a shallow pitched gable roof running left to right. The top surface of the
+roof is visible and covered in rough wooden shingles — short horizontal plank lines
+running parallel to the ridge. The ridge sits at the center top. The left slope of the
+roof catches the overhead light from the upper-left and is the lightest warm brown. The
+right slope is in shadow and is the darkest brown. A narrow front wall strip is visible
+below the roof edge: log-wall texture in mid brown, and a small dark rectangular door
+opening (3×4 pixels) centered on the front face.
+
+To the right side of the building, flush against the right wall: a small neat stack of
+two or three short log segments, seen slightly from above and the front. Each log segment
+shows a small wood-grain circle on its cut top face in warm tan. The stack is 4 to 5
+pixels wide and 3 to 4 pixels tall. The stack is part of the building composition and
+does not touch the tile edge.
+
+Everything outside the building and log stack is fully transparent.
+```
+
+**Zielfarben:** Dach-Highlight `#9A7A5A` · Dach-Mitte `#6B5240` · Dach-Schatten `#3E2C1E` · Wand-Log `#7A6048` · Wand-Fuge `#3E2C1E` · Tür `#2A1E14` · Holzstapel-Top `#A88860`
+**Hintergrund:** Transparent
+
+---
+
 ## Atlas-Assembly
 
 Nach Generierung alle Einzel-Tiles horizontal zusammenfügen:

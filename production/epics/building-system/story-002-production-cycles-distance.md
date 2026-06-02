@@ -1,7 +1,7 @@
 # Story 002: Production Cycles and Carrier Transport
 
 > **Epic**: Building System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: Integration — ADR-0008
 > **Manifest Version**: N/A — control manifest not yet created
@@ -177,7 +177,21 @@ if building.type == RESIDENTIAL_HOUSE and building.state == OPERATING:
 **Story Type**: Integration
 **Required evidence**: `tests/integration/building_system/production_cycles_test.gd` — must exist and pass
 
-**Status**: [ ] Not yet created
+**Status**: [x] Created and passing — `tests/integration/building_system/production_cycles_test.gd` (25 tests)
+
+---
+
+## Completion Notes
+**Completed**: 2026-06-02
+**Criteria**: 6/6 passing
+**Deviations**:
+- ADVISORY: `assign_npc()` returns `void` vs ADR-0008 `AssignmentResult` — deferred to story-004
+- ADVISORY: Signal name `building_npc_spawn_requested` differs from ADR-0008 `building_npc_spawned` — explicitly renamed in story impl notes; update ADR-0008 Consequences
+- ADVISORY: TR-build-004 says "output deposit" — implementation uses `buffered_output` pattern per ADR-0008 Decision (correct)
+- ADVISORY: Story predates control manifest (v2026-05-14); `Manifest Version: N/A` in header is expected
+- ADVISORY: Gameplay constants hardcoded as `const` (ongoing project pattern)
+**Test Evidence**: Integration — `tests/integration/building_system/production_cycles_test.gd` (25 tests, all 6 ACs covered)
+**Code Review**: Complete (manual, this session — all blocking findings resolved before story-done)
 
 ---
 

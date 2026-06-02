@@ -428,14 +428,14 @@ After noise sampling, the smoothing pass determines each tile's final type based
 
 ```
 For each tile at (x, y):
-    1. Count neighbors of each type (8-way adjacency)
-    2. neighbor_count[type] = { IMPASSABLE: n1, BERRY: n2, ... }
-    3. dominant_type = argmax(neighbor_count) (most frequent neighbor type)
-    4. r = random_float()  // [0.0, 1.0)
-    5. if r < 0.6:
-           tile[x][y] = dominant_type    // 60% chance: adopt neighbor type
-       else:
-           tile[x][y] stays unchanged     // 40% chance: keep current type
+	1. Count neighbors of each type (8-way adjacency)
+	2. neighbor_count[type] = { IMPASSABLE: n1, BERRY: n2, ... }
+	3. dominant_type = argmax(neighbor_count) (most frequent neighbor type)
+	4. r = random_float()  // [0.0, 1.0)
+	5. if r < 0.6:
+		   tile[x][y] = dominant_type    // 60% chance: adopt neighbor type
+	   else:
+		   tile[x][y] stays unchanged     // 40% chance: keep current type
 ```
 
 **Variables:**

@@ -1,7 +1,7 @@
 # Story 003: Building Placement Validation Gate
 
 > **Epic**: Grid/Map System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Core
 > **Type**: Logic
 > **Manifest Version**: Not yet created
@@ -158,3 +158,12 @@ func remove_building(tile: Vector2i) -> bool:
 
 - Depends on: Story 001 must be DONE (WorldGrid class, arrays, enums, and read API must exist)
 - Unlocks: Building System stories (which call `validate_placement` and `place_building`)
+
+---
+
+## Completion Notes
+**Completed**: 2026-05-31
+**Criteria**: 11/11 passing (all auto-verified via code inspection + unit tests)
+**Deviations**: ADVISORY — AC text references old `get_resource()` / null API; implementation correctly uses post-amendment `get_resources()` / empty Array. ADVISORY — Manifest Version not set (story predates manifest adoption; no new rules apply).
+**Test Evidence**: Logic — `tests/unit/grid/grid_placement_test.gd` exists, 11 tests, all ACs traced.
+**Code Review**: Complete (performed in session; fixes applied: `get_resources()` return type, ADR-0004 amended for TILE_SIZE=64 and FastNoiseLite)

@@ -1,7 +1,7 @@
 # Story 001: InventorySystem Autoload and Container Data Model
 
 > **Epic**: Inventory/Storage System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Core
 > **Type**: Logic
 > **Manifest Version**: Not yet created
@@ -187,6 +187,15 @@ func _is_slot_usable(slot: InventorySlot) -> bool:
 **Required evidence**: `tests/unit/inventory/inventory_container_test.gd` — must exist and pass
 
 **Status**: [ ] Not yet created
+
+---
+
+## Completion Notes
+**Completed**: 2026-05-31
+**Criteria**: 6/7 passing (AC-26 "unusable" path deferred to inv-002 — private method, untestable at unit level)
+**Deviations**: ADVISORY — AC-26 unusable path deferred; `_is_slot_usable` private + registry-absent escape hatch makes it untestable here. inv-002 `try_consume` must cover it.
+**Test Evidence**: Logic — `tests/unit/inventory/inventory_container_test.gd` (19 tests, file exists)
+**Code Review**: Complete (pre-done fixes: typed Array/Dictionary, `_grow_slots_to` rewrite, `get_capacity()` removed, test naming corrected, autoload registered)
 
 ---
 

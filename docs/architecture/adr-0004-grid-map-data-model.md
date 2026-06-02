@@ -26,10 +26,10 @@ Defines the GridMap system as the single source of truth for world state: a fixe
 |-------|-------|
 | **Engine** | Godot 4.6 |
 | **Domain** | Core / Rendering |
-| **Knowledge Risk** | HIGH — `TileMapLayer` introduced in 4.3, project targets 4.6; LLM training data covers ~4.3. `PerlinNoise` class was renamed to `FastNoise` in Godot 4.5+ (use `FastNoise` with `noise_type = FastNoise.TYPE_PERLIN`). Confirm `get_noise_2d` return range and any property changes. |
+| **Knowledge Risk** | HIGH — `TileMapLayer` introduced in 4.3, project targets 4.6; LLM training data covers ~4.3. `FastNoise` (the class suggested by pre-4.x docs) does not exist in Godot 4.x; the correct class is `FastNoiseLite`. Confirm `get_noise_2d` return range and any property changes. |
 | **References Consulted** | `docs/engine-reference/godot/breaking-changes.md` (4.2→4.3: TileMap→TileMapLayer), `docs/engine-reference/godot/deprecated-apis.md` (TileMap→TileMapLayer), `docs/engine-reference/godot/VERSION.md` (4.5→4.6 TileMapLayer scene tile rotation), `docs/architecture/architecture.md` (Module Ownership, API Boundaries) |
-| **Post-Cutoff APIs Used** | `TileMapLayer` (4.3+), `TileMapLayer.set_cell()` (4.3+), `TileSet` with `tile_size` (4.3+), `YSort` via `Node2D.y_sort_enabled` (4.0+), `FastNoise` (4.5+, renamed from `PerlinNoise`) |
-| **Verification Required** | Confirm `TileMapLayer.set_cell()` batch call pattern works without per-tile overhead. Verify `Node2D.y_sort_enabled` property (not YSort node) works for building/character depth sorting. Test `FastNoise.get_noise_2d()` returns `[-1.0, 1.0]` range as documented. Confirm 4.6 behavior: scene-level tile rotation on TileMapLayer does not interfere with our tile-based data model. |
+| **Post-Cutoff APIs Used** | `TileMapLayer` (4.3+), `TileMapLayer.set_cell()` (4.3+), `TileSet` with `tile_size` (4.3+), `YSort` via `Node2D.y_sort_enabled` (4.0+), `FastNoiseLite` (Godot 4.x noise class) |
+| **Verification Required** | Confirm `TileMapLayer.set_cell()` batch call pattern works without per-tile overhead. Verify `Node2D.y_sort_enabled` property (not YSort node) works for building/character depth sorting. Test `FastNoiseLite.get_noise_2d()` returns `[-1.0, 1.0]` range as documented. Confirm 4.6 behavior: scene-level tile rotation on TileMapLayer does not interfere with our tile-based data model. |
 
 > **Note**: TileMap→TileMapLayer deprecation is HIGH risk because using `TileMap` would cause runtime warnings and incompatible data layouts. The ADR explicitly bans `TileMap`.
 
@@ -56,13 +56,13 @@ No GridMap ADR exists. The architecture document defines the module ownership an
 
 - **Engine**: Godot 4.6 — `TileMap` is deprecated since 4.3; must use `TileMapLayer` (one node per visual layer).
 - **Grid size**: 30×30 for Vertical Slice, 50×50 for MVP (separate instantiation, no runtime resizing).
-- **Tile size**: 48×48 pixels — fits on 1920×1080 with UI overhead (1440×1440 map viewport).
+- **Tile size**: 64×64 pixels — fits on 1920×1080 with UI overhead (1920×1920 map viewport at 30 tiles).
 - **Determinism**: Same seed must produce identical maps (required for save/load consistency).
 - **Data ownership**: GridMap owns all world state; TileMapLayer is a pure rendering target with no independent state.
 - **Read-back prohibition**: Gameplay code must NEVER call `TileMapLayer.get_cell()` — data reads only from GridMap.
 - **Depth ordering**: Game objects must use `Node2D.y_sort_enabled` (not legacy `YSort` node, deprecated since 4.0).
 - **Resource IDs**: Grid references resource types by StringName from ResourceRegistry — no inline resource definitions.
-- **Perlin noise**: Godot's native `FastNoise` class with `noise_type = FastNoise.TYPE_PERLIN` (renamed from `PerlinNoise` in 4.5+). `FastNoiseLite` is also available but adds unnecessary complexity for VS scope.
+- **Perlin noise**: Godot 4.x uses `FastNoiseLite` with `noise_type = FastNoiseLite.TYPE_PERLIN`. `FastNoise` does not exist as a standalone class in Godot 4.x — `FastNoiseLite` is the correct API. Configuration: two instances (elevation: FBM, 4 octaves, frequency 0.05; moisture: FBM, 3 octaves, frequency 0.08).
 
 ### Requirements
 
@@ -121,7 +121,7 @@ Data flow (unidirectional):
 class_name GridMap extends Node
 
 const GRID_SIZE: int = 30
-const TILE_SIZE: int = 48  # pixels
+const TILE_SIZE: int = 64  # pixels
 
 enum TileType { EMPTY, TREE, STONE, BERRY, GRASS, IMPASSABLE }
 
@@ -206,13 +206,13 @@ func deserialize(data: Dictionary) -> void
 
 ### Implementation Guidelines
 
-1. **TileMapLayer over TileMap**: Use one `TileMapLayer` node per visual layer (terrain, resource overlay, building slots). Each has `TileSet` with `tile_size = Vector2i(48, 48)`. NEVER instantiate or reference a `TileMap` node.
+1. **TileMapLayer over TileMap**: Use one `TileMapLayer` node per visual layer (terrain, resource overlay, building slots). Each has `TileSet` with `tile_size = Vector2i(64, 64)`. NEVER instantiate or reference a `TileMap` node.
 
 2. **Data ownership invariance**: The Grid's 3 layer arrays are the sole truth. TileMapLayer cells are derived from Grid data via `set_cell()` calls — always in batch after generation or after a resource tile is cleared. Gameplay code reads Grid methods only.
 
 3. **Y-sort depth ordering**: All game objects that need proper depth ordering (buildings, characters, items) must be children of a `Node2D` with `y_sort_enabled = true`. Do NOT use the legacy `YSort` node (deprecated since 4.0).
 
-4. **Perlin noise generation**: Use Godot's native `FastNoise` class (not `FastNoiseLite`). Set `noise_type = FastNoise.TYPE_PERLIN`. Configure two instances — elevation (`octave_count = 4`) and moisture (`octave_count = 3`) — with scale `Vector2(9.0, 9.0)`. Normalize output from `[-1.0, 1.0]` to `[0.0, 1.0]` via `(value + 1.0) / 2.0`.
+4. **Perlin noise generation**: Use `FastNoiseLite` (Godot 4.x) — `FastNoise` does not exist as a standalone class in Godot 4. Set `noise_type = FastNoiseLite.TYPE_PERLIN` and `fractal_type = FastNoiseLite.FRACTAL_FBM`. Configure two instances — elevation (`fractal_octaves = 4`, `frequency = 0.05`) and moisture (`fractal_octaves = 3`, `frequency = 0.08`). Normalize output from `[-1.0, 1.0]` to `[0.0, 1.0]` via `(value + 1.0) / 2.0`.
 
 5. **validate_placement is the single gate**: All placement code — Building System, HUD ghost preview, Camera hover — calls this one function. No system implements its own placement logic. The function returns an enum with specific blocking reasons.
 
@@ -240,13 +240,13 @@ func deserialize(data: Dictionary) -> void
 - **Estimated Effort**: Less initial work (one node vs three), but migration cost later.
 - **Rejection Reason**: TR-grid-002 mandates `TileMapLayer`. Using `TileMap` would violate the requirement and create a debt that must be paid before Vertical Slice ships.
 
-### Alternative 3: External noise library (FastNoiseLite or third-party)
+### Alternative 3: Third-party GDExtension noise library
 
-- **Description**: Use `FastNoiseLite` or a GDExtension noise library instead of native `FastNoise` (with `TYPE_PERLIN`).
-- **Pros**: More configurable noise types (Perlin, Simplex, Voronoi, etc.).
-- **Cons**: Unnecessary complexity for VS scope; `FastNoise` with `TYPE_PERLIN` provides sufficient quality with its 4-octave configuration; adds an external dependency.
+- **Description**: Use a GDExtension noise library instead of Godot's built-in `FastNoiseLite`.
+- **Pros**: More configurable noise types (Voronoi, domain warping, custom implementations).
+- **Cons**: Adds an external dependency; unnecessary complexity for VS scope; `FastNoiseLite.TYPE_PERLIN` with FBM provides sufficient quality.
 - **Estimated Effort**: 1–2 hours additional for library integration and testing.
-- **Rejection Reason**: Native `FastNoise` with `TYPE_PERLIN` is adequate for the required terrain quality. The Architecture doc mentions `FastNoiseLite` in Module Ownership, but the GDD specifies `PerlinNoise` (now `FastNoise` in Godot 4.5+). We use the GDD spec.
+- **Rejection Reason**: Built-in `FastNoiseLite` with `TYPE_PERLIN` is adequate for the required terrain quality. No external dependency needed.
 
 ## Consequences
 
@@ -269,6 +269,11 @@ func deserialize(data: Dictionary) -> void
 - 30×30 grid is fixed at instantiation — changing to 50×50 requires creating a new Grid instance, not resizing.
 - Resource tiles are permanently removed when buildings are placed — no regeneration or replenishment.
 - TerrainLayer becomes immutable after `_ready()` — enforced by assertion, not by data structure.
+
+### Post-acceptance amendments (2026-05-31)
+
+- **TILE_SIZE corrected to 64**: ADR was authored with 48px; implementation verified 64px is the correct value used across `WorldGrid`, `CameraController`, `MapRoot`, and all tests. All coordinate conversion values updated accordingly.
+- **FastNoiseLite replaces FastNoise**: ADR incorrectly specified `FastNoise` (a Godot 3.x / pre-release class name). `FastNoise` does not exist in Godot 4.x — `FastNoiseLite` is the correct class. Implementation already used `FastNoiseLite` correctly. ADR updated to match.
 
 ### Post-acceptance amendments (2026-05-28)
 
@@ -317,7 +322,7 @@ This is a new ADR — no migration from existing code. Implementation steps:
 - [ ] Same seed (42) produces tile-for-tile identical maps across regenerations (AC #2)
 - [ ] `validate_placement` returns correct `PlacementResult` for all 5 blocking conditions: SUCCESS, BLOCKED_BY_BOUNDS, BLOCKED_BY_IMPASSABLE, BLOCKED_BY_BUILDING, BLOCKED_BY_RESOURCE_TILE (AC #5–#10)
 - [ ] Building placement updates BuildingLayer and clears clearable resources (AC #3, #11)
-- [ ] Coordinate conversion: tile (5,12) → pixel (264,600) → tile (8,6) are exact (AC #12–14)
+- [ ] Coordinate conversion: tile (5,12) → pixel center (352,800) are exact (AC #12–14) — `5×64+32=352`, `12×64+32=800`
 - [ ] `get_tiles_in_radius(15, 15, 1)` returns exactly 9 tiles (AC #15)
 - [ ] Manhattan distance between (0,0) and (5,5) = 10; Euclidean between (0,0) and (3,4) = 5.0 ± 0.001 (AC #16–17)
 - [ ] `find_nearest` returns closest tile by Manhattan distance (AC #18)

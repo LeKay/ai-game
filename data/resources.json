@@ -89,7 +89,7 @@
       "weight": 2.0,
       "base_value": 30,
       "max_charge": 100.0,
-      "icon_path": "assets/ui/icons/resources/tool.png",
+      "icon_path": "res://assets/art/tiles/env_tile_resource_tool.png",
       "description": "A sturdy general-purpose tool for chopping, mining, and crafting.",
       "tags": ["tool"]
     }

@@ -28,6 +28,7 @@
 | hud | APPROVED (after review) | design/ux/hud.md |
 | build-placement | APPROVED (after review) | design/ux/build-placement.md |
 | building-detail | COMPLETE (ready for /ux-review) | design/ux/building-detail.md |
+| inventory | COMPLETE (ready for /ux-review) | design/ux/inventory.md |
 
 ## UX Review Results — Build Placement (2026-05-18)
 
@@ -39,7 +40,7 @@ Second review: APPROVED — all completeness, quality, accessibility, and locali
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: UX Spec Design
-Task: Main Menu REVIEWED — APPROVED
+Task: Inventory screen spec complete — ready for /ux-review
 <!-- /STATUS -->
 
 ## UX Review Results — Main Menu (2026-05-18)
@@ -584,3 +585,114 @@ Revised review: APPROVED — completeness 8/8, all GDDs aligned, accessibility c
 - Test evidence: None — UI story, advisory gate, walkthrough deferred
 - Tech debt logged: None
 - Next recommended: inp-04 (Input System: Context transition on UI open/close) — ready-for-dev in sprint-001
+
+## Session Extract — /dev-story 2026-05-31 (inv-001)
+- Story: production/epics/inventory-system/story-001-inventory-container-data-model.md — InventorySystem Autoload and Container Data Model
+- Files changed: src/systems/inventory/inventory_system.gd (new), src/systems/inventory/inventory_container.gd (new), src/systems/inventory/inventory_slot.gd (new), src/systems/inventory/transit_item.gd (new stub)
+- Test written: tests/unit/inventory/inventory_container_test.gd — 19 test functions
+- Deviations: None — all in-scope ACs implemented; out-of-scope methods stubbed with story references
+- Blockers: RESOLVED — InventorySystem registered as Autoload in project.godot
+- Next: /code-review src/systems/inventory/ then /story-done production/epics/inventory-system/story-001-inventory-container-data-model.md
+
+## Session Extract — /story-done 2026-05-31 (inv-001)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/inventory-system/story-001-inventory-container-data-model.md — InventorySystem Autoload and Container Data Model
+- Deviations: AC-26 "unusable" path deferred to inv-002 (private method + test-env escape hatch); code review fixes applied (typed Array/Dict, _grow_slots_to rewrite, get_capacity() removed, test naming, autoload registered)
+- Test evidence: tests/unit/inventory/inventory_container_test.gd — 19 tests, file confirmed
+- Tech debt logged: None
+- Next recommended: inv-002 (InventorySystem: try_deposit / try_consume / first-fit stacking)
+
+## Session Extract — /dev-story 2026-05-31 (inv-002)
+- Story: production/epics/inventory-system/story-002-first-fit-stacking.md — First-Fit Stacking Algorithm
+- Files changed: src/systems/inventory/inventory_container.gd (enums + _first_fit_allocate + try_deposit + try_consume + _is_slot_usable added), src/systems/inventory/inventory_system.gd (try_deposit + try_consume stubs replaced with real implementations; _is_slot_usable moved to InventoryContainer)
+- Test written: tests/unit/inventory/first_fit_stacking_test.gd — 21 test functions
+- Deviations: stack_limit lookup moved from InventoryContainer.try_deposit to InventorySystem.try_deposit (testability — container stays pure data logic, system handles registry integration); story manifest version updated to 2026-05-14
+- Blockers: None
+- Next: /code-review src/systems/inventory/ then /story-done production/epics/inventory-system/story-002-first-fit-stacking.md
+
+## Session Extract — /story-done 2026-05-31 (inv-002)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/inventory-system/story-002-first-fit-stacking.md — First-Fit Stacking Algorithm
+- Deviations: stack_limit/max_charge moved to caller params (testability); max_charge initialised on deposit (ADR-0005 compliance); try_consume bounded to active slots (correctness fix from code review)
+- Test evidence: tests/unit/inventory/first_fit_stacking_test.gd — 27 tests (21 original + 6 new: AC-26 ×2, overflow boundary, charge-on-deposit ×2, rollback-charge)
+- Code review findings fixed: W-2 (null crash on registry.get_definition), W-6 (overflow consume), T-2 (charge-on-deposit), T-1 (AC-26 test), W-1/W-4/W-5/I-3/I-4 (quality)
+- Tech debt logged: None
+- Next recommended: inv-003 (start_transport / cancel_transport / _on_ticks_advanced)
+
+
+## Session Extract — /dev-story 2026-05-31 (ui-006)
+- Story: production/epics/ui-system/story-006-hud-storage-panel.md — HUD Storage Panel (Global Resource Overview)
+- Files changed: src/ui/hud/hud.gd (storage panel added: _add_storage_panel, _refresh_storage_panel, _compute_storage_summary, _toggle_storage_panel, InventorySystem signal wiring; "StoragePanel" removed from stubs list)
+- Test written: None — UI story, manual evidence required at production/qa/evidence/storage-panel-evidence.md
+- Deviations: In-transit badge (Element 5b) hardcoded hidden — InventorySlot has no state field yet (story-003 not implemented); in-transit count always 0 until then
+- Blockers: None
+- Next: /code-review src/ui/hud/hud.gd then /story-done production/epics/ui-system/story-006-hud-storage-panel.md
+
+## Session Extract — /story-done 2026-05-31 (ui-006)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/ui-system/story-006-hud-storage-panel.md — HUD Storage Panel (Global Resource Overview)
+- Deviations: AC6 (in-transit badge) hardcoded hidden pending inv-003; AC-HUD-14 (modal hiding) deferred to modal system story
+- Test evidence: Manual confirmation AC1–AC3; code inspection AC4/AC5/AC-HUD-05; evidence doc not yet created (production/qa/evidence/storage-panel-evidence.md)
+- Code review fixes applied: TICKS_PER_DAY duplication, click-outside collapse (AC3), is_connected guard, speed label format
+- Tech debt logged: None
+- Next recommended: inv-003 (start_transport / cancel_transport / _on_ticks_advanced)
+
+## Session Extract — /dev-story 2026-05-31 (grid-map-003 + build-001)
+- Stories: production/epics/grid-map-system/story-003-placement-validation.md + production/epics/building-system/story-001-placement-construction.md (implemented together — grid-map-003 was a blocking dependency of build-001)
+- Files changed: src/systems/world_grid.gd (validate_placement + place_building + remove_building stubs implemented), src/systems/player_character.gd (consume_energy() added to Energy API), src/gameplay/building_registry.gd (new Autoload — BuildingInstance, BuildingType, PlacementResult, initiate_build, _on_ticks_advanced, query API, stubs for future stories), project.godot (BuildingRegistry autoload registered after InventorySystem)
+- Test written: tests/unit/grid/grid_placement_test.gd (11 tests — grid-map-003), tests/integration/building_system/placement_construction_test.gd (15 tests — build-001)
+- Deviations: Visual spawning deferred (no PackedScene asset yet) — _spawn_visual() is a stub; MapRoot must connect to building_placed signal to render visuals. Both stories implemented in one agent pass.
+- Blockers: None
+- Next: /code-review src/systems/world_grid.gd src/gameplay/building_registry.gd then /story-done for both stories
+
+## Session Extract — /story-done 2026-05-31 (grid-map-003)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/grid-map-system/story-003-placement-validation.md — Building Placement Validation Gate
+- Deviations: ADVISORY — AC text uses old get_resource()/null API; implementation correctly uses post-amendment get_resources()/empty Array. ADVISORY — Manifest Version not set in story header.
+- Test evidence: Logic — tests/unit/grid/grid_placement_test.gd exists, 11 tests, all 11 ACs traced and covered.
+- Code review fixes applied (in same session): get_resources() return type typed, ADR-0004 amended (TILE_SIZE 48→64, FastNoise→FastNoiseLite, coordinate AC values updated)
+- Tech debt logged: None
+- Next recommended: /story-done production/epics/building-system/story-001-placement-construction.md
+
+## Session Extract — /dev-story 2026-05-31 (pc-004)
+- Story: production/epics/player-character/story-004-depletion-food.md — Depletion Penalty and Food Refill
+- Files changed: src/systems/player_character.gd (try_start_action, get_cost_preview, init_dependencies, _on_day_transition)
+- Test written: tests/unit/player_character/depletion_food_test.gd (14 tests, 5 ACs)
+- Bugs fixed: tick multiplier * 3 → * 2; INSUFFICIENT_ENERGY gate added; day_transition no-op subscription
+- Blockers: None
+- Next: /code-review src/systems/player_character.gd tests/unit/player_character/depletion_food_test.gd then /story-done production/epics/player-character/story-004-depletion-food.md
+
+## Session Extract — /story-done 2026-05-31 (build-001)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/building-system/story-001-placement-construction.md — Placement and Construction
+- Deviations: ADVISORY — _spawn_visual() stub (no PackedScene asset); AC-01/AC-02 visual/tooltip elements deferred to UI story; Manifest Version N/A.
+- Test evidence: Integration — tests/integration/building_system/placement_construction_test.gd exists, 15 tests, all 6 ACs traced.
+- Code review fixes applied (same session): building_state_changed reason param, _all_buildings type hint, energy null guard
+- Tech debt logged: None
+- Next recommended: building-system/story-002 (production cycles + tick advancement) or inv-003 (start_transport / cancel_transport)
+
+## Session Extract — /story-done 2026-05-31 (pc-004)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/player-character/story-004-depletion-food.md — Depletion Penalty and Food Refill
+- Deviations: ADVISORY — action configs hardcoded in _ready() (not data-driven); ADVISORY — story predates control manifest v2026-05-14
+- Test evidence: Logic — tests/unit/player_character/depletion_food_test.gd (16 tests, all 5 ACs covered)
+- Code review fixes applied (same session): consume_food() slot occupation (AC6 gap), _build_output() null guard, _complete_current_action() eat action handling, Dictionary typed, test renames + 2 new AC6 tests, story doc typo fix
+- Tech debt logged: None (hardcoded action configs noted as advisory)
+- Next recommended: player-character/story-005-architect-mode.md (Status: Ready) or inv-003-item-state-machine-transport.md (Status: Ready)
+
+## Session Extract — /dev-story 2026-06-02 (build-002)
+- Story: production/epics/building-system/story-002-production-cycles-distance.md — Production Cycles and Carrier Transport
+- Files changed:
+  - `src/gameplay/building_registry.gd` — Extended: BuildingInstance fields (npc_count, npc_spawn_timer, production_cycle_ticks, production_cycle_duration, cycle_running, buffered_output, assigned_npc_id); input_buffer typed as float; signals (production_output_ready, building_npc_spawn_requested); constants (TICKS_PER_TILE, NPC_SPAWN_INTERVAL, MAX_HOUSE_NPCS, PRODUCTION_TABLE); formula methods (calculate_carrier_travel_ticks, calculate_production_output, calculate_cycle_duration); add_charge_to_input, assign_npc (stub→real), collect_output; _on_ticks_advanced rewritten to handle CONSTRUCTING (AC-06/AC-22), Residential NPC timer (AC-22), production cycle (AC-09/AC-13); _try_start_production_cycle private helper
+  - `tests/integration/building_system/production_cycles_test.gd` — Created: 24 test functions covering all 6 ACs
+- Deviations: ADVISORY — ADR-0008 file does not exist (rules embedded in story + control manifest); input_buffer changed from int to float to unify quantity/charge tracking
+- Blockers: None
+- Next: /code-review src/gameplay/building_registry.gd tests/integration/building_system/production_cycles_test.gd then /story-done production/epics/building-system/story-002-production-cycles-distance.md
+
+## Session Extract — /story-done 2026-06-02 (build-002)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/building-system/story-002-production-cycles-distance.md — Production Cycles and Carrier Transport
+- Deviations: ADVISORY — assign_npc() returns void vs ADR AssignmentResult (deferred to story-004); signal name building_npc_spawn_requested vs building_npc_spawned (explicit rename); TR-build-004 "output deposit" stale vs buffered_output pattern (ADR correct); story predates control manifest; gameplay constants hardcoded (ongoing pattern)
+- Code review fixes (same session): get_all_buildings() typed return; production_output_ready signal typed; 3 methods extracted to helpers; Array[StringName] typing; Storage Area AC-06 test added (25 tests total)
+- Tech debt logged: None
+- Next recommended: building-system/story-003 (BLOCKED/STALLED states) or building-system/story-004 (NPC assignment)
