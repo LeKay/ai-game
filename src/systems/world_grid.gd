@@ -97,7 +97,6 @@ func generate(world_seed: int) -> void:
 		push_warning("Map generation forced-fix on attempt 5")
 		_force_fix_minimums()
 
-	_populate_resources(world_seed)
 	_generation_done = true
 
 
@@ -387,18 +386,40 @@ func _get_type_tiles_in_terrain(tile_type: int) -> Array[Vector2i]:
 # --- Placement validation (implemented in Story 003) ---
 
 ## Validates building placement against all 3 layers. Never mutates state.
-func validate_placement(_tile: Vector2i, _building_type: int) -> PlacementResult:
+func validate_placement(tile: Vector2i, _building_type: int) -> PlacementResult:
+	if not is_in_bounds(tile):
+		return PlacementResult.BLOCKED_BY_BOUNDS
+	if _terrain[tile.x][tile.y] == TileType.IMPASSABLE:
+		return PlacementResult.BLOCKED_BY_IMPASSABLE
+	if _buildings[tile.x][tile.y] != null:
+		return PlacementResult.BLOCKED_BY_BUILDING
+	var resources: Array = _resources[tile.x][tile.y]
+	for res: ResourceTileData in resources:
+		if not res.clearable:
+			return PlacementResult.BLOCKED_BY_RESOURCE_TILE
 	return PlacementResult.SUCCESS
 
 
 ## Atomically validates and places a building. Updates BuildingLayer; clears clearable resources.
-func place_building(_tile: Vector2i, _building_type: int) -> PlacementResult:
+## building_id uniquely identifies the placed building instance.
+func place_building(tile: Vector2i, building_id: String) -> PlacementResult:
+	var result: PlacementResult = validate_placement(tile, 0)
+	if result != PlacementResult.SUCCESS:
+		return result
+	_buildings[tile.x][tile.y] = building_id
+	if not _resources[tile.x][tile.y].is_empty():
+		_resources[tile.x][tile.y] = []
 	return PlacementResult.SUCCESS
 
 
 ## Removes building from BuildingLayer at tile. Returns true if a building was present.
-func remove_building(_tile: Vector2i) -> bool:
-	return false
+func remove_building(tile: Vector2i) -> bool:
+	if not is_in_bounds(tile):
+		return false
+	if _buildings[tile.x][tile.y] == null:
+		return false
+	_buildings[tile.x][tile.y] = null
+	return true
 
 
 # --- Read API ---
@@ -410,9 +431,11 @@ func get_terrain(tile: Vector2i) -> TileType:
 
 
 ## Returns all resources at tile as an Array[ResourceTileData]. Empty when tile has no resources.
-func get_resources(tile: Vector2i) -> Array:
+func get_resources(tile: Vector2i) -> Array[ResourceTileData]:
 	assert(is_in_bounds(tile), "get_resources: tile %s is out of bounds" % str(tile))
-	return _resources[tile.x][tile.y]
+	var result: Array[ResourceTileData] = []
+	result.assign(_resources[tile.x][tile.y])
+	return result
 
 
 ## Returns building ID at tile, or empty string if no building.
@@ -563,6 +586,30 @@ func find_tiles_by_predicate(predicate: Callable) -> Array[Vector2i]:
 ## Moves one ResourceTileData entry from source[source_idx] to target.
 ## Returns false if: target out-of-bounds, target IMPASSABLE, source_idx invalid,
 ## or target already holds MAX_RESOURCES_PER_TILE entries.
+## Removes a single resource entry at source_idx from tile. Returns false on invalid args.
+func remove_one_resource(tile: Vector2i, resource_idx: int) -> bool:
+	if not is_in_bounds(tile):
+		return false
+	var arr: Array = _resources[tile.x][tile.y]
+	if resource_idx < 0 or resource_idx >= arr.size():
+		return false
+	arr.remove_at(resource_idx)
+	return true
+
+
+## Places a new resource on the given tile.
+## Returns false if: out-of-bounds, IMPASSABLE, or tile already holds MAX_RESOURCES_PER_TILE.
+func add_resource_to_tile(tile: Vector2i, resource_id: StringName, clearable: bool = true) -> bool:
+	if not is_in_bounds(tile):
+		return false
+	if _terrain[tile.x][tile.y] == TileType.IMPASSABLE:
+		return false
+	if _resources[tile.x][tile.y].size() >= MAX_RESOURCES_PER_TILE:
+		return false
+	_resources[tile.x][tile.y].append(ResourceTileData.new(resource_id, clearable))
+	return true
+
+
 func move_one_resource(source: Vector2i, source_idx: int, target: Vector2i) -> bool:
 	if not is_in_bounds(source) or not is_in_bounds(target):
 		return false
