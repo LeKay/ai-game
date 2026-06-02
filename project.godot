@@ -22,6 +22,9 @@ TickSystem="*res://src/systems/tick_system.gd"
 InputContext="*res://src/systems/input_context.gd"
 WorldSaveManager="*res://src/systems/save_world_save_manager.gd"
 InputDispatcher="*res://src/systems/input_dispatcher.gd"
+InventorySystem="*res://src/systems/inventory/inventory_system.gd"
+BuildingRegistry="*res://src/gameplay/building_registry.gd"
+CraftingRegistry="*res://src/gameplay/crafting_registry.gd"
 
 [display]
 
