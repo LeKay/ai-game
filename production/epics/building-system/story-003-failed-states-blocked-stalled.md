@@ -1,7 +1,7 @@
 # Story 003: Failed States — BLOCKED and STALLED
 
 > **Epic**: Building System
-> **Status**: Ready
+> **Status**: In Progress — Foundation exists, transitions missing
 > **Layer**: Feature
 > **Type**: Integration — ADR-0008
 > **Manifest Version**: N/A — control manifest not yet created
@@ -27,14 +27,22 @@
 
 *From GDD `design/gdd/building-system.md`, scoped to this story:*
 
-- [ ] **AC-10** GIVEN a production building in OPERATING state WITH inputs available WHEN the next tick cycle fires THEN `try_start_production_cycle()` is called, inputs are deducted, and the production cycle begins (state remains OPERATING, sub-phase = PRODUCE)
+- [x] **AC-10** GIVEN a production building in OPERATING state WITH inputs available WHEN the next tick cycle fires THEN `try_start_production_cycle()` is called, inputs are deducted, and the production cycle begins (state remains OPERATING, sub-phase = PRODUCE)
+  > ✅ Implemented in `_advance_production_cycle` / `_try_start_production_cycle` (story-002). Inputs validated and deducted before cycle start.
 - [ ] **AC-11** GIVEN a production building is in BLOCKED state WHEN the missing input is provided THEN on the next tick cycle `try_start_production_cycle()` succeeds and the building transitions back to OPERATING with the production cycle starting automatically — no player action required
+  > ❌ Missing: `_on_ticks_advanced` has no branch for `state == BLOCKED`. A BLOCKED building is never re-checked. Need to add recovery path in tick handler.
 - [ ] **AC-12** GIVEN a production building has no NPC assigned WHEN it enters OPERATING state THEN it enters IDLE sub-phase, does NOT start a production cycle, and the building shows BLOCKED on the next tick cycle (missing NPC)
+  > ❌ Partial: `_try_start_production_cycle` returns early when `assigned_npc_id == ""` (prevents cycle start ✅), but never sets `state = BLOCKED` and emits no signal.
 - [ ] **AC-12b** GIVEN a production building has no input carrier assigned WHEN it tries to start a production cycle THEN it enters BLOCKED state with reason "No carrier assigned (inputs)" and waits until an input carrier is configured via the Transportation Management UI
+  > ❌ Missing: `BuildingInstance` has no `input_carrier_id` field. Carrier concept not yet wired. Needs stub field + BLOCKED check in `_try_start_production_cycle`.
 - [ ] **AC-12c** GIVEN a production building has no output carrier assigned WHEN a production cycle completes THEN it enters STALLED state with reason "No output carrier" — output held in `buffered_output` indefinitely, never discarded
+  > ❌ Missing: `BuildingInstance` has no `output_carrier_id` field. `_advance_production_cycle` deposits to `buffered_output` but never transitions to STALLED.
 - [ ] **AC-13** GIVEN a production building completes a cycle and the output carrier is unavailable or not assigned WHEN the cycle completes THEN the building enters STALLED state, the `buffered_output` field stores the production output, `building_stalled` signal is emitted with reason, and the output is never discarded
+  > ❌ Missing: `buffered_output` is populated ✅ but `state` never becomes `STALLED` and `building_stalled` signal is not defined. The output_capacity guard prevents new cycles (silent workaround), but STALLED logic is absent.
 - [ ] **AC-14** GIVEN a production building is in STALLED state WHEN the output carrier arrives and calls `collect_output()` THEN the output buffer is cleared, the building transitions back to OPERATING with `building_destalled` signal emitted, and the next production cycle can begin
-- [ ] **AC-23** GIVEN a storage building (Storage Area or Storage Building) WHEN it transitions to OPERATING THEN it never enters BLOCKED or STALLED — these failure states apply only to production buildings
+  > ❌ Partial: `collect_output()` clears `buffered_output` ✅ but does not check `state == STALLED`, does not set `state = OPERATING`, and `building_destalled` signal is not defined.
+- [x] **AC-23** GIVEN a storage building (Storage Area or Storage Building) WHEN it transitions to OPERATING THEN it never enters BLOCKED or STALLED — these failure states apply only to production buildings
+  > ✅ Implicit: storage types have no `PRODUCTION_TABLE` entry so `_advance_production_cycle` is never called for them. No explicit guard needed.
 
 ---
 
@@ -159,6 +167,39 @@ if building.type in [STORAGE_AREA, STORAGE_BUILDING]:
 
 ---
 
+## Implementation Status
+
+*As of 2026-06-02 — analysed against `src/gameplay/building_registry.gd`*
+
+### Foundation already in place (from Story 002)
+
+| Item | Location | Notes |
+|------|----------|-------|
+| `State` enum: `BLOCKED`, `STALLED` | `BuildingInstance.State` line 33 | Defined, never assigned |
+| `buffered_output` field | `BuildingInstance` line 55 | Populated on cycle completion |
+| `output_capacity` guard | `_try_start_production_cycle` | Prevents new cycle when buffer full — silent substitute for STALLED, not a real state |
+| NPC guard | `_try_start_production_cycle` | Returns early if `assigned_npc_id == ""` — prevents cycle, but no BLOCKED transition |
+| Input validation | `_try_start_production_cycle` | Returns early if inputs missing — no BLOCKED transition |
+| `collect_output()` | line 561 | Clears buffer and returns output, but no state transition |
+| `building_state_changed` signal | line 147 | Generic signal exists; specific signals absent |
+| `assign_npc()` | line 649 | Sets `assigned_npc_id` only |
+
+### What needs to be added for this story
+
+| Gap | Change required |
+|-----|----------------|
+| BLOCKED on NPC missing | `_try_start_production_cycle`: set `state = BLOCKED`, emit `building_blocked` |
+| BLOCKED on inputs missing | `_try_start_production_cycle`: set `state = BLOCKED`, emit `building_blocked` |
+| BLOCKED recovery in tick loop | `_on_ticks_advanced`: add branch for `state == BLOCKED` that re-calls `_try_start_production_cycle` and emits `building_unblocked` on success |
+| STALLED on cycle completion | `_advance_production_cycle`: after depositing to `buffered_output`, check `output_carrier_id == &""` and set `state = STALLED`, emit `building_stalled` |
+| STALLED recovery | `_on_ticks_advanced`: add branch for `state == STALLED` (or handle in `collect_output()`) |
+| `collect_output()` complete | Guard `state == STALLED`, set `state = OPERATING`, emit `building_destalled` |
+| Carrier stub fields | Add `input_carrier_id: StringName` and `output_carrier_id: StringName` to `BuildingInstance` |
+| Signals | Add `building_blocked`, `building_unblocked`, `building_stalled`, `building_destalled` to signal list |
+| Test file | Create `tests/integration/building_system/failed_states_test.gd` |
+
+---
+
 ## Out of Scope
 
 *Handled by neighbouring stories — do not implement here:*
@@ -221,7 +262,7 @@ if building.type in [STORAGE_AREA, STORAGE_BUILDING]:
 **Story Type**: Integration
 **Required evidence**: `tests/integration/building_system/failed_states_test.gd` — must exist and pass
 
-**Status**: [ ] Not yet created
+**Status**: [x] Created — `tests/integration/building_system/failed_states_test.gd` (21 test functions)
 
 ---
 

@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="PackedScene" path="res://src/scenes/map_root.tscn" id="1_maproot"]
 [ext_resource type="Script" path="res://src/systems/camera_controller.gd" id="2_camera"]
 [ext_resource type="PackedScene" path="res://src/ui/hud/hud.tscn" id="3_hud"]
 [ext_resource type="Script" path="res://src/ui/hud/build_placement_overlay.gd" id="5_bpo"]
+[ext_resource type="PackedScene" path="res://src/ui/DayOverviewPanel.tscn" id="6_dop"]
 
 [node name="GameWorld" type="Node2D"]
 
@@ -16,3 +17,5 @@ script = ExtResource("2_camera")
 
 [node name="BuildPlacementOverlay" type="CanvasLayer" parent="."]
 script = ExtResource("5_bpo")
+
+[node name="DayOverviewPanel" parent="." instance=ExtResource("6_dop")]

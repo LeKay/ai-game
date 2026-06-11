@@ -95,13 +95,13 @@ func test_multiple_manual_actions_accumulate() -> void:
 # --- Day transition ---
 
 func test_manual_day_transition_on_overflow() -> void:
-	# Advance 1500 from 0 → tick_count = 1500 - 1000 = 500, day=2, 1 transition
+	# Advance 1940 from 0 → tick_count = 1940 - 1440 = 500, day=2, 1 transition
 	var system := _make_running_system()
 
 	var days_fired := []  # [days_elapsed_per_emission]
 	system.day_transition.connect(func(d: int): days_fired.append(d))
 
-	system.advance_ticks_manual(1500)
+	system.advance_ticks_manual(1940)
 
 	assert_int(system.get_tick_count()).is_equal(500)
 	assert_int(system.get_current_day()).is_equal(2)
@@ -110,14 +110,14 @@ func test_manual_day_transition_on_overflow() -> void:
 
 
 func test_manual_multi_day_overflow_on_large_cost() -> void:
-	# Advance 2500 from 0 → tick_count = 2500 - 2000 = 500, day=3.
+	# Advance 3380 from 0 → tick_count = 3380 - 2880 = 500, day=3.
 	# Single day_transition signal with days_elapsed=2 (Issue 2 fix).
 	var system := _make_running_system()
 
 	var days_fired := []
 	system.day_transition.connect(func(d: int): days_fired.append(d))
 
-	system.advance_ticks_manual(2500)
+	system.advance_ticks_manual(3380)
 
 	assert_int(system.get_tick_count()).is_equal(500)
 	assert_int(system.get_current_day()).is_equal(3)
@@ -127,9 +127,9 @@ func test_manual_multi_day_overflow_on_large_cost() -> void:
 
 
 func test_manual_overflow_from_near_end_of_day() -> void:
-	# Advance to 950 first (day=1), then advance 80 → tick_count = 1030 - 1000 = 30, day=2, 1 transition
+	# Advance to 1390 first (day=1), then advance 80 → tick_count = 1470 - 1440 = 30, day=2, 1 transition
 	var system := _make_running_system()
-	system.advance_ticks_manual(950)
+	system.advance_ticks_manual(1390)
 
 	var days_fired := []
 	system.day_transition.connect(func(d: int): days_fired.append(d))

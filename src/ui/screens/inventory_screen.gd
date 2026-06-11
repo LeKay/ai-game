@@ -10,6 +10,8 @@ class_name InventoryScreen extends CanvasLayer
 signal inventory_opened()
 signal inventory_closed()
 signal build_mode_requested(building_type: int)
+signal path_mode_requested()
+signal demolish_mode_requested()
 
 const MODAL_WIDTH      := 900
 const MODAL_MIN_HEIGHT := 300
@@ -47,6 +49,8 @@ var _zone3_vbox:     VBoxContainer
 var _item_grid:      ItemGrid
 var _building_grid:  BuildingGrid
 var _crafting_grid:  CraftingGrid
+var _npc_grid:        NpcGrid
+var _npc_detail_panel: NpcDetailPanel
 
 var _open_tween:       Tween = null
 var _pulse_tween:      Tween = null
@@ -66,13 +70,25 @@ func _exit_tree() -> void:
 		InventorySystem.storage_changed.disconnect(_on_inventory_changed)
 	if InventorySystem.container_capacity_changed.is_connected(_on_capacity_changed):
 		InventorySystem.container_capacity_changed.disconnect(_on_capacity_changed)
+	var npc_sys: Node = NPCSystem
+	if npc_sys != null:
+		if npc_sys.npc_recruited.is_connected(_on_npc_recruited_iv):
+			npc_sys.npc_recruited.disconnect(_on_npc_recruited_iv)
+		if npc_sys.npc_removed.is_connected(_on_npc_sn_iv):
+			npc_sys.npc_removed.disconnect(_on_npc_sn_iv)
+		if npc_sys.npc_released.is_connected(_on_npc_sn_iv):
+			npc_sys.npc_released.disconnect(_on_npc_sn_iv)
+		if npc_sys.npc_assigned.is_connected(_on_npc_sn_sn_iv):
+			npc_sys.npc_assigned.disconnect(_on_npc_sn_sn_iv)
+		if npc_sys.npc_returned_home.is_connected(_on_npc_sn_iv):
+			npc_sys.npc_returned_home.disconnect(_on_npc_sn_iv)
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key == null or not key.pressed:
 		return
-	if key.keycode == KEY_I:
+	if key.keycode == KEY_I or key.keycode == KEY_TAB:
 		_toggle()
 		get_viewport().set_input_as_handled()
 	elif key.keycode == KEY_ESCAPE and _is_open:
@@ -148,7 +164,7 @@ func _build_zone1(parent: VBoxContainer) -> void:
 		btn.name                = "Tab_%s" % TABS[i]
 		btn.text                = TABS[i]
 		btn.custom_minimum_size = Vector2(110, 40)
-		btn.focus_mode          = Control.FOCUS_ALL
+		btn.focus_mode          = Control.FOCUS_NONE
 		btn.pressed.connect(_on_tab_pressed.bind(i))
 		tab_bar.add_child(btn)
 		_tab_buttons.append(btn)
@@ -162,7 +178,7 @@ func _build_zone1(parent: VBoxContainer) -> void:
 	close_btn.name                = "CloseBtn"
 	close_btn.text                = "×"
 	close_btn.custom_minimum_size = Vector2(40, 40)
-	close_btn.focus_mode          = Control.FOCUS_ALL
+	close_btn.focus_mode          = Control.FOCUS_NONE
 	close_btn.pressed.connect(_close)
 	tab_bar.add_child(close_btn)
 
@@ -183,7 +199,7 @@ func _build_zone2(parent: VBoxContainer) -> void:
 
 	_capacity_label = Label.new()
 	_capacity_label.name                = "CapacityLabel"
-	_capacity_label.text                = "Storage: 0 / 0 slots  0%"
+	_capacity_label.text                = "Storage: 0 / 0  0%"
 	_capacity_label.vertical_alignment  = VERTICAL_ALIGNMENT_CENTER
 	_capacity_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_capacity_label.add_theme_font_size_override("font_size", 14)
@@ -255,6 +271,16 @@ func _build_zone3(parent: VBoxContainer) -> void:
 	_building_grid.visible = false
 	_zone3_vbox.add_child(_building_grid)
 
+	_npc_grid = NpcGrid.new()
+	_npc_grid.name    = "NpcGrid"
+	_npc_grid.center  = true
+	_npc_grid.visible = false
+	_zone3_vbox.add_child(_npc_grid)
+
+	_npc_detail_panel = NpcDetailPanel.new()
+	_npc_detail_panel.name = "NpcDetailPanel"
+	_panel_root.add_child(_npc_detail_panel)
+
 
 func _add_divider(parent: VBoxContainer) -> void:
 	var sep := ColorRect.new()
@@ -273,6 +299,17 @@ func _connect_signals() -> void:
 	_item_grid.item_clicked.connect(_on_item_clicked)
 	_crafting_grid.recipe_selected.connect(_on_recipe_selected)
 	_building_grid.building_selected.connect(_on_building_selected)
+	_npc_grid.npc_clicked.connect(_open_npc_detail)
+	_npc_detail_panel.food_assigned.connect(_on_npc_food_assigned)
+	_npc_detail_panel.food_cleared.connect(_on_npc_food_cleared)
+	_npc_detail_panel.food_amount_changed.connect(_on_npc_food_amount_changed)
+	var npc_sys: Node = NPCSystem
+	if npc_sys != null:
+		npc_sys.npc_recruited.connect(_on_npc_recruited_iv)
+		npc_sys.npc_removed.connect(_on_npc_sn_iv)
+		npc_sys.npc_released.connect(_on_npc_sn_iv)
+		npc_sys.npc_assigned.connect(_on_npc_sn_sn_iv)
+		npc_sys.npc_returned_home.connect(_on_npc_sn_iv)
 
 
 func _on_inventory_changed(_container_id: StringName) -> void:
@@ -344,6 +381,8 @@ func _refresh() -> void:
 		_crafting_grid.populate(_crafting_list())
 	elif _active_tab == 2:
 		_building_grid.populate(_building_list())
+	elif _active_tab == 3:
+		_npc_grid.populate(_npc_list())
 
 
 func _compute_summary() -> Dictionary:
@@ -351,7 +390,7 @@ func _compute_summary() -> Dictionary:
 	var total:     int = 0
 	var resources: Dictionary[StringName, int] = {}
 	for container: InventoryContainer in InventorySystem.get_all_containers():
-		used  += container.get_occupied_count()
+		used  += container.get_total_quantity() if container.quantity_based else container.get_occupied_count()
 		total += container.capacity
 		for slot: InventorySlot in container.slots:
 			if not slot.is_empty():
@@ -371,7 +410,7 @@ func _to_item_list(resources: Dictionary) -> Array[Dictionary]:
 
 func _refresh_capacity(used: int, total: int) -> void:
 	if total == 0:
-		_capacity_label.text            = "Storage: 0 / 0 slots  0%"
+		_capacity_label.text            = "Storage: 0 / 0  0%"
 		_capacity_bar_fill.anchor_right = 0.0
 		_capacity_bar_fill.color        = COLOR_CAP_GREEN
 		_stop_pulse()
@@ -379,7 +418,7 @@ func _refresh_capacity(used: int, total: int) -> void:
 
 	var ratio: float = clampf(float(used) / float(total), 0.0, 1.0)
 	var pct:   int   = int(ratio * 100.0)
-	_capacity_label.text            = "Storage: %d / %d slots  %d%%" % [used, total, pct]
+	_capacity_label.text            = "Storage: %d / %d  %d%%" % [used, total, pct]
 	_capacity_bar_fill.anchor_right = ratio
 
 	if ratio >= 0.90:
@@ -435,12 +474,13 @@ func _apply_tab_styles() -> void:
 
 func _refresh_zone3() -> void:
 	for child in _zone3_vbox.get_children():
-		if child != _item_grid and child != _crafting_grid and child != _building_grid:
+		if child != _item_grid and child != _crafting_grid and child != _building_grid and child != _npc_grid:
 			child.queue_free()
 
 	_item_grid.visible     = false
 	_crafting_grid.visible = false
 	_building_grid.visible = false
+	_npc_grid.visible      = false
 
 	if _active_tab == 0:
 		_item_grid.visible = true
@@ -452,6 +492,9 @@ func _refresh_zone3() -> void:
 	elif _active_tab == 2:
 		_building_grid.visible = true
 		_building_grid.populate(_building_list())
+	elif _active_tab == 3:
+		_npc_grid.visible = true
+		_npc_grid.populate(_npc_list())
 	else:
 		var placeholder := Label.new()
 		placeholder.text                  = "%s — coming soon" % TABS[_active_tab]
@@ -508,14 +551,14 @@ func _spawn_energy_float(text: String) -> void:
 	tween.finished.connect(label.queue_free)
 
 
-func _spawn_craft_float(text: String) -> void:
+func _spawn_craft_float(text: String, color: Color = Color("#D4A85C")) -> void:
 	var modal_rect: Rect2 = _modal.get_global_rect()
 	var origin := Vector2(modal_rect.position.x + modal_rect.size.x * 0.5, modal_rect.position.y + 60.0)
 	var label := Label.new()
 	label.text     = text
 	label.position = origin + Vector2(-40.0, 0.0)
 	label.add_theme_font_size_override("font_size", 22)
-	label.add_theme_color_override("font_color", Color("#D4A85C"))
+	label.add_theme_color_override("font_color", color)
 	label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.9))
 	label.add_theme_constant_override("outline_size", 4)
 	add_child(label)
@@ -532,11 +575,39 @@ func _building_list() -> Array[Dictionary]:
 	var resources: Dictionary = _compute_summary()[&"resources"]
 	var player: Node = get_tree().get_first_node_in_group(&"player_character")
 	var current_energy: int = player.get_current_energy() if player != null else 0
-	var entries: Array[Dictionary] = [
-		{&"building_type": BuildingRegistry.BuildingType.LUMBER_CAMP, &"display_name": "Lumber Camp"},
+	var building_entries: Array[Dictionary] = [
+		{&"building_type": BuildingRegistry.BuildingType.STORAGE_BUILDING,  &"display_name": "Storage Building"},
+		{&"building_type": BuildingRegistry.BuildingType.RESIDENTIAL_HOUSE, &"display_name": "Residential House"},
+		{&"building_type": BuildingRegistry.BuildingType.LUMBER_CAMP,       &"display_name": "Lumber Camp"},
+		{&"building_type": BuildingRegistry.BuildingType.STONE_MASON,       &"display_name": "Stone Mason"},
+		{&"building_type": BuildingRegistry.BuildingType.GATHERING_HUT,     &"display_name": "Gathering Hut"},
+		{&"building_type": BuildingRegistry.BuildingType.TOOL_WORKSHOP,     &"display_name": "Tool Workshop"},
 	]
 	var result: Array[Dictionary] = []
-	for entry: Dictionary in entries:
+
+	# Demolish entry — no cost, always available.
+	result.append({
+		&"building_type":  BuildingGrid.DEMOLISH_SENTINEL,
+		&"display_name":   "Demolish",
+		&"cost":           {},
+		&"available":      {},
+		&"can_afford":     true,
+		&"energy_cost":    0,
+		&"current_energy": current_energy,
+	})
+
+	# Path entry — free to place, no resource cost.
+	result.append({
+		&"building_type":  PathSystem.PATH_SENTINEL,
+		&"display_name":   "Path",
+		&"cost":           {},
+		&"available":      {},
+		&"can_afford":     true,
+		&"energy_cost":    0,
+		&"current_energy": current_energy,
+	})
+
+	for entry: Dictionary in building_entries:
 		var btype: int       = entry[&"building_type"]
 		var cost: Dictionary = BuildingRegistry.BUILD_COST.get(btype, {})
 		var available: Dictionary = {}
@@ -565,6 +636,14 @@ func _building_list() -> Array[Dictionary]:
 
 
 func _on_building_selected(building_type: int) -> void:
+	if building_type == BuildingGrid.DEMOLISH_SENTINEL:
+		_close()
+		demolish_mode_requested.emit()
+		return
+	if building_type == PathSystem.PATH_SENTINEL:
+		_close()
+		path_mode_requested.emit()
+		return
 	_close()
 	build_mode_requested.emit(building_type)
 
@@ -603,12 +682,63 @@ func _crafting_list() -> Array[Dictionary]:
 
 func _on_recipe_selected(recipe_id: StringName) -> void:
 	var result: int = CraftingRegistry.try_craft(recipe_id)
+	if result == CraftingRegistry.CraftResult.NO_STORAGE:
+		_spawn_craft_float("Kein Lager verfügbar!", Color("#E05050"))
+		return
 	if result != CraftingRegistry.CraftResult.SUCCESS:
 		return
 	var output: Dictionary    = CraftingRegistry.RECIPE_OUTPUT.get(recipe_id, {})
 	var qty: int              = output.get(&"quantity", 1)
 	var display_name: String  = CraftingRegistry.RECIPE_DISPLAY_NAME.get(recipe_id, str(recipe_id))
 	_spawn_craft_float("+%d %s" % [qty, display_name])
+
+
+# ── NPC tab ───────────────────────────────────────────────────────────────────
+
+func _npc_list() -> Array[Dictionary]:
+	var npc_sys: Node = NPCSystem
+	if npc_sys == null:
+		return []
+	var result: Array[Dictionary] = []
+	for npc_id: StringName in npc_sys.all_npcs:
+		result.append({
+			&"npc_id": npc_id,
+			&"state": npc_sys.get_npc_state(npc_id),
+			&"display_name": npc_sys.get_npc_display_name(npc_id),
+		})
+	return result
+
+
+func _on_npc_recruited_iv(_npc_id: StringName, _home: Vector2i) -> void:
+	if _is_open and _active_tab == 3:
+		_npc_grid.populate(_npc_list())
+
+
+func _on_npc_sn_iv(_npc_id: StringName) -> void:
+	if _is_open and _active_tab == 3:
+		_npc_grid.populate(_npc_list())
+
+
+func _on_npc_sn_sn_iv(_npc_id: StringName, _other: StringName) -> void:
+	if _is_open and _active_tab == 3:
+		_npc_grid.populate(_npc_list())
+
+
+func _open_npc_detail(npc_id: StringName) -> void:
+	var npc_state: int = NPCSystem.get_npc_state(npc_id)
+	_npc_detail_panel.open_for_npc(npc_id, npc_state)
+
+
+func _on_npc_food_assigned(npc_id: StringName, resource_id: StringName) -> void:
+	HungerSystem.assign_food(npc_id, resource_id)
+
+
+func _on_npc_food_cleared(npc_id: StringName) -> void:
+	HungerSystem.clear_food_assignment(npc_id)
+
+
+func _on_npc_food_amount_changed(npc_id: StringName, amount: int) -> void:
+	HungerSystem.set_food_amount(npc_id, amount)
 
 
 # ── Backdrop input ────────────────────────────────────────────────────────────

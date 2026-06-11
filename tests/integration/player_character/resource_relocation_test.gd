@@ -62,7 +62,7 @@ func test_resource_relocation_success_moves_resource_to_target() -> void:
 	assert_int(grid.get_resources(tgt).size()).is_equal(1)   # wood moved
 
 
-func test_resource_relocation_success_deducts_correct_energy() -> void:
+func test_resource_relocation_success_does_not_deduct_energy() -> void:
 	# Arrange — distance 5 from (5,5) to (5,10)
 	var pc := await _make_pc()
 	var grid := await _make_grid()
@@ -75,8 +75,8 @@ func test_resource_relocation_success_deducts_correct_energy() -> void:
 	pc.try_start_relocation(src, 0, &"wood")
 	pc.try_commit_relocation(tgt, grid)
 
-	# Assert — 50 - 5 = 45
-	assert_int(pc.get_current_energy()).is_equal(45)
+	# Assert — energy unchanged
+	assert_int(pc.get_current_energy()).is_equal(50)
 
 
 func test_resource_relocation_success_emits_relocation_completed_signal() -> void:
@@ -112,9 +112,9 @@ func test_resource_relocation_get_preview_returns_manhattan_distance() -> void:
 	# Act — 3 right, 4 down = distance 7
 	var preview := pc.get_relocation_preview(Vector2i(3, 4))
 
-	# Assert
-	assert_int(preview.energy_cost).is_equal(7)
-	assert_int(preview.tick_cost).is_equal(7)
+	# Assert — energy cost is always 0; tick cost = distance × 5
+	assert_int(preview.energy_cost).is_equal(0)
+	assert_int(preview.tick_cost).is_equal(35)
 
 
 func test_resource_relocation_get_preview_minimum_cost_is_1() -> void:
@@ -129,9 +129,9 @@ func test_resource_relocation_get_preview_minimum_cost_is_1() -> void:
 	# Act
 	var preview := pc.get_relocation_preview(src)
 
-	# Assert — max(1, 0) = 1
-	assert_int(preview.energy_cost).is_equal(1)
-	assert_int(preview.tick_cost).is_equal(1)
+	# Assert — energy cost always 0; tick cost = max(1,0) × 5 = 5
+	assert_int(preview.energy_cost).is_equal(0)
+	assert_int(preview.tick_cost).is_equal(5)
 
 
 func test_resource_relocation_get_preview_returns_zero_when_not_dragging() -> void:
@@ -147,43 +147,6 @@ func test_resource_relocation_get_preview_returns_zero_when_not_dragging() -> vo
 	assert_int(preview.tick_cost).is_equal(0)
 
 
-# ---- AC5: Insufficient energy snap-back -------------------------------------
-
-func test_resource_relocation_insufficient_energy_snaps_back() -> void:
-	# Arrange — energy 3, distance 10
-	var pc := await _make_pc()
-	var grid := await _make_grid()
-	_set_energy(pc, 3)
-	var src := Vector2i(0, 0)
-	var tgt := Vector2i(0, 10)
-	_place_resource(grid, src, &"wood")
-
-	# Act
-	pc.try_start_relocation(src, 0, &"wood")
-	var result := pc.try_commit_relocation(tgt, grid)
-
-	# Assert
-	assert_int(result).is_equal(PlayerCharacter.RelocationResult.SNAP_BACK_ENERGY)
-	assert_int(pc.get_current_energy()).is_equal(3)  # energy unchanged
-	assert_int(grid.get_resources(src).size()).is_equal(1)  # grid unchanged
-
-
-func test_resource_relocation_insufficient_energy_emits_cancelled_signal() -> void:
-	# Arrange
-	var pc := await _make_pc()
-	var grid := await _make_grid()
-	_set_energy(pc, 2)
-	var src := Vector2i(1, 1)
-	_place_resource(grid, src, &"berry")
-
-	var monitor := monitor_signals(pc)
-
-	# Act
-	pc.try_start_relocation(src, 0, &"berry")
-	pc.try_commit_relocation(Vector2i(1, 15), grid)
-
-	# Assert
-	assert_signal_emitted(monitor, "relocation_cancelled")
 
 
 # ---- AC7: Full target tile --------------------------------------------------
@@ -207,49 +170,13 @@ func test_resource_relocation_full_target_tile_snaps_back() -> void:
 	assert_int(result).is_equal(PlayerCharacter.RelocationResult.SNAP_BACK_FULL)
 	assert_int(grid.get_resources(src).size()).is_equal(1)   # source unchanged
 	assert_int(grid.get_resources(tgt).size()).is_equal(4)   # target unchanged
-	assert_int(pc.get_current_energy()).is_equal(50)         # energy unchanged
 
 
-# ---- AC8: Depleted energy doubles cost --------------------------------------
-
-func test_resource_relocation_depleted_energy_doubles_cost_and_blocks() -> void:
-	# Arrange — depleted (energy = 0), distance 3 → cost = 6 > 0 → SNAP_BACK_ENERGY
-	var pc := await _make_pc()
-	var grid := await _make_grid()
-	_set_energy(pc, 0)
-	var src := Vector2i(3, 3)
-	var tgt := Vector2i(3, 6)
-	_place_resource(grid, src, &"fiber")
-
-	# Act
-	pc.try_start_relocation(src, 0, &"fiber")
-	var result := pc.try_commit_relocation(tgt, grid)
-
-	# Assert — depleted → cost = 3 × 2 = 6, but energy = 0 < 6 → snap-back
-	assert_int(result).is_equal(PlayerCharacter.RelocationResult.SNAP_BACK_ENERGY)
-	assert_int(pc.get_current_energy()).is_equal(0)
-
-
-func test_resource_relocation_depleted_preview_doubles_cost() -> void:
-	# Arrange — depleted energy
-	var pc := await _make_pc()
-	_set_energy(pc, 0)
-	var src := Vector2i(0, 0)
-	var grid := await _make_grid()
-	_place_resource(grid, src, &"wood")
-	pc.try_start_relocation(src, 0, &"wood")
-
-	# Act — distance 4
-	var preview := pc.get_relocation_preview(Vector2i(0, 4))
-
-	# Assert — energy: 4 × 2 = 8 (depletion), tick: 4 (no depletion multiplier)
-	assert_int(preview.energy_cost).is_equal(8)
-	assert_int(preview.tick_cost).is_equal(4)
 
 
 # ---- AC9: Same-tile drop ----------------------------------------------------
 
-func test_resource_relocation_same_tile_pays_min_energy_and_snap_back() -> void:
+func test_resource_relocation_same_tile_snap_back_no_energy_cost() -> void:
 	# Arrange — distance 0, energy 10
 	var pc := await _make_pc()
 	var grid := await _make_grid()
@@ -261,9 +188,9 @@ func test_resource_relocation_same_tile_pays_min_energy_and_snap_back() -> void:
 	pc.try_start_relocation(src, 0, &"berry")
 	var result := pc.try_commit_relocation(src, grid)
 
-	# Assert — cost = max(1, 0) = 1, energy → 9, WorldGrid unchanged
+	# Assert — no energy spent, WorldGrid unchanged
 	assert_int(result).is_equal(PlayerCharacter.RelocationResult.SNAP_BACK_SAME_TILE)
-	assert_int(pc.get_current_energy()).is_equal(9)
+	assert_int(pc.get_current_energy()).is_equal(10)
 	assert_int(grid.get_resources(src).size()).is_equal(1)  # no move in grid
 
 

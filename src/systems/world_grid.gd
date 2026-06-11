@@ -7,6 +7,10 @@ const GRID_SIZE: int = 30
 const TILE_SIZE: int = 64  # pixels per tile
 const MAX_RESOURCES_PER_TILE: int = 4
 
+## Layer identifiers for terrain_changed signal.
+const BUILDING_LAYER: int = 1
+const RESOURCE_LAYER: int = 2
+
 enum TileType { EMPTY, TREE, STONE, BERRY, GRASS, IMPASSABLE }
 
 enum PlacementResult {
@@ -38,6 +42,15 @@ class TileView:
 		terrain = p_terrain
 		resources = p_resources
 		building_id = p_building_id
+
+## Emitted when a terrain tile type changes at runtime (e.g. via clear_terrain_tile).
+## Listeners can use this to update systems that depend on terrain adjacency.
+signal terrain_tile_changed(tile: Vector2i)
+
+## Emitted when the BuildingLayer or ResourceLayer changes at pos.
+## layer is BUILDING_LAYER or RESOURCE_LAYER. Subscribers (e.g. LogisticsSystem)
+## use this to invalidate cached pathfinder routes that cross pos.
+signal terrain_changed(pos: Vector2i, layer: int)
 
 var _terrain: Array[Array]   # [x][y] -> TileType (int)  — write-once after generate()
 var _resources: Array[Array] # [x][y] -> Array[ResourceTileData], empty when no resources
@@ -391,6 +404,8 @@ func validate_placement(tile: Vector2i, _building_type: int) -> PlacementResult:
 		return PlacementResult.BLOCKED_BY_BOUNDS
 	if _terrain[tile.x][tile.y] == TileType.IMPASSABLE:
 		return PlacementResult.BLOCKED_BY_IMPASSABLE
+	if _terrain[tile.x][tile.y] != TileType.EMPTY:
+		return PlacementResult.BLOCKED_BY_RESOURCE_TILE
 	if _buildings[tile.x][tile.y] != null:
 		return PlacementResult.BLOCKED_BY_BUILDING
 	var resources: Array = _resources[tile.x][tile.y]
@@ -409,6 +424,7 @@ func place_building(tile: Vector2i, building_id: String) -> PlacementResult:
 	_buildings[tile.x][tile.y] = building_id
 	if not _resources[tile.x][tile.y].is_empty():
 		_resources[tile.x][tile.y] = []
+	terrain_changed.emit(tile, BUILDING_LAYER)
 	return PlacementResult.SUCCESS
 
 
@@ -419,6 +435,7 @@ func remove_building(tile: Vector2i) -> bool:
 	if _buildings[tile.x][tile.y] == null:
 		return false
 	_buildings[tile.x][tile.y] = null
+	terrain_changed.emit(tile, BUILDING_LAYER)
 	return true
 
 
@@ -461,12 +478,49 @@ func is_passable(tile: Vector2i) -> bool:
 	return _terrain[tile.x][tile.y] != TileType.IMPASSABLE
 
 
+## Returns the movement cost for a tile used by the A* pathfinder (ADR-0013).
+## Priority: BuildingLayer (INF) > path (0.5) > terrain type.
+## Terrain type is the sole source of movement difficulty — dropped items are ignored.
+## Out-of-bounds positions return INF (treated as impassable wall).
+func get_tile_movement_cost(pos: Vector2i) -> float:
+	if not is_in_bounds(pos):
+		return INF
+	if _buildings[pos.x][pos.y] != null:
+		return BuildingRegistry.get_movement_cost(str(_buildings[pos.x][pos.y]))
+	if PathSystem.has_path(pos):
+		return 0.5
+	match _terrain[pos.x][pos.y]:
+		TileType.IMPASSABLE: return INF
+		TileType.TREE:       return 4.0
+		TileType.STONE:      return 4.0
+		TileType.BERRY:      return 4.0
+		TileType.GRASS:      return 4.0
+		_:                   return 1.0  # EMPTY
+
+
+## Returns false if and only if get_tile_movement_cost(pos) == INF (ADR-0013).
+func is_tile_passable(pos: Vector2i) -> bool:
+	return get_tile_movement_cost(pos) != INF
+
+
 ## Returns true if tile is within grid bounds. Safe to call without a pre-check.
 func is_in_bounds(tile: Vector2i) -> bool:
 	return tile.x >= 0 and tile.x < GRID_SIZE and tile.y >= 0 and tile.y < GRID_SIZE
 
 
 # --- Resource mutation ---
+
+## Clears a terrain tile: sets it to EMPTY and removes all resources.
+## Gameplay mutation only — bypasses generation immutability guard intentionally.
+## Returns false if tile is out of bounds.
+func clear_terrain_tile(tile: Vector2i) -> bool:
+	if not is_in_bounds(tile):
+		return false
+	_terrain[tile.x][tile.y] = TileType.EMPTY
+	_resources[tile.x][tile.y] = []
+	terrain_tile_changed.emit(tile)
+	return true
+
 
 ## Clears the resource at tile if one is present. Returns 1 if cleared, 0 if none.
 ## Anno-style: resources are spatial anchors — present or cleared, no quantity tracking.
@@ -477,6 +531,7 @@ func harvest_resource(tile: Vector2i, _amount: int) -> int:
 		return 0
 	var count: int = _resources[tile.x][tile.y].size()
 	_resources[tile.x][tile.y] = []
+	terrain_changed.emit(tile, RESOURCE_LAYER)
 	return count
 
 
@@ -594,19 +649,19 @@ func remove_one_resource(tile: Vector2i, resource_idx: int) -> bool:
 	if resource_idx < 0 or resource_idx >= arr.size():
 		return false
 	arr.remove_at(resource_idx)
+	terrain_changed.emit(tile, RESOURCE_LAYER)
 	return true
 
 
 ## Places a new resource on the given tile.
-## Returns false if: out-of-bounds, IMPASSABLE, or tile already holds MAX_RESOURCES_PER_TILE.
+## Returns false if: out-of-bounds or IMPASSABLE. No per-tile cap.
 func add_resource_to_tile(tile: Vector2i, resource_id: StringName, clearable: bool = true) -> bool:
 	if not is_in_bounds(tile):
 		return false
 	if _terrain[tile.x][tile.y] == TileType.IMPASSABLE:
 		return false
-	if _resources[tile.x][tile.y].size() >= MAX_RESOURCES_PER_TILE:
-		return false
 	_resources[tile.x][tile.y].append(ResourceTileData.new(resource_id, clearable))
+	terrain_changed.emit(tile, RESOURCE_LAYER)
 	return true
 
 
@@ -618,21 +673,49 @@ func move_one_resource(source: Vector2i, source_idx: int, target: Vector2i) -> b
 	var src_arr: Array = _resources[source.x][source.y]
 	if source_idx < 0 or source_idx >= src_arr.size():
 		return false
-	if _resources[target.x][target.y].size() >= MAX_RESOURCES_PER_TILE:
-		return false
 	var entry: ResourceTileData = src_arr[source_idx]
 	src_arr.remove_at(source_idx)
 	_resources[target.x][target.y].append(entry)
 	return true
 
 
-# --- Serialization (implemented with save/load system) ---
+# --- Serialization ---
 
-## Serializes grid state to a Dictionary for save/load.
+## Serializes terrain and resource layers. Buildings are owned by BuildingRegistry.
 func serialize() -> Dictionary:
-	return {}
+	var terrain_flat: Array[int] = []
+	for x in range(GRID_SIZE):
+		for y in range(GRID_SIZE):
+			terrain_flat.append(_terrain[x][y])
+	var resources_sparse: Array = []
+	for x in range(GRID_SIZE):
+		for y in range(GRID_SIZE):
+			var tile_res: Array = _resources[x][y]
+			if not tile_res.is_empty():
+				var items: Array = []
+				for rd: ResourceTileData in tile_res:
+					items.append({"id": str(rd.resource_id), "clearable": rd.clearable})
+				resources_sparse.append({"x": x, "y": y, "items": items})
+	return {"terrain": terrain_flat, "resources": resources_sparse}
 
 
-## Restores grid state from a serialized Dictionary.
-func deserialize(_data: Dictionary) -> void:
-	pass
+## Restores terrain and resource layers from a serialized Dictionary.
+## Called before BuildingRegistry.deserialize() so terrain is valid for placement validation.
+func deserialize(data: Dictionary) -> void:
+	_init_arrays()
+	var terrain_flat: Array = data.get("terrain", [])
+	for x in range(GRID_SIZE):
+		for y in range(GRID_SIZE):
+			var idx: int = x * GRID_SIZE + y
+			if idx < terrain_flat.size():
+				_terrain[x][y] = terrain_flat[idx]
+	for entry: Dictionary in data.get("resources", []):
+		var x: int = entry.get("x", -1)
+		var y: int = entry.get("y", -1)
+		if x < 0 or y < 0 or x >= GRID_SIZE or y >= GRID_SIZE:
+			continue
+		var tile_res: Array = []
+		for item: Dictionary in entry.get("items", []):
+			tile_res.append(ResourceTileData.new(StringName(item.get("id", "")), item.get("clearable", true)))
+		_resources[x][y] = tile_res
+	_generation_done = true

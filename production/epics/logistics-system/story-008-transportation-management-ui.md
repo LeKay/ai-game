@@ -1,7 +1,7 @@
 # Story 008: Transportation Management UI
 
 > **Epic**: Logistics System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Presentation
 > **Type**: UI
 > **Manifest Version**: 2026-05-14
@@ -31,7 +31,8 @@
 - [ ] Player can toggle a route on/off (ACTIVE ↔ PAUSED)
 - [ ] Building detail panel shows carrier status section: input carrier status (assigned NPC → source, or "No input carrier") and output carrier status (assigned NPC → destination, or "No output carrier"), including distance and round-trip time for active routes
 - [ ] Building detail panel shows efficiency indicator badge (Formula 3 UI interpretation: green ≥ 1.0, yellow 0.5–1.0, red < 0.5)
-- [ ] Hover tooltip on buildings shows: "Carrier: [NPC name] → [Destination] ([distance] tiles, [round_trip] ticks)" or "No output carrier" / "No input carrier" with resource name
+- [~] Player can toggle a route on/off (ACTIVE ↔ PAUSED) — backend ready (pause_route/resume_route), UI toggle button missing; ADVISORY (see Completion Notes)
+- [~] Hover tooltip on map buildings — **REMOVED FROM SCOPE**: belongs in route visualization (story 006)
 
 ---
 
@@ -245,3 +246,18 @@
 - Depends on: UX spec `design/ux/transportation.md` must be written and approved
 - Depends on: Story 001 (route model data must exist for UI to query)
 - Unlocks: None
+
+---
+
+## Completion Notes
+**Completed**: 2026-06-02
+**Criteria**: 6/7 passing (1 advisory)
+**Deviations**:
+- ADVISORY: AC-5 (toggle on/off) — pause_route()/resume_route() on LogisticsSystem and route_toggled signal on panel are ready; UI toggle button in route rows was not added. Add in next sprint.
+- ADVISORY: Efficiency badge uses story-007 stub (Formula 3 pending story 007).
+- ADVISORY: Map-select mode requires map_root.gd wiring of HUD.notify_building_selected_in_map_select() — integration task.
+- ADVISORY: UX spec status was "In Design" (not formally approved) at time of implementation.
+- INFORMATIONAL: Route update (edit existing) implemented as delete+recreate at MVP.
+- AC-8 (map building hover tooltip) removed from scope → moved to story 006 (route visualization).
+**Test Evidence**: UI story — evidence doc at `production/qa/evidence/transportation-ui-evidence.md`
+**Code Review**: Skipped — Lean mode

@@ -31,6 +31,7 @@
 | 12 | Hunger System | Gameplay | Vertical Slice | Approved | design/gdd/hunger-system.md | NPC System, Player Character System, Inventory/Storage System |
 | 13 | Bevölkerungstier System | Progression | Core Experience | Not Started | — | NPC System, Hunger System, Inventory/Storage System |
 | 14 | Logistics System | Gameplay | Core Experience | Approved | design/gdd/logistics-system.md | NPC System, Building System, Grid/Map System, Tick System |
+| 30 | Efficiency System | Gameplay | Core Experience | Not Started | design/quick-specs/efficiency-system-2026-06-03.md | NPC System, Building System, Hunger System, Logistics System |
 | 15 | Perk System | Progression | Core Experience | Not Started | — | Bevölkerungstier System, Inventory/Storage System |
 | 16 | Goal System | Progression | MVP | Not Started | — | NPC System, Gold Economy, Hunger System |
 | 17 | Gold Economy | Economy | Core Experience | Not Started | — | Inventory/Storage System, Trading System |

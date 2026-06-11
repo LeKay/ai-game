@@ -1,7 +1,7 @@
 # Story 001: NPC Identity and Recruitment
 
 > **Epic**: NPC System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: Logic — ADR-0009
 > **Manifest Version**: N/A — control manifest not yet created
@@ -135,7 +135,7 @@ const NPC_CAPACITY_PER_HOUSE: int = 2   # fixed at 2 for VS
 **Story Type**: Logic
 **Required evidence**: `tests/unit/npc_system/npc_identity_recruitment_test.gd` — must exist and pass
 
-**Status**: [ ] Not yet created
+**Status**: [x] Created and passing — 27/27 tests PASSED (2026-06-02)
 
 ---
 
@@ -143,3 +143,20 @@ const NPC_CAPACITY_PER_HOUSE: int = 2   # fixed at 2 for VS
 
 - Depends on: None — NPCSystem can be tested independently with mock dependencies
 - Unlocks: Story 002 (task cycle requires NPCs to exist first)
+
+---
+
+## Completion Notes
+**Completed**: 2026-06-02
+**Criteria**: 4/4 passing (all automated, no deferred)
+**Deviations**:
+- ADVISORY: NPC_SPAWN_DELAY_TICKS/NPC_CAPACITY_PER_HOUSE hardcoded — ongoing project pattern
+- ADVISORY: Story predates control manifest (N/A)
+- ADVISORY: NPCSystem Autoload not yet registered in project.godot — deferred to story-002 wiring
+- ADVISORY: _on_ticks_advanced() added in story-001 (nominally story-002) — required for AC-2
+**Implementation fixes applied during story-done**:
+- Dictionary[StringName, NPCInstance] → untyped Dictionary (GDScript 4.x inner class typing limit)
+- before_each() → before_test() (GdUnit4 lifecycle; same fix applied to 3 building-system test files)
+- var before: int renamed to count_before (shadowed GdUnitTestSuite.before())
+**Test Evidence**: tests/unit/npc_system/npc_identity_recruitment_test.gd — 27/27 PASSED
+**Code Review**: Approved with suggestions (lean mode)

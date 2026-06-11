@@ -48,7 +48,7 @@ Each NPC requires 1 food unit per day. This means 1 bread satisfies 2 NPCs' dail
 **Rule 3: Debuff Activation and Deactivation**
 The hunger debuff (-50% speed, 2× tick cost, no output change) applies when the village is HUNGRY at day transition. The debuff affects:
 - **Player actions:** All manual actions cost 2× tick cost. Output quantity is unchanged by hunger (energy depletion separately reduces output to 50%). The player's Energy depletion penalty and the hunger debuff are **separate modifiers** that stack multiplicatively. (See Formulas.)
-- **NPC buildings:** Production cycles take 2× ticks (100 ticks → 200 ticks). Output quantity is unchanged.
+- **NPC buildings:** Production cycles take 2× ticks (100 ticks → 200 ticks). Output quantity is unchanged. *Implementation: delivered via `npc.efficiency = 0.5` (hunger_modifier_hungry) in the Efficiency System (`design/quick-specs/efficiency-system-2026-06-03.md`) — `effective_cycle_ticks = floor(base_cycle_ticks / 0.5) = base × 2`. Do not implement as a direct 2×-Tick-Modifier; route through the Efficiency System to avoid duplicate debuff logic.*
 
 The NPC-side debuff persists until the next successful day transition (village FED). The player-side debuff from hunger clears when the village has sufficient food (next successful `consume_food()` at day transition). The player's Energy depletion debuff is separate and clears when the player eats (energy rises above 0 per PC System Rule 2).
 

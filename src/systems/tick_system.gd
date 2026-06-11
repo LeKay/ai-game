@@ -14,7 +14,7 @@ extends Node
 ## **Story 004**: Day transition — fires `day_transition` signal at day boundary, auto-pauses the game.
 ## **Story 005**: `serialize()` / `deserialize()` — save/load tick state for persistence.
 
-const TICKS_PER_DAY: int = 1000
+const TICKS_PER_DAY: int = 1440
 const TICKS_PER_SECOND_BASE: float = 10.0
 const MAX_TICKS_PER_FRAME: int = 100
 const SPEED_OPTIONS: Array[float] = [0.5, 1.0, 2.0]

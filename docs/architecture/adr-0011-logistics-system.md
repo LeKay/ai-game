@@ -44,7 +44,7 @@ The Logistics System is the village's supply chain — connecting buildings via 
 - All timing must be tick-based and driven by `TickSystem.ticks_advanced()` — no `_process()` timers.
 - The carrier FSM is owned entirely by the Logistics System. The NPC System's task cycle is suspended during carrier assignment.
 - Routes are saved and loaded as part of game state (ADR-0006 applies).
-- Manhattan distance is used — no pathfinding or obstacle avoidance at MVP scope.
+- Travel time uses tile-weighted A* path cost instead of flat Manhattan distance — see ADR-0013 for pathfinding architecture.
 - A building can have at most one carrier per slot type.
 
 ### Requirements

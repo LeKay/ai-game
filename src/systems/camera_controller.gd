@@ -9,6 +9,7 @@ const GRID_SIZE: int = 30
 const WORLD_ACTIVE_CONTEXT: int = 0
 const MIN_ZOOM: float = 1.0
 const MAX_ZOOM: float = 2.0
+const INITIAL_ZOOM_TICKS: int = 6
 const _PAN_ACTIONS: Array[StringName] = [&"move_up", &"move_down", &"move_left", &"move_right"]
 
 ## Pan speed in tiles per second.
@@ -208,7 +209,7 @@ func screen_to_tile(screen_pos: Vector2) -> Vector2i:
 	return tile.clamp(Vector2i(0, 0), Vector2i(GRID_SIZE - 1, GRID_SIZE - 1))
 
 
-## Zooms so the map width fills the screen exactly (zoom = screen.x / max_world).
+## Zooms to INITIAL_ZOOM_TICKS ticks in from the full-map fit zoom.
 ## Positions camera at top-left (0,0); map is scrollable vertically.
 ## Called on startup and bound to the camera_reset action (R key).
 func fit_to_view() -> void:
@@ -216,7 +217,9 @@ func fit_to_view() -> void:
 	if screen == Vector2.ZERO:
 		return
 	var max_world: float = float(GRID_SIZE * TILE_SIZE)
-	zoom = Vector2(clamp(screen.x / max_world, MIN_ZOOM, MAX_ZOOM), clamp(screen.x / max_world, MIN_ZOOM, MAX_ZOOM))
+	var fit_zoom: float = clamp(screen.x / max_world, MIN_ZOOM, MAX_ZOOM)
+	var start_zoom: float = clamp(fit_zoom + INITIAL_ZOOM_TICKS * zoom_sensitivity, MIN_ZOOM, MAX_ZOOM)
+	zoom = Vector2(start_zoom, start_zoom)
 	position = Vector2.ZERO
 	_apply_boundary_clamp()
 

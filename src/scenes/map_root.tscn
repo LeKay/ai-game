@@ -1,23 +1,23 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene format=3 uid="uid://dr5yfi8f3ined"]
 
-[ext_resource type="Script" path="res://src/scenes/map_root.gd" id="1_script"]
-[ext_resource type="Script" path="res://src/systems/world_grid.gd" id="2_worldgrid"]
+[ext_resource type="Script" uid="uid://dt8m1d1aayn46" path="res://src/scenes/map_root.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://sp75wn0rgowf" path="res://src/systems/world_grid.gd" id="2_worldgrid"]
 [ext_resource type="Script" uid="uid://qf1amlv2xu1n" path="res://src/systems/player_character.gd" id="3_playerchar"]
 
-[node name="MapRoot" type="Node2D"]
-script = ExtResource("1_script")
+[node name="MapRoot" type="Node2D" unique_id=90600179]
 y_sort_enabled = true
+script = ExtResource("1_script")
 
-[node name="BackgroundLayer" type="TileMapLayer" parent="."]
+[node name="BackgroundLayer" type="TileMapLayer" parent="." unique_id=927234893]
 
-[node name="TerrainLayer" type="TileMapLayer" parent="."]
+[node name="TerrainLayer" type="TileMapLayer" parent="." unique_id=725263833]
 
-[node name="ResourceOverlay" type="TileMapLayer" parent="."]
+[node name="ResourceOverlay" type="TileMapLayer" parent="." unique_id=1950894919]
 
-[node name="BuildingSlots" type="TileMapLayer" parent="."]
+[node name="BuildingSlots" type="TileMapLayer" parent="." unique_id=1634342043]
 
-[node name="WorldGrid" type="Node" parent="."]
+[node name="WorldGrid" type="Node" parent="." unique_id=1015013477]
 script = ExtResource("2_worldgrid")
 
-[node name="PlayerCharacter" type="Node" parent="."]
+[node name="PlayerCharacter" type="Node" parent="." unique_id=1964857898]
 script = ExtResource("3_playerchar")

@@ -113,6 +113,7 @@ func _consume_resource_any(resource_id: StringName, quantity: int) -> void:
 
 func _find_container_with_space(space: int) -> StringName:
 	for container: InventoryContainer in InventorySystem.get_all_containers():
-		if container.capacity - container.get_occupied_count() >= space:
+		var remaining: int = container.capacity - (container.get_total_quantity() if container.quantity_based else container.get_occupied_count())
+		if remaining >= space:
 			return container.container_id
 	return &""

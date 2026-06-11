@@ -26,6 +26,10 @@ enum ManualActionType {
 	CHOP_TREE,
 	MINE_STONE,
 	HARVEST_FIBER,
+	CLEAR_TREE,
+	CLEAR_STONE,
+	CLEAR_BERRY,
+	CLEAR_GRASS,
 }
 
 enum StartResult {
@@ -241,6 +245,10 @@ func _ready() -> void:
 		ManualActionType.CHOP_TREE:     ManualActionConfig.new(ManualActionType.CHOP_TREE,     80, 12, 5, &"wood",  true),
 		ManualActionType.MINE_STONE:    ManualActionConfig.new(ManualActionType.MINE_STONE,    60, 10, 3, &"stone", true),
 		ManualActionType.HARVEST_FIBER: ManualActionConfig.new(ManualActionType.HARVEST_FIBER, 45,  6, 2, &"fiber", false),
+		ManualActionType.CLEAR_TREE:    ManualActionConfig.new(ManualActionType.CLEAR_TREE,   400, 40, 20, &"wood",  false),
+		ManualActionType.CLEAR_STONE:   ManualActionConfig.new(ManualActionType.CLEAR_STONE,  400, 40, 20, &"stone", false),
+		ManualActionType.CLEAR_BERRY:   ManualActionConfig.new(ManualActionType.CLEAR_BERRY,  400, 40, 20, &"berry", false),
+		ManualActionType.CLEAR_GRASS:   ManualActionConfig.new(ManualActionType.CLEAR_GRASS,  400, 40, 20, &"fiber", false),
 	}
 
 
@@ -424,28 +432,15 @@ func get_relocation_preview(target_tile: Vector2i) -> Dictionary:
 	var dist: int = (abs(target_tile.x - _relocation_drag.source_tile.x)
 		+ abs(target_tile.y - _relocation_drag.source_tile.y))
 	var base_cost: int = maxi(1, dist)
-	var has_energy := _energy_pool.current >= base_cost
-	var is_food := FOOD_ENERGY.has(_relocation_drag.resource_id)
-	var energy_cost: int
-	var tick_cost: int
-	var energy_insufficient := false
-	if has_energy:
-		energy_cost = base_cost
-		tick_cost = base_cost * 5
-	elif is_food:
-		energy_cost = 0
-		tick_cost = base_cost * 15
-	else:
-		energy_cost = base_cost
-		tick_cost = base_cost * 5
-		energy_insufficient = true
 	_relocation_drag.cached_cost = base_cost
-	return {energy_cost = energy_cost, tick_cost = tick_cost, energy_insufficient = energy_insufficient}
+	return {energy_cost = 0, tick_cost = base_cost * 5, energy_insufficient = false}
 
 
-## Called on LMB release. Validates energy, calls WorldGrid.move_one_resource(),
-## deducts energy. Returns RelocationResult enum value.
-func try_commit_relocation(target_tile: Vector2i, grid: Node) -> int:
+## Called on LMB release. Optionally calls WorldGrid.move_one_resource().
+## Returns RelocationResult enum value.
+## When deferred=true, skips the WorldGrid mutation and relocation_completed signal —
+## the caller is responsible for executing the move after the pending transport completes.
+func try_commit_relocation(target_tile: Vector2i, grid: Node, deferred: bool = false) -> int:
 	if _relocation_drag.state != RelocationDrag.DragState.DRAGGING:
 		return RelocationResult.NOT_DRAGGING
 
@@ -454,18 +449,9 @@ func try_commit_relocation(target_tile: Vector2i, grid: Node) -> int:
 	var res_id: StringName = _relocation_drag.resource_id
 
 	var dist: int = abs(target_tile.x - source.x) + abs(target_tile.y - source.y)
-	var base_cost: int = maxi(1, dist)
-	var has_energy := _energy_pool.current >= base_cost
-	var is_food := FOOD_ENERGY.has(res_id)
 
-	# Same-tile drop: spend energy if available, no WorldGrid mutation.
+	# Same-tile drop: no WorldGrid mutation.
 	if dist == 0:
-		if not has_energy and not is_food:
-			_relocation_drag.state = RelocationDrag.DragState.IDLE
-			relocation_cancelled.emit(source)
-			return RelocationResult.SNAP_BACK_ENERGY
-		if has_energy:
-			_energy_pool.try_spend(base_cost)
 		_relocation_drag.state = RelocationDrag.DragState.IDLE
 		relocation_completed.emit(source, target_tile, res_id)
 		return RelocationResult.SNAP_BACK_SAME_TILE
@@ -481,24 +467,11 @@ func try_commit_relocation(target_tile: Vector2i, grid: Node) -> int:
 		relocation_cancelled.emit(source)
 		return RelocationResult.SNAP_BACK_INVALID
 
-	if grid.get_resources(target_tile).size() >= WorldGrid.MAX_RESOURCES_PER_TILE:
-		_relocation_drag.state = RelocationDrag.DragState.IDLE
-		relocation_cancelled.emit(source)
-		return RelocationResult.SNAP_BACK_FULL
-
-	if not has_energy and not is_food:
-		_relocation_drag.state = RelocationDrag.DragState.IDLE
-		relocation_cancelled.emit(source)
-		return RelocationResult.SNAP_BACK_ENERGY
-
-	if has_energy:
-		_energy_pool.try_spend(base_cost)
-
-	# Commit — mutate WorldGrid.
-	grid.move_one_resource(source, src_idx, target_tile)
 	_relocation_drag.state = RelocationDrag.DragState.IDLE
-	relocation_completed.emit(source, target_tile, res_id)
-	return RelocationResult.SUCCESS if has_energy else RelocationResult.SUCCESS_LOW_ENERGY
+	if not deferred:
+		grid.move_one_resource(source, src_idx, target_tile)
+		relocation_completed.emit(source, target_tile, res_id)
+	return RelocationResult.SUCCESS
 
 
 ## Cancels an in-progress drag. No energy spent.

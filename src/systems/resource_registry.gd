@@ -28,6 +28,7 @@ class _ResourceDefinition:
 	var description: String = ""
 	var tags: Array[String] = []
 	var deprecated: bool = false
+	var movement_cost: float = 4.0
 
 
 func _ready() -> void:
@@ -222,3 +223,6 @@ func _apply_optional_fields(def: _ResourceDefinition, entry: Dictionary) -> void
 		for tag: Variant in raw_tags:
 			if tag is String:
 				def.tags.append(str(tag))
+
+	var raw_movement_cost: Variant = entry.get("movement_cost")
+	def.movement_cost = float(raw_movement_cost) if raw_movement_cost != null else 4.0

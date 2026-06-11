@@ -4,7 +4,6 @@ class_name MapRoot extends Node2D
 ## After generation, syncs all 900 tiles in a single batch set_cell() pass.
 ## ADR-0004: Grid data is authoritative; TileMapLayer is a pure rendering target.
 
-const WORLD_SEED: int = 42  # TODO: replace with dynamic seed before release
 const _TILE_PANEL_SCENE: PackedScene = preload("res://src/ui/TileInteractionPanel.tscn")
 
 ## PNG variant lists per terrain TileType index (EMPTY=0 … IMPASSABLE=5).
@@ -133,6 +132,8 @@ var _terrain_type_variant_counts: Array[int] = []
 var _resource_icons: Array = []
 var _interaction_panel: TileInteractionPanel = null
 var _last_action_tile: Vector2i = Vector2i(-1, -1)
+## Frozen at action-start; never overwritten by subsequent tile clicks.
+var _active_action_tile: Vector2i = Vector2i(-1, -1)
 
 ## Drag state — set while the player holds LMB on a resource icon.
 var _drag_icon: Node2D = null          ## the icon node being dragged
@@ -146,8 +147,35 @@ var _drag_path_dots: Array = []
 var _drag_path_dst_marker: Sprite2D = null
 var _drag_src_tile: Vector2i = Vector2i(-1, -1)
 var _drag_path_phase: float = 0.0
+var _drag_hold_timer: float = 0.0      ## LMB hold time accumulated during active world drag
+var _drag_collected_count: int = 1     ## total items in current drag batch (1 = only the dragged item)
+var _drag_count_label: Label = null    ## "×N" badge shown near cursor when batch > 1
 
 var _inventory_screen: InventoryScreen = null
+
+## Maps building_id → BuildingStatusIndicator node for production buildings.
+var _building_indicators: Dictionary[String, BuildingStatusIndicator] = {}
+## Maps building_id → Sprite2D for construction skeleton→full transition.
+var _building_sprites: Dictionary[String, Sprite2D] = {}
+## Maps tile → Sprite2D for placed path tiles.
+var _path_sprites: Dictionary = {}
+
+var _hud: HUD = null
+var _map_select_highlight: Sprite2D = null
+var _route_lines: RouteLines = null
+var _npc_overlay: NpcOverlay = null
+## Progress indicator shown at the harvested tile while a manual action is in progress.
+var _action_indicator: BuildingStatusIndicator = null
+
+## Active pending manual transports (resources in transit after a drag-drop commit).
+## Each entry: {icon, icon_entry, source_tile, ticks_total, ticks_elapsed, indicator, on_complete}
+var _pending_transports: Array = []
+
+## Pause state captured before a manual action or transport begins, restored when done.
+var _was_paused_before_action: bool = false
+
+## Modulate applied to a building sprite while it is still under construction.
+const _SKELETON_MODULATE: Color = Color(0.75, 0.88, 1.0, 0.28)
 
 ## Storage-drag state — set while a resource is dragged out of a building container.
 var _drag_from_container_id: StringName = &""
@@ -168,28 +196,55 @@ const _PATH_DOT_SPEED: float = 80.0
 const _PATH_COLOR_VALID: Color = Color(0.290, 0.494, 0.659, 1.0)
 ## Error Red #C45A4A per Art Bible
 const _PATH_COLOR_INVALID: Color = Color(0.769, 0.353, 0.290, 1.0)
+const _HOLD_COLLECT_DELAY: float = 0.5     ## hold time before first batch collect begins
+const _HOLD_COLLECT_INTERVAL: float = 0.35 ## interval between subsequent batch collects
 
 
 func _ready() -> void:
 	_setup_tilesets()
-	grid.generate(WORLD_SEED)
-	_sync_tilemap()
-	_spawn_resource_badges()
+	WorldSaveManager.register_world_grid(grid)
 	_interaction_panel = _TILE_PANEL_SCENE.instantiate() as TileInteractionPanel
 	add_child(_interaction_panel)
 	_interaction_panel.world_click_at.connect(_on_panel_world_click)
 	_registry.connect("building_placed", _on_building_placed)
+	_registry.building_state_changed.connect(_on_building_state_changed)
+	_registry.building_construction_complete.connect(_on_building_construction_complete)
+	_registry.building_demolished.connect(_on_building_demolished)
+	_registry.building_items_dropped.connect(_on_building_items_dropped)
+	TickSystem.ticks_advanced.connect(_on_ticks_advanced_indicators)
 	_player.init_dependencies(TickSystem, null, grid, null)
 	_registry.init_dependencies(grid, _player)
-	_registry.place_starter_building(1, Vector2i(12, 12))  # 1 = BuildingType.STORAGE_BUILDING
+	PathSystem.init_dependencies(grid)
+	PathSystem.path_placed.connect(_on_path_placed)
+	PathSystem.path_updated.connect(_on_path_updated)
+	PathSystem.path_removed.connect(_on_path_removed)
+	LogisticsSystem.set_grid_map(grid)
+	NPCSystem.set_grid_map(grid)
+	if WorldSaveManager.has_pending_load():
+		WorldSaveManager.apply_pending_load()
+	else:
+		grid.generate(randi())
+		_registry.place_starter_building(BuildingRegistry.BuildingType.COLLECTION_POINT, Vector2i(12, 12))
+	_sync_tilemap()
+	_spawn_resource_badges()
 	_player.action_started.connect(_on_action_started)
 	_player.action_completed.connect(_on_action_completed)
+	_player.action_progress_update.connect(_on_action_progress_update)
 	_setup_drag_overlays()
 	_inventory_screen = InventoryScreen.new()
 	_inventory_screen.name = "InventoryScreen"
 	add_child(_inventory_screen)
-	call_deferred(&"_wire_inventory_hud")
+	_setup_map_select_highlight()
+	_route_lines = RouteLines.new()
+	_route_lines.name = "RouteLines"
+	add_child(_route_lines)
+	_route_lines.init_dependencies(grid)
+	_npc_overlay = NpcOverlay.new()
+	_npc_overlay.name = "NpcOverlay"
+	add_child(_npc_overlay)
+	_npc_overlay.init_dependencies(grid)
 	call_deferred(&"_wire_building_detail")
+	call_deferred(&"_wire_inventory_hud")
 
 
 ## Creates the cost label (AC2) and path line overlay (AC3) used during drag.
@@ -235,6 +290,15 @@ func _setup_drag_overlays() -> void:
 	_drag_path_dst_marker.visible = false
 	_drag_path_dst_marker.z_index = 6
 	add_child(_drag_path_dst_marker)
+
+	_drag_count_label = Label.new()
+	_drag_count_label.visible = false
+	_drag_count_label.z_index = 22
+	_drag_count_label.add_theme_font_size_override("font_size", 15)
+	_drag_count_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.45))
+	_drag_count_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 1.0))
+	_drag_count_label.add_theme_constant_override("outline_size", 4)
+	add_child(_drag_count_label)
 
 
 # ── TileSet construction ──────────────────────────────────────────────────────
@@ -387,8 +451,8 @@ func _spawn_badge(tile: Vector2i, resource_ids: Array[StringName], parent: Node2
 		icon_scale_override: float = 0.0, pop_in: bool = false, pos_seed_offset: int = 0) -> void:
 	var tile_px: int = WorldGrid.TILE_SIZE
 	var base_pos: Vector2 = Vector2(tile) * tile_px + Vector2(tile_px, tile_px) * 0.5
-	var count: int = mini(resource_ids.size(), _ICON_SCALE_BY_COUNT.size())
-	var scale_factor: float = icon_scale_override if icon_scale_override > 0.0 else _ICON_SCALE_BY_COUNT[count - 1]
+	var count: int = resource_ids.size()
+	var scale_factor: float = icon_scale_override if icon_scale_override > 0.0 else _ICON_SCALE_BY_COUNT[mini(count - 1, _ICON_SCALE_BY_COUNT.size() - 1)]
 	var icon_px: int = roundi(tile_px * scale_factor)
 	var backdrop_tex := _make_circle_texture(roundi(icon_px * 0.55), Color(0.0, 0.0, 0.0, 0.30))
 	var positions: Array = _random_icon_positions(tile, count, icon_px, pos_seed_offset)
@@ -411,6 +475,7 @@ func _spawn_badge(tile: Vector2i, resource_ids: Array[StringName], parent: Node2
 		icon_spr.scale = Vector2(float(icon_px) / tex_size.x, float(icon_px) / tex_size.y)
 		icon_node.add_child(icon_spr)
 
+		icon_node.z_index = 2
 		parent.add_child(icon_node)
 		_resource_icons.append({
 			"node": icon_node,
@@ -449,6 +514,8 @@ func _random_icon_positions(tile: Vector2i, count: int, _icon_px: int, seed_offs
 func _process(delta: float) -> void:
 	var t: float = Time.get_ticks_msec() * 0.001
 	for entry: Dictionary in _resource_icons:
+		if entry.get("in_transit", false):
+			continue
 		var icon_node: Node2D = entry.node as Node2D
 		if _drag_icon != null and icon_node == _drag_icon:
 			icon_node.global_position = get_global_mouse_position()
@@ -460,7 +527,29 @@ func _process(delta: float) -> void:
 
 	if _drag_icon != null:
 		_drag_path_phase += delta * _PATH_DOT_SPEED
+		if (_drag_from_container_id == &"" and _drag_from_input_building_id == ""
+				and _drag_from_output_building_id == ""):
+			var cursor_tile: Vector2i = terrain_layer.local_to_map(
+				terrain_layer.to_local(get_global_mouse_position()))
+			if cursor_tile == _drag_src_tile:
+				_drag_hold_timer += delta
+				var _hold_threshold: float = (
+					_HOLD_COLLECT_DELAY if _drag_collected_count == 1 else _HOLD_COLLECT_INTERVAL
+				)
+				if _drag_hold_timer >= _hold_threshold:
+					_drag_hold_timer -= _hold_threshold
+					_try_batch_collect()
+			else:
+				_drag_hold_timer = 0.0
+		if _drag_count_label.visible:
+			_drag_count_label.position = get_global_mouse_position() + Vector2(18.0, 10.0)
 	_update_drag_overlays()
+
+	for pt: Dictionary in _pending_transports:
+		pt.path_phase += delta * _PATH_DOT_SPEED
+		_animate_pending_path_overlay(pt)
+
+	_update_map_select_highlight()
 
 
 ## Updates cost label (AC2) and path line overlay (AC3) each frame during an active drag.
@@ -468,6 +557,7 @@ func _update_drag_overlays() -> void:
 	if _drag_icon == null:
 		_drag_cost_label.visible = false
 		_drag_energy_label.visible = false
+		_drag_count_label.visible = false
 		_drag_path_line.visible = false
 		_drag_path_dst_marker.visible = false
 		for dot: Sprite2D in _drag_path_dots:
@@ -481,19 +571,11 @@ func _update_drag_overlays() -> void:
 	var cursor_world: Vector2 = get_global_mouse_position()
 	var hovered_tile: Vector2i = grid.world_to_tile(cursor_world)
 	var preview: Dictionary = _player.get_relocation_preview(hovered_tile)
-	_drag_cost_label.text = "⏱️%d" % preview.tick_cost
+	_drag_cost_label.text = "⏱️%d" % (preview.tick_cost * _drag_collected_count)
 	_drag_cost_label.position = cursor_world + Vector2(16.0, -32.0)
 	_drag_cost_label.visible = true
 
-	_drag_energy_label.text = "⚡%d" % preview.energy_cost
-	var insufficient: bool = preview.get(&"energy_insufficient", false)
-	_drag_energy_label.add_theme_color_override(
-		"font_color",
-		Color(0.769, 0.353, 0.290) if insufficient else Color(1.0, 1.0, 0.8)
-	)
-	var tick_w: float = _drag_cost_label.get_minimum_size().x
-	_drag_energy_label.position = cursor_world + Vector2(16.0 + tick_w + 6.0, -32.0)
-	_drag_energy_label.visible = true
+	_drag_energy_label.visible = false
 
 	if not grid.is_in_bounds(hovered_tile) or _drag_src_tile == Vector2i(-1, -1):
 		_drag_path_line.visible = false
@@ -503,8 +585,7 @@ func _update_drag_overlays() -> void:
 		return
 
 	var passable: bool = grid.is_passable(hovered_tile)
-	var not_full: bool = grid.get_resources(hovered_tile).size() < WorldGrid.MAX_RESOURCES_PER_TILE
-	var valid: bool = passable and not_full
+	var valid: bool = passable
 	var path_color: Color = _PATH_COLOR_VALID if valid else _PATH_COLOR_INVALID
 	var tile_px: float = float(WorldGrid.TILE_SIZE)
 	var half: float = tile_px * 0.5
@@ -554,24 +635,13 @@ func _update_storage_drag_overlays() -> void:
 	var dist: int = (abs(hovered_tile.x - _drag_from_building_tile.x)
 		+ abs(hovered_tile.y - _drag_from_building_tile.y))
 	var base_cost: int = maxi(1, dist)
-	var has_energy: bool = _player.get_current_energy() >= base_cost
-	var is_food: bool = PlayerCharacter.FOOD_ENERGY.has(_drag_resource_id)
-	var energy_insufficient: bool = not has_energy and not is_food
-	var tick_cost: int = base_cost * (15 if (not has_energy and is_food) else 5)
-	var energy_cost: int = base_cost if has_energy else 0
+	var tick_cost: int = base_cost * 5
 
 	_drag_cost_label.text = "⏱️%d" % tick_cost
 	_drag_cost_label.position = cursor_world + Vector2(16.0, -32.0)
 	_drag_cost_label.visible = true
 
-	_drag_energy_label.text = "⚡%d" % energy_cost
-	_drag_energy_label.add_theme_color_override(
-		"font_color",
-		Color(0.769, 0.353, 0.290) if energy_insufficient else Color(1.0, 1.0, 0.8)
-	)
-	var tick_w: float = _drag_cost_label.get_minimum_size().x
-	_drag_energy_label.position = cursor_world + Vector2(16.0 + tick_w + 6.0, -32.0)
-	_drag_energy_label.visible = true
+	_drag_energy_label.visible = false
 
 	# ── Path line + dots ─────────────────────────────────────────────────────
 	if not grid.is_in_bounds(hovered_tile) or _drag_from_building_tile == Vector2i(-1, -1):
@@ -592,8 +662,7 @@ func _update_storage_drag_overlays() -> void:
 				inst.type if inst != null else -1, [])
 			valid = _drag_resource_id in allowed
 	else:
-		valid = (grid.is_passable(hovered_tile)
-			and grid.get_resources(hovered_tile).size() < WorldGrid.MAX_RESOURCES_PER_TILE)
+		valid = grid.is_passable(hovered_tile)
 
 	var path_color: Color = _PATH_COLOR_VALID if valid else _PATH_COLOR_INVALID
 	var tile_px: float = float(WorldGrid.TILE_SIZE)
@@ -736,7 +805,8 @@ func _finish_output_drag() -> void:
 	var target_tile: Vector2i = grid.world_to_tile(world_pos)
 	var res_id: StringName = _drag_resource_id
 	var building_id: String = _drag_from_output_building_id
-	_drag_icon.queue_free()
+	var from_tile: Vector2i = _drag_from_building_tile
+	var icon_node: Node2D = _drag_icon
 	_drag_icon = null
 	_drag_from_output_building_id = ""
 	_drag_resource_id = &""
@@ -747,15 +817,28 @@ func _finish_output_drag() -> void:
 		if target_building_id != "":
 			var inst: BuildingRegistry.BuildingInstance = _registry.get_building_instance(target_building_id)
 			if inst != null and inst.assigned_container_id != &"":
-				if InventorySystem.try_deposit(inst.assigned_container_id, res_id, 1) == InventoryContainer.DepositResult.SUCCESS:
+				if InventorySystem.get_occupied_slots(inst.assigned_container_id) < InventorySystem.get_capacity(inst.assigned_container_id):
+					var ticks_needed: int = _calc_drag_ticks(from_tile, target_tile, res_id)
+					var target_cid: StringName = inst.assigned_container_id
+					_park_panel_icon_pending(icon_node, from_tile, target_tile, ticks_needed, func() -> void:
+						if InventorySystem.try_deposit(target_cid, res_id, 1) != InventoryContainer.DepositResult.SUCCESS:
+							_registry.receive_output_to_buffer(building_id, res_id, 1)
+						icon_node.queue_free()
+					)
 					get_viewport().set_input_as_handled()
 					return
-		elif grid.is_passable(target_tile) \
-				and grid.get_resources(target_tile).size() < WorldGrid.MAX_RESOURCES_PER_TILE:
-			grid.add_resource_to_tile(target_tile, res_id, true)
-			_spawn_badge(target_tile, [res_id], self, 0.0, true, Time.get_ticks_msec())
+		elif grid.is_passable(target_tile):
+			var ticks_needed: int = _calc_drag_ticks(from_tile, target_tile, res_id)
+			_park_panel_icon_pending(icon_node, from_tile, target_tile, ticks_needed, func() -> void:
+				if grid.add_resource_to_tile(target_tile, res_id, true):
+					_spawn_badge(target_tile, [res_id], self, 0.0, true, Time.get_ticks_msec())
+				else:
+					_registry.receive_output_to_buffer(building_id, res_id, 1)
+				icon_node.queue_free()
+			)
 			get_viewport().set_input_as_handled()
 			return
+	icon_node.queue_free()
 	_registry.receive_output_to_buffer(building_id, res_id, 1)
 	get_viewport().set_input_as_handled()
 
@@ -767,17 +850,24 @@ func _finish_input_drag() -> void:
 	var target_tile: Vector2i = grid.world_to_tile(world_pos)
 	var res_id: StringName = _drag_resource_id
 	var building_id: String = _drag_from_input_building_id
-	_drag_icon.queue_free()
+	var from_tile: Vector2i = _drag_from_building_tile
+	var icon_node: Node2D = _drag_icon
 	_drag_icon = null
 	_drag_from_input_building_id = ""
 	_drag_resource_id = &""
 	_drag_from_building_tile = Vector2i(-1, -1)
 	_drag_src_tile = Vector2i(-1, -1)
-	if grid.is_in_bounds(target_tile) and grid.is_passable(target_tile) \
-			and grid.get_resources(target_tile).size() < WorldGrid.MAX_RESOURCES_PER_TILE:
-		grid.add_resource_to_tile(target_tile, res_id, true)
-		_spawn_badge(target_tile, [res_id], self, 0.0, true, Time.get_ticks_msec())
+	if grid.is_in_bounds(target_tile) and grid.is_passable(target_tile):
+		var ticks_needed: int = _calc_drag_ticks(from_tile, target_tile, res_id)
+		_park_panel_icon_pending(icon_node, from_tile, target_tile, ticks_needed, func() -> void:
+			if grid.add_resource_to_tile(target_tile, res_id, true):
+				_spawn_badge(target_tile, [res_id], self, 0.0, true, Time.get_ticks_msec())
+			else:
+				_registry.receive_input_from_world(building_id, res_id, 1)
+			icon_node.queue_free()
+		)
 	else:
+		icon_node.queue_free()
 		_registry.receive_input_from_world(building_id, res_id, 1)
 	get_viewport().set_input_as_handled()
 
@@ -789,8 +879,8 @@ func _finish_storage_drag() -> void:
 	var target_tile: Vector2i = grid.world_to_tile(world_pos)
 	var res_id: StringName = _drag_resource_id
 	var container_id: StringName = _drag_from_container_id
-
-	_drag_icon.queue_free()
+	var from_tile: Vector2i = _drag_from_building_tile
+	var icon_node: Node2D = _drag_icon
 	_drag_icon = null
 	_drag_from_container_id = &""
 	_drag_resource_id = &""
@@ -802,29 +892,125 @@ func _finish_storage_drag() -> void:
 		if building_id != "":
 			var inst: BuildingRegistry.BuildingInstance = _registry.get_building_instance(building_id)
 			var target_cid: StringName = inst.assigned_container_id if inst != null else &""
-			if target_cid != &"" and target_cid != container_id:
-				if InventorySystem.try_deposit(target_cid, res_id, 1) == InventoryContainer.DepositResult.SUCCESS:
-					get_viewport().set_input_as_handled()
-					return
+			if target_cid != &"" and target_cid != container_id \
+					and InventorySystem.get_occupied_slots(target_cid) < InventorySystem.get_capacity(target_cid):
+				var ticks_needed: int = _calc_drag_ticks(from_tile, target_tile, res_id)
+				_park_panel_icon_pending(icon_node, from_tile, target_tile, ticks_needed, func() -> void:
+					if InventorySystem.try_deposit(target_cid, res_id, 1) != InventoryContainer.DepositResult.SUCCESS:
+						InventorySystem.try_deposit(container_id, res_id, 1)
+					icon_node.queue_free()
+				)
+				get_viewport().set_input_as_handled()
+				return
 			elif target_cid == &"":
-				# Production building (e.g. LUMBER_CAMP) — resource was already consumed from
-				# source container in _on_storage_drag_started; route directly to input_buffer.
-				if _registry.receive_input_from_world(building_id, res_id, 1):
-					get_viewport().set_input_as_handled()
-					return
-			# Same container or deposit failed — fall through to return resource
-		elif grid.add_resource_to_tile(target_tile, res_id, true):
-			_spawn_badge(target_tile, [res_id], self, 0.0, true, Time.get_ticks_msec())
+				# Production building — route to input_buffer.
+				var ticks_needed: int = _calc_drag_ticks(from_tile, target_tile, res_id)
+				_park_panel_icon_pending(icon_node, from_tile, target_tile, ticks_needed, func() -> void:
+					if not _registry.receive_input_from_world(building_id, res_id, 1):
+						InventorySystem.try_deposit(container_id, res_id, 1)
+					icon_node.queue_free()
+				)
+				get_viewport().set_input_as_handled()
+				return
+			# Same container or would-be-full — fall through to return resource
+		elif grid.is_passable(target_tile):
+			var ticks_needed: int = _calc_drag_ticks(from_tile, target_tile, res_id)
+			_park_panel_icon_pending(icon_node, from_tile, target_tile, ticks_needed, func() -> void:
+				if grid.add_resource_to_tile(target_tile, res_id, true):
+					_spawn_badge(target_tile, [res_id], self, 0.0, true, Time.get_ticks_msec())
+				else:
+					InventorySystem.try_deposit(container_id, res_id, 1)
+				icon_node.queue_free()
+			)
 			get_viewport().set_input_as_handled()
 			return
 
+	icon_node.queue_free()
 	InventorySystem.try_deposit(container_id, res_id, 1)
 	get_viewport().set_input_as_handled()
+
+
+## Applies tick cost for a successful building-panel drag.
+func _pay_drag_cost(from_tile: Vector2i, to_tile: Vector2i, _res_id: StringName) -> void:
+	var dist: int = abs(to_tile.x - from_tile.x) + abs(to_tile.y - from_tile.y)
+	var base_cost: int = maxi(1, dist)
+	TickSystem.advance_ticks_manual(base_cost * 5)
+
+
+## Returns the tick duration for a building-panel drag from from_tile to to_tile.
+## Does NOT advance ticks (caller starts pending transport).
+func _calc_drag_ticks(from_tile: Vector2i, to_tile: Vector2i, _res_id: StringName) -> int:
+	var dist: int = abs(to_tile.x - from_tile.x) + abs(to_tile.y - from_tile.y)
+	var base_cost: int = maxi(1, dist)
+	return base_cost * 5
+
+
+## Parks a building-panel drag icon at the target tile and registers a pending transport.
+## The icon stays at target_tile with a progress circle until ticks_needed elapse,
+## then on_complete is called (responsible for the actual data change and icon.queue_free).
+func _park_panel_icon_pending(icon: Node2D, from_tile: Vector2i, target_tile: Vector2i,
+		ticks_needed: int, on_complete: Callable) -> void:
+	var tile_px: int = WorldGrid.TILE_SIZE
+	icon.position = Vector2(target_tile) * tile_px + Vector2(tile_px, tile_px) * 0.5
+	icon.modulate.a = 1.0
+	icon.scale = Vector2(1.0, 1.0)
+	icon.z_index = 2
+	var indicator: BuildingStatusIndicator = _spawn_transport_indicator(target_tile)
+	var path_overlay: Dictionary = _spawn_pending_path_overlay(from_tile, target_tile)
+	if _pending_transports.is_empty() and _action_indicator == null:
+		_was_paused_before_action = TickSystem.is_paused()
+	_pending_transports.append({
+		"icon": icon, "icon_entry": {}, "source_tile": from_tile,
+		"target_tile": target_tile,
+		"ticks_total": ticks_needed, "ticks_elapsed": 0,
+		"indicator": indicator,
+		"path_overlay": path_overlay, "path_phase": 0.0,
+		"on_complete": on_complete,
+	})
+	TickSystem.set_pause(false)
+
+
+func _setup_map_select_highlight() -> void:
+	_map_select_highlight = Sprite2D.new()
+	_map_select_highlight.texture = _make_tile_highlight_texture()
+	_map_select_highlight.visible = false
+	_map_select_highlight.z_index = 4
+	add_child(_map_select_highlight)
+
+
+func _make_tile_highlight_texture() -> ImageTexture:
+	var size: int = WorldGrid.TILE_SIZE
+	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var fill := Color(0.29, 0.49, 0.66, 0.22)
+	var border := Color(0.29, 0.49, 0.66, 0.85)
+	for x: int in range(size):
+		for y: int in range(size):
+			img.set_pixel(x, y, border if (x < 2 or x >= size - 2 or y < 2 or y >= size - 2) else fill)
+	return ImageTexture.create_from_image(img)
+
+
+func _update_map_select_highlight() -> void:
+	if _hud == null or not _hud.is_map_select_active():
+		_map_select_highlight.visible = false
+		return
+	var world_pos: Vector2 = get_global_mouse_position()
+	var tile: Vector2i = terrain_layer.local_to_map(terrain_layer.to_local(world_pos))
+	if tile.x < 0 or tile.y < 0 or tile.x >= WorldGrid.GRID_SIZE or tile.y >= WorldGrid.GRID_SIZE:
+		_map_select_highlight.visible = false
+		return
+	var building_id: String = grid.get_building(tile)
+	if building_id == "":
+		_map_select_highlight.visible = false
+		return
+	var tile_px: int = WorldGrid.TILE_SIZE
+	_map_select_highlight.position = Vector2(tile) * tile_px + Vector2(tile_px, tile_px) * 0.5
+	_map_select_highlight.visible = true
 
 
 ## Wires BuildingDetailPanel.storage_drag_started to this scene.
 func _wire_building_detail() -> void:
 	var hud: HUD = get_tree().get_first_node_in_group(&"hud") as HUD
+	_hud = hud
 	if hud == null:
 		push_warning("[MapRoot] HUD not found — storage drag not wired")
 		return
@@ -925,6 +1111,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	# ── LMB press: begin resource relocation drag or open building detail ────
 	if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
 		var world_pos: Vector2 = get_global_mouse_position()
+
+		# In map-select mode all other clicks are blocked; route to HUD.
+		if _hud != null and _hud.is_map_select_active():
+			var sel_tile: Vector2i = terrain_layer.local_to_map(terrain_layer.to_local(world_pos))
+			var sel_building: String = ""
+			if sel_tile.x >= 0 and sel_tile.y >= 0 and sel_tile.x < WorldGrid.GRID_SIZE and sel_tile.y < WorldGrid.GRID_SIZE:
+				sel_building = grid.get_building(sel_tile)
+			_hud.notify_building_selected_in_map_select(StringName(sel_building))
+			get_viewport().set_input_as_handled()
+			return
+
 		var hit := _hit_test_resource_icon(world_pos)
 		if hit.is_empty():
 			# No resource icon hit — check if tile has a building.
@@ -933,9 +1130,8 @@ func _unhandled_input(event: InputEvent) -> void:
 					and click_tile.x < WorldGrid.GRID_SIZE and click_tile.y < WorldGrid.GRID_SIZE):
 				var building_id: String = grid.get_building(click_tile)
 				if building_id != "":
-					var hud: HUD = get_tree().get_first_node_in_group(&"hud") as HUD
-					if hud != null:
-						hud.open_building_detail(building_id)
+					if _hud != null:
+						_hud.open_building_detail(building_id)
 						get_viewport().set_input_as_handled()
 						return
 			return
@@ -949,6 +1145,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_drag_icon_entry = hit
 		_drag_src_tile = res_tile
 		_drag_path_phase = 0.0
+		_drag_hold_timer = 0.0
+		_drag_collected_count = 1
 		icon_node.modulate.a = 0.7
 		icon_node.scale = Vector2(1.2, 1.2)
 		icon_node.z_index = 10
@@ -969,28 +1167,88 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 
-		var result: int = _player.try_commit_relocation(target_tile, grid)
+		var result: int = _player.try_commit_relocation(target_tile, grid, true)
 		match result:
-			PlayerCharacter.RelocationResult.SUCCESS, \
-			PlayerCharacter.RelocationResult.SUCCESS_LOW_ENERGY:
+			PlayerCharacter.RelocationResult.SUCCESS:
 				var src_tile: Vector2i = _drag_icon_entry.tile
 				var src_idx: int = _drag_icon_entry.resource_idx
-				var tile_px: int = WorldGrid.TILE_SIZE
-				var new_base: Vector2 = Vector2(target_tile) * tile_px + Vector2(tile_px, tile_px) * 0.5
-				_drag_icon_entry.tile = target_tile
-				# Resource was appended to end of target array by move_one_resource.
-				_drag_icon_entry.resource_idx = grid.get_resources(target_tile).size() - 1
-				_drag_icon_entry.base_pos = new_base
-				_drag_icon.position = new_base
-				_reset_drag_icon_visuals(_drag_icon)
-				# Indices for remaining entries on the source tile are shifted by remove_at.
+				var move_dist: int = abs(target_tile.x - src_tile.x) + abs(target_tile.y - src_tile.y)
+				var ticks_needed: int = maxi(1, move_dist) * 5
+				# Remove resource from grid immediately so it is in transit.
+				grid.remove_one_resource(src_tile, src_idx)
 				for entry: Dictionary in _resource_icons:
 					if entry.tile == src_tile and entry.resource_idx > src_idx:
 						entry.resource_idx -= 1
-				var move_dist: int = (abs(target_tile.x - src_tile.x)
-					+ abs(target_tile.y - src_tile.y))
-				var tick_mult: int = 15 if result == PlayerCharacter.RelocationResult.SUCCESS_LOW_ENERGY else 5
-				TickSystem.advance_ticks_manual(maxi(1, move_dist) * tick_mult)
+				# Park icon at source; mark in-transit so it cannot be re-dragged.
+				_drag_icon_entry.in_transit = true
+				_drag_icon.position = _drag_icon_entry.base_pos
+				_reset_drag_icon_visuals(_drag_icon)
+				var indicator: BuildingStatusIndicator = _spawn_transport_indicator(src_tile)
+				var path_overlay: Dictionary = _spawn_pending_path_overlay(src_tile, target_tile)
+				var c_icon: Node2D = _drag_icon
+				var c_entry: Dictionary = _drag_icon_entry
+				var c_src_tile: Vector2i = src_tile
+				var c_target_tile: Vector2i = target_tile
+				var c_res_id: StringName = _drag_icon_entry.resource_id
+				var c_tile_px: int = WorldGrid.TILE_SIZE
+				# All batch extras are transported (no energy gate).
+				var c_total_items: int = _drag_collected_count
+				if _pending_transports.is_empty() and _action_indicator == null:
+					_was_paused_before_action = TickSystem.is_paused()
+				_pending_transports.append({
+					"icon": c_icon,
+					"icon_entry": c_entry,
+					"source_tile": src_tile,
+					"target_tile": c_target_tile,
+					"ticks_total": ticks_needed * c_total_items,
+					"ticks_elapsed": 0,
+					"indicator": indicator,
+					"path_overlay": path_overlay,
+					"path_phase": 0.0,
+					"on_complete": func() -> void:
+						var size_before: int = grid.get_resources(c_target_tile).size()
+						var placed_count: int = 0
+						for _pi in range(c_total_items):
+							if grid.add_resource_to_tile(c_target_tile, c_res_id, true):
+								placed_count += 1
+							else:
+								break
+						var new_base: Vector2 = (Vector2(c_target_tile) * float(c_tile_px)
+							+ Vector2(c_tile_px, c_tile_px) * 0.5)
+						# First item — update the dragged icon entry.
+						if placed_count >= 1:
+							c_entry.tile = c_target_tile
+							c_entry.resource_idx = size_before
+							var c_scatter: Array = _random_icon_positions(c_target_tile, 1,
+								roundi(float(c_tile_px) * _ICON_SCALE_BY_COUNT[0]),
+								Time.get_ticks_msec())
+							c_entry.base_pos = new_base + c_scatter[0]
+							c_icon.position = c_entry.base_pos
+							c_entry.in_transit = false
+						else:
+							if grid.add_resource_to_tile(c_src_tile, c_res_id, true):
+								c_entry.tile = c_src_tile
+								c_entry.resource_idx = grid.get_resources(c_src_tile).size() - 1
+								c_entry.in_transit = false
+							else:
+								_resource_icons.erase(c_entry)
+								c_icon.queue_free()
+						# Extra items that reached target — spawn new badges.
+						for pi in range(1, placed_count):
+							var ids_e: Array[StringName] = [c_res_id]
+							_spawn_badge(c_target_tile, ids_e, self, 0.0, false,
+								Time.get_ticks_msec() + pi * 31)
+							_resource_icons.back().resource_idx = size_before + pi
+						# Extra items that couldn't be placed — restore to source.
+						var failed_extras: int = c_total_items - maxi(placed_count, 1)
+						var seed_off: int = Time.get_ticks_msec()
+						for ri in range(failed_extras):
+							if grid.add_resource_to_tile(c_src_tile, c_res_id, true):
+								var ids_r: Array[StringName] = [c_res_id]
+								_spawn_badge(c_src_tile, ids_r, self, 0.0, true, seed_off + ri * 41)
+								_resource_icons.back().resource_idx = grid.get_resources(c_src_tile).size() - 1
+				})
+				TickSystem.set_pause(false)
 			PlayerCharacter.RelocationResult.SNAP_BACK_SAME_TILE:
 				_snap_back_drag_icon()
 			_:
@@ -1012,6 +1270,8 @@ func _hit_test_resource_icon(world_pos: Vector2) -> Dictionary:
 	for entry: Dictionary in _resource_icons:
 		if entry.tile != tile_pos:
 			continue
+		if entry.get("in_transit", false):
+			continue
 		var icon_node: Node2D = entry.node as Node2D
 		var dist: float = icon_node.global_position.distance_to(world_pos)
 		if dist < best_dist:
@@ -1032,6 +1292,7 @@ func _cancel_drag_visual() -> void:
 func _snap_back_drag_icon() -> void:
 	if _drag_icon == null:
 		return
+	_restore_batch_extras()
 	var icon_node: Node2D = _drag_icon
 	var tween := create_tween()
 	tween.tween_property(icon_node, "position", _drag_icon_entry.base_pos, 0.18).set_trans(Tween.TRANS_BACK)
@@ -1041,12 +1302,96 @@ func _snap_back_drag_icon() -> void:
 func _reset_drag_icon_visuals(icon_node: Node2D) -> void:
 	icon_node.modulate.a = 1.0
 	icon_node.scale = Vector2(1.0, 1.0)
-	icon_node.z_index = 0
+	icon_node.z_index = 2
+
+
+## During a world drag, auto-collects one additional matching resource from the source tile.
+## Called from _process on a timer while LMB is held. The collected icon flies to the cursor
+## and is freed; the grid resource is removed immediately (items restored on snap-back).
+func _try_batch_collect() -> void:
+	if _drag_icon == null or _drag_src_tile == Vector2i(-1, -1):
+		return
+	var res_id: StringName = _drag_icon_entry.resource_id
+	var src_tile: Vector2i = _drag_src_tile
+	var target_entry: Dictionary = {}
+	for entry: Dictionary in _resource_icons:
+		if entry.get("node") == _drag_icon_entry.get("node"):
+			continue  # skip the icon currently being dragged
+		if entry.tile != src_tile:
+			continue
+		if entry.resource_id != res_id:
+			continue
+		if entry.get("in_transit", false):
+			continue
+		target_entry = entry
+		break
+	if target_entry.is_empty():
+		return
+	var icon_node: Node2D = target_entry.node as Node2D
+	var res_idx: int = target_entry.resource_idx
+	grid.remove_one_resource(src_tile, res_idx)
+	for other: Dictionary in _resource_icons:
+		if other.tile == src_tile and other.resource_idx > res_idx:
+			other.resource_idx -= 1
+	target_entry.in_transit = true
+	var cursor_pos: Vector2 = _drag_icon.global_position
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(icon_node, "global_position", cursor_pos, 0.22).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tween.tween_property(icon_node, "modulate:a", 0.0, 0.18)
+	tween.tween_property(icon_node, "scale", Vector2(0.4, 0.4), 0.22)
+	var cap_entry: Dictionary = target_entry
+	var cap_node: Node2D = icon_node
+	tween.chain().tween_callback(func() -> void:
+		_resource_icons.erase(cap_entry)
+		cap_node.queue_free()
+	)
+	_drag_collected_count += 1
+	_drag_count_label.text = "×%d" % _drag_collected_count
+	_drag_count_label.visible = true
+
+
+## Restores any batch-collected extras to the source tile when a drag is cancelled/snapped back.
+## Resets batch state. Called from _snap_back_drag_icon before the snap animation begins.
+func _restore_batch_extras() -> void:
+	var extra_count: int = _drag_collected_count - 1
+	_drag_collected_count = 1
+	_drag_hold_timer = 0.0
+	if extra_count <= 0 or _drag_src_tile == Vector2i(-1, -1) or _drag_icon_entry.is_empty():
+		return
+	var res_id: StringName = _drag_icon_entry.resource_id
+	for i in range(extra_count):
+		if grid.add_resource_to_tile(_drag_src_tile, res_id, true):
+			var ids_r: Array[StringName] = [res_id]
+			_spawn_badge(_drag_src_tile, ids_r, self, 0.0, true, Time.get_ticks_msec() + i * 37)
+			_resource_icons.back().resource_idx = grid.get_resources(_drag_src_tile).size() - 1
+
+
+## Creates a standalone resource icon Node2D at the tile's centre without registering it
+## in _resource_icons. Used for batch transport visual proxies.
+func _make_resource_icon_node(tile: Vector2i, res_id: StringName) -> Node2D:
+	var tile_px: int = WorldGrid.TILE_SIZE
+	var icon_px: int = roundi(float(tile_px) * _ICON_SCALE_BY_COUNT[0])
+	var icon_node := Node2D.new()
+	icon_node.position = Vector2(tile) * tile_px + Vector2(tile_px, tile_px) * 0.5
+	icon_node.z_index = 2
+	var backdrop := Sprite2D.new()
+	backdrop.texture = _make_circle_texture(roundi(icon_px * 0.55), Color(0.0, 0.0, 0.0, 0.30))
+	icon_node.add_child(backdrop)
+	var spr := Sprite2D.new()
+	spr.texture = _load_resource_texture(_resource_id_to_index(res_id))
+	var tex_size: Vector2 = spr.texture.get_size()
+	spr.scale = Vector2(float(icon_px) / tex_size.x, float(icon_px) / tex_size.y)
+	icon_node.add_child(spr)
+	add_child(icon_node)
+	return icon_node
 
 
 ## Handles a confirmed left-click on a valid grid tile.
 ## Maps terrain type to ManualActionType and opens the Tile Interaction Panel.
 func _on_tile_clicked(tile: Vector2i, screen_pos: Vector2) -> void:
+	if grid.get_building(tile) != "" or PathSystem.has_path(tile):
+		return
 	var terrain: WorldGrid.TileType = grid.get_terrain(tile)
 	var action_type: int = _terrain_to_action(terrain)
 	if action_type < 0:
@@ -1056,42 +1401,97 @@ func _on_tile_clicked(tile: Vector2i, screen_pos: Vector2) -> void:
 
 
 ## Handles a world-area click emitted by the panel's ClickGuard.
-## Valid tile → update panel in place (AC7); invalid/out-of-bounds → close (AC6).
-func _on_panel_world_click(screen_pos: Vector2) -> void:
-	var world_pos: Vector2 = get_viewport().get_canvas_transform().affine_inverse() * screen_pos
-	var tile: Vector2i = terrain_layer.local_to_map(terrain_layer.to_local(world_pos))
-	if tile.x < 0 or tile.y < 0 or tile.x >= WorldGrid.GRID_SIZE or tile.y >= WorldGrid.GRID_SIZE:
-		_interaction_panel.close()
-		return
-	var terrain: WorldGrid.TileType = grid.get_terrain(tile)
-	var action_type: int = _terrain_to_action(terrain)
-	if action_type < 0:
-		_interaction_panel.close()
-		return
-	_last_action_tile = tile
-	_interaction_panel.show_at(screen_pos, action_type)
+## Any click outside the panel closes it — the user can right-click again to open a new one.
+func _on_panel_world_click(_screen_pos: Vector2) -> void:
+	_interaction_panel.close()
 
 
-## Advances ticks manually when a player action starts (TickSystem stays paused otherwise).
-func _on_action_started(_action_id: int, tick_cost: int) -> void:
-	TickSystem.advance_ticks_manual(tick_cost)
+## Unpauses the tick system and spawns a progress circle at the harvested tile.
+func _on_action_started(_action_id: int, _tick_cost: int) -> void:
+	_active_action_tile = _last_action_tile
+	if _pending_transports.is_empty() and _action_indicator == null:
+		_was_paused_before_action = TickSystem.is_paused()
+	TickSystem.set_pause(false)
+	_spawn_action_indicator(_active_action_tile)
+
+
+func _spawn_action_indicator(tile: Vector2i) -> void:
+	if _action_indicator != null:
+		_action_indicator.queue_free()
+		_action_indicator = null
+	var tile_px: int = WorldGrid.TILE_SIZE
+	var indicator := BuildingStatusIndicator.new()
+	indicator.position = Vector2(tile) * tile_px + Vector2(tile_px, tile_px) * 0.5 \
+		+ Vector2(tile_px * 0.32, tile_px * 0.32)
+	indicator.z_index = 3
+	add_child(indicator)
+	_action_indicator = indicator
+
+
+func _on_action_progress_update(progress: float, _tick_cost: int, _output: int) -> void:
+	if _action_indicator != null:
+		_action_indicator.set_progress(progress)
 
 
 ## Spawns floating text and a loot-icon badge on the harvested tile.
-func _on_action_completed(_action_id: int, output: Array) -> void:
-	if _last_action_tile == Vector2i(-1, -1):
+## For CLEAR_* actions: removes terrain, clears all resource icons, then spawns loot.
+func _on_action_completed(action_id: int, output: Array) -> void:
+	if _pending_transports.is_empty():
+		TickSystem.set_pause(_was_paused_before_action)
+	if _action_indicator != null:
+		_action_indicator.queue_free()
+		_action_indicator = null
+	if _active_action_tile == Vector2i(-1, -1):
 		return
-	var world_pos: Vector2 = grid.tile_to_world(_last_action_tile)
+
+	var is_clear: bool = action_id in [
+		PlayerCharacter.ManualActionType.CLEAR_TREE,
+		PlayerCharacter.ManualActionType.CLEAR_STONE,
+		PlayerCharacter.ManualActionType.CLEAR_BERRY,
+		PlayerCharacter.ManualActionType.CLEAR_GRASS,
+	]
+
+	if is_clear:
+		var tile := _active_action_tile
+		var to_remove: Array = []
+		for entry: Dictionary in _resource_icons:
+			if entry.tile == tile:
+				(entry.node as Node2D).queue_free()
+				to_remove.append(entry)
+		for entry: Dictionary in to_remove:
+			_resource_icons.erase(entry)
+		grid.clear_terrain_tile(tile)
+		terrain_layer.set_cell(tile, -1, Vector2i(-1, -1))
+		var world_pos: Vector2 = grid.tile_to_world(tile)
+		for item: Dictionary in output:
+			var qty: int = item.get("quantity", 0)
+			var resource_id: StringName = item.get("resource_id", &"")
+			if qty <= 0 or resource_id == &"" or _resource_id_to_index(resource_id) < 0:
+				continue
+			_spawn_pickup_float(world_pos, "+%d %s" % [qty, str(resource_id)])
+			var ids: Array[StringName] = []
+			for _i in range(qty):
+				grid.add_resource_to_tile(tile, resource_id, true)
+				ids.append(resource_id)
+			_spawn_badge(tile, ids, self, 0.0, true, Time.get_ticks_msec())
+		return
+
+	var world_pos: Vector2 = grid.tile_to_world(_active_action_tile)
 	for item: Dictionary in output:
 		var qty: int = item.get("quantity", 0)
 		var resource_id: StringName = item.get("resource_id", &"")
 		if qty <= 0 or resource_id == &"" or _resource_id_to_index(resource_id) < 0:
 			continue
 		_spawn_pickup_float(world_pos, "+%d %s" % [qty, str(resource_id)])
+		var existing_count: int = grid.get_resources(_active_action_tile).size()
 		var ids: Array[StringName] = []
-		for _i in range(mini(qty, _ICON_SCALE_BY_COUNT.size())):
+		for _i in range(qty):
+			grid.add_resource_to_tile(_active_action_tile, resource_id, true)
 			ids.append(resource_id)
-		_spawn_badge(_last_action_tile, ids, self, 0.0, true, Time.get_ticks_msec())
+		var prev_len: int = _resource_icons.size()
+		_spawn_badge(_active_action_tile, ids, self, 0.0, true, Time.get_ticks_msec())
+		for j in range(prev_len, _resource_icons.size()):
+			_resource_icons[j].resource_idx = existing_count + (j - prev_len)
 
 
 func _spawn_pickup_float(world_pos: Vector2, text: String) -> void:
@@ -1110,8 +1510,8 @@ func _spawn_pickup_float(world_pos: Vector2, text: String) -> void:
 	tween.finished.connect(label.queue_free)
 
 
-## Attempts to deposit the currently-dragged resource into a building's storage container.
-## Pays energy proportional to drag distance. Snaps back if deposit fails or energy is short.
+## Attempts to deposit the currently-dragged resource (and any batch extras) into a building.
+## Pays energy per item. Restores unpayable extras to the source tile immediately.
 func _try_deposit_to_building(target_tile: Vector2i, building_id: String) -> void:
 	var instance: Object = _registry.get_building_instance(building_id)
 	var container_id: StringName = instance.assigned_container_id if instance != null else &""
@@ -1122,7 +1522,7 @@ func _try_deposit_to_building(target_tile: Vector2i, building_id: String) -> voi
 	var cost: int = maxi(1, dist)
 
 	if container_id == &"":
-		# Production building (e.g. LUMBER_CAMP) — route to input_buffer instead of a container.
+		# Production building — route to input_buffer.
 		var allowed: Array = BuildingRegistry.INPUT_RESOURCES.get(
 			instance.type if instance != null else -1, [])
 		if not res_id in allowed:
@@ -1132,70 +1532,354 @@ func _try_deposit_to_building(target_tile: Vector2i, building_id: String) -> voi
 			_drag_icon_entry = {}
 			_drag_src_tile = Vector2i(-1, -1)
 			return
-		var has_energy_prod := _player.get_current_energy() >= cost
-		var is_food_prod := PlayerCharacter.FOOD_ENERGY.has(res_id)
-		if not has_energy_prod and not is_food_prod:
-			_player.cancel_relocation()
-			_snap_back_drag_icon()
-			_drag_icon = null
-			_drag_icon_entry = {}
-			_drag_src_tile = Vector2i(-1, -1)
-			return
-		if has_energy_prod:
-			_player.consume_energy(cost)
+		# All batch extras are transported (no energy gate).
+		var cp_total: int = _drag_collected_count
+		_drag_collected_count = 1
+		if _pending_transports.is_empty() and _action_indicator == null:
+			_was_paused_before_action = TickSystem.is_paused()
+		# Remove main item from grid and start pending transport.
 		grid.remove_one_resource(src_tile, src_idx)
-		_registry.receive_input_from_world(building_id, res_id, 1)
-		_drag_icon.queue_free()
-		_resource_icons.erase(_drag_icon_entry)
 		for entry: Dictionary in _resource_icons:
 			if entry.tile == src_tile and entry.resource_idx > src_idx:
 				entry.resource_idx -= 1
-		TickSystem.advance_ticks_manual(cost * (5 if has_energy_prod else 15))
+		_drag_icon_entry.in_transit = true
+		_drag_icon.position = _drag_icon_entry.base_pos
+		_reset_drag_icon_visuals(_drag_icon)
+		var indicator_prod: BuildingStatusIndicator = _spawn_transport_indicator(src_tile)
+		var path_overlay_prod: Dictionary = _spawn_pending_path_overlay(src_tile, target_tile)
+		var cp_icon: Node2D = _drag_icon
+		var cp_entry: Dictionary = _drag_icon_entry
+		var cp_bid: String = building_id
+		var cp_res: StringName = res_id
+		_pending_transports.append({
+			"icon": cp_icon, "icon_entry": cp_entry, "source_tile": src_tile,
+			"target_tile": target_tile,
+			"ticks_total": cost * 5,
+			"ticks_elapsed": 0, "indicator": indicator_prod,
+			"path_overlay": path_overlay_prod, "path_phase": 0.0,
+			"on_complete": func() -> void:
+				_registry.receive_input_from_world(cp_bid, cp_res, cp_total)
+				_resource_icons.erase(cp_entry)
+				cp_icon.queue_free()
+		})
+		_player.cancel_relocation()
+		_drag_icon = null
+		_drag_icon_entry = {}
+		_drag_src_tile = Vector2i(-1, -1)
+		TickSystem.set_pause(false)
+		return
+
+	# Pre-check: container must have space for at least 1 item.
+	if InventorySystem.get_occupied_slots(container_id) >= InventorySystem.get_capacity(container_id):
+		_snap_back_drag_icon()
 		_player.cancel_relocation()
 		_drag_icon = null
 		_drag_icon_entry = {}
 		_drag_src_tile = Vector2i(-1, -1)
 		return
 
-	var has_energy := _player.get_current_energy() >= cost
-	var is_food := PlayerCharacter.FOOD_ENERGY.has(res_id)
-
-	if not has_energy and not is_food:
-		_player.cancel_relocation()
-		_snap_back_drag_icon()
-		_drag_icon = null
-		_drag_icon_entry = {}
-		_drag_src_tile = Vector2i(-1, -1)
-		return
-
-	if has_energy:
-		_player.consume_energy(cost)
-
-	var deposit_result: int = InventorySystem.try_deposit(container_id, res_id, 1)
-	if deposit_result == InventoryContainer.DepositResult.SUCCESS:
-		grid.remove_one_resource(src_tile, src_idx)
-		_drag_icon.queue_free()
-		_resource_icons.erase(_drag_icon_entry)
-		for entry: Dictionary in _resource_icons:
-			if entry.tile == src_tile and entry.resource_idx > src_idx:
-				entry.resource_idx -= 1
-		TickSystem.advance_ticks_manual(cost * (5 if has_energy else 15))
-	else:
-		_snap_back_drag_icon()
+	# All batch extras are transported (no energy gate).
+	var cs_total: int = _drag_collected_count
+	_drag_collected_count = 1
+	if _pending_transports.is_empty() and _action_indicator == null:
+		_was_paused_before_action = TickSystem.is_paused()
+	# Remove main item from grid and start pending transport.
+	grid.remove_one_resource(src_tile, src_idx)
+	for entry: Dictionary in _resource_icons:
+		if entry.tile == src_tile and entry.resource_idx > src_idx:
+			entry.resource_idx -= 1
+	_drag_icon_entry.in_transit = true
+	_drag_icon.position = _drag_icon_entry.base_pos
+	_reset_drag_icon_visuals(_drag_icon)
+	var indicator_stor: BuildingStatusIndicator = _spawn_transport_indicator(src_tile)
+	var path_overlay_stor: Dictionary = _spawn_pending_path_overlay(src_tile, target_tile)
+	var cs_icon: Node2D = _drag_icon
+	var cs_entry: Dictionary = _drag_icon_entry
+	var cs_cid: StringName = container_id
+	var cs_res: StringName = res_id
+	var cs_src: Vector2i = src_tile
+	_pending_transports.append({
+		"icon": cs_icon, "icon_entry": cs_entry, "source_tile": src_tile,
+		"target_tile": target_tile,
+		"ticks_total": cost * 5,
+		"ticks_elapsed": 0, "indicator": indicator_stor,
+		"path_overlay": path_overlay_stor, "path_phase": 0.0,
+		"on_complete": func() -> void:
+			for _di in range(cs_total):
+				var dep: int = InventorySystem.try_deposit(cs_cid, cs_res, 1)
+				if dep != InventoryContainer.DepositResult.SUCCESS:
+					# Container full during transit — put excess back on world grid.
+					if grid.add_resource_to_tile(cs_src, cs_res, true):
+						var ids_fb: Array[StringName] = [cs_res]
+						_spawn_badge(cs_src, ids_fb, self, 0.0, true, Time.get_ticks_msec() + _di * 37)
+						_resource_icons.back().resource_idx = grid.get_resources(cs_src).size() - 1
+			_resource_icons.erase(cs_entry)
+			cs_icon.queue_free()
+	})
 	_player.cancel_relocation()
 	_drag_icon = null
 	_drag_icon_entry = {}
 	_drag_src_tile = Vector2i(-1, -1)
+	TickSystem.set_pause(false)
+
+
+## Spawns a Sprite2D for a newly placed path tile.
+func _on_path_placed(tile: Vector2i) -> void:
+	var sprite := Sprite2D.new()
+	sprite.texture = load(PathSystem.get_texture_path(tile))
+	var tile_px: int = WorldGrid.TILE_SIZE
+	sprite.position = Vector2(tile) * tile_px + Vector2(tile_px, tile_px) * 0.5
+	sprite.z_index = 1
+	add_child(sprite)
+	_path_sprites[tile] = sprite
+
+
+## Updates path sprite texture when neighbor connections change.
+func _on_path_updated(tile: Vector2i) -> void:
+	var sprite: Sprite2D = _path_sprites.get(tile)
+	if sprite == null:
+		return
+	sprite.texture = load(PathSystem.get_texture_path(tile))
+
+
+## Removes a path sprite when a path tile is demolished.
+func _on_path_removed(tile: Vector2i) -> void:
+	var sprite: Sprite2D = _path_sprites.get(tile)
+	if sprite != null:
+		sprite.queue_free()
+		_path_sprites.erase(tile)
 
 
 ## Spawns the building visual sprite when BuildingRegistry confirms placement.
-func _on_building_placed(_building_id: String, type: int, tile: Vector2i) -> void:
+func _on_building_placed(building_id: String, type: int, tile: Vector2i) -> void:
 	var sprite := Sprite2D.new()
 	sprite.texture = load(_building_texture_path(type))
 	var tile_px: int = WorldGrid.TILE_SIZE
 	sprite.position = Vector2(tile) * tile_px + Vector2(tile_px, tile_px) * 0.5
 	sprite.z_index = 2
+
+	var instance: BuildingRegistry.BuildingInstance = _registry.get_building_instance(building_id)
+	if instance != null and instance.state == BuildingRegistry.BuildingInstance.State.CONSTRUCTING:
+		sprite.modulate = _SKELETON_MODULATE
+	_building_sprites[building_id] = sprite
+
 	add_child(sprite)
+
+	var build_time: int = BuildingRegistry.BUILD_TIME.get(type, 0)
+	if build_time > 0 or BuildingRegistry.PRODUCTION_TABLE.has(type):
+		var indicator := BuildingStatusIndicator.new()
+		indicator.position = sprite.position + Vector2(tile_px * 0.32, tile_px * 0.32)
+		indicator.z_index = 3
+		add_child(indicator)
+		_building_indicators[building_id] = indicator
+		_refresh_indicator(building_id)
+
+	PathSystem.update_neighbors(tile)
+
+
+func _on_building_construction_complete(building_id: String, _type: int) -> void:
+	var sprite: Sprite2D = _building_sprites.get(building_id)
+	if sprite == null:
+		return
+	var tween := create_tween()
+	tween.tween_property(sprite, "modulate", Color.WHITE, 0.5).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+
+func _on_building_items_dropped(tile: Vector2i, items: Dictionary) -> void:
+	var seed_base: int = Time.get_ticks_msec()
+	var i: int = 0
+	for res_id: StringName in items:
+		var qty: int = items[res_id]
+		for _j in range(qty):
+			if grid.add_resource_to_tile(tile, res_id, true):
+				_spawn_badge(tile, [res_id], self, 0.0, true, seed_base + i * 37)
+			i += 1
+
+
+func _on_building_demolished(building_id: StringName) -> void:
+	var id: String = str(building_id)
+	var sprite: Sprite2D = _building_sprites.get(id)
+	if sprite != null:
+		var tile_px: int = WorldGrid.TILE_SIZE
+		var tile := Vector2i((sprite.position - Vector2(tile_px, tile_px) * 0.5) / tile_px)
+		sprite.queue_free()
+		_building_sprites.erase(id)
+		PathSystem.update_neighbors(tile)
+	var indicator: BuildingStatusIndicator = _building_indicators.get(id)
+	if indicator != null:
+		indicator.queue_free()
+		_building_indicators.erase(id)
+
+
+func _on_building_state_changed(building_id: String, _new_state: int, _reason: String) -> void:
+	_refresh_indicator(building_id)
+
+
+func _on_ticks_advanced_indicators(_delta: int) -> void:
+	for building_id: String in _building_indicators:
+		_refresh_indicator(building_id)
+	_advance_pending_transports(_delta)
+
+
+func _refresh_indicator(building_id: String) -> void:
+	var indicator: BuildingStatusIndicator = _building_indicators.get(building_id)
+	if indicator == null:
+		return
+	var instance: BuildingRegistry.BuildingInstance = _registry.get_building_instance(building_id)
+	if instance == null:
+		return
+
+	if instance.state == BuildingRegistry.BuildingInstance.State.CONSTRUCTING:
+		var progress: float = float(instance.accumulated_ticks) / float(instance.build_time) \
+			if instance.build_time > 0 else 0.0
+		indicator.set_construction_progress(progress)
+		indicator.show()
+		return
+
+	if not BuildingRegistry.PRODUCTION_TABLE.has(instance.type):
+		indicator.hide()
+		return
+
+	indicator.show()
+	if instance.cycle_running:
+		var duration: int = instance.production_cycle_duration
+		indicator.set_progress(float(instance.production_cycle_ticks) / float(duration) \
+			if duration > 0 else 1.0)
+	elif _building_has_valid_input(instance):
+		indicator.set_progress(0.0)
+	else:
+		indicator.set_idle()
+
+
+## Advances all pending manual transports and completes any that have finished.
+func _advance_pending_transports(delta: int) -> void:
+	if _pending_transports.is_empty():
+		return
+	var completed: Array = []
+	for pt: Dictionary in _pending_transports:
+		pt.ticks_elapsed += delta
+		var progress: float = minf(float(pt.ticks_elapsed) / float(pt.ticks_total), 1.0)
+		if is_instance_valid(pt.indicator):
+			pt.indicator.set_progress(progress)
+		if pt.ticks_elapsed >= pt.ticks_total:
+			completed.append(pt)
+	for pt: Dictionary in completed:
+		_pending_transports.erase(pt)
+		if is_instance_valid(pt.indicator):
+			pt.indicator.queue_free()
+		_free_pending_path_overlay(pt.get("path_overlay", {}))
+		var icon_entry: Dictionary = pt.get("icon_entry", {})
+		if not icon_entry.is_empty() and pt.has("target_tile"):
+			# World drag: tween icon from source to destination, then commit.
+			var icon: Node2D = pt.icon
+			var tile_px: int = WorldGrid.TILE_SIZE
+			var to_tile: Vector2i = pt.target_tile
+			var new_pos: Vector2 = Vector2(to_tile) * tile_px + Vector2(tile_px, tile_px) * 0.5
+			var tween: Tween = create_tween()
+			tween.tween_property(icon, "position", new_pos, 0.22).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+			tween.tween_callback(pt.on_complete)
+		else:
+			pt.on_complete.call()
+	if _pending_transports.is_empty() and _action_indicator == null:
+		TickSystem.set_pause(_was_paused_before_action)
+
+
+## Spawns a progress circle indicator at the given tile for a pending transport.
+func _spawn_transport_indicator(tile: Vector2i) -> BuildingStatusIndicator:
+	var tile_px: int = WorldGrid.TILE_SIZE
+	var indicator := BuildingStatusIndicator.new()
+	indicator.position = (Vector2(tile) * tile_px + Vector2(tile_px, tile_px) * 0.5
+		+ Vector2(tile_px * 0.32, tile_px * 0.32))
+	indicator.z_index = 15
+	add_child(indicator)
+	indicator.set_progress(0.0)
+	return indicator
+
+
+## Spawns a persistent path line + animated dots for a pending transport.
+## Returns a Dictionary with line, dots, dst_marker, path_points, path_len.
+func _spawn_pending_path_overlay(from_tile: Vector2i, to_tile: Vector2i) -> Dictionary:
+	var tile_px: float = float(WorldGrid.TILE_SIZE)
+	var half: float = tile_px * 0.5
+	var src_center: Vector2 = Vector2(from_tile) * tile_px + Vector2(half, half)
+	var dst_center: Vector2 = Vector2(to_tile) * tile_px + Vector2(half, half)
+	var path: Array[Vector2] = []
+	path.append(src_center)
+	var corner := Vector2(dst_center.x, src_center.y)
+	if corner != src_center and corner != dst_center:
+		path.append(corner)
+	path.append(dst_center)
+	var path_len: float = _path_length(path)
+	var line := Line2D.new()
+	line.width = _PATH_LINE_WIDTH
+	line.default_color = _PATH_COLOR_VALID
+	line.joint_mode = Line2D.LINE_JOINT_ROUND
+	line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	line.end_cap_mode = Line2D.LINE_CAP_ROUND
+	line.z_index = 5
+	add_child(line)
+	for pt: Vector2 in path:
+		line.add_point(pt)
+	var dots: Array = []
+	for _i in range(_PATH_DOT_COUNT):
+		var dot := Sprite2D.new()
+		dot.texture = _make_circle_texture(_PATH_DOT_RADIUS, Color.WHITE)
+		dot.modulate = _PATH_COLOR_VALID
+		dot.z_index = 6
+		add_child(dot)
+		dots.append(dot)
+	var dst_marker := Sprite2D.new()
+	dst_marker.texture = _make_circle_texture(_PATH_DST_MARKER_RADIUS, Color.WHITE)
+	dst_marker.modulate = _PATH_COLOR_VALID
+	dst_marker.position = dst_center
+	dst_marker.z_index = 6
+	add_child(dst_marker)
+	return {
+		"line": line, "dots": dots, "dst_marker": dst_marker,
+		"path_points": path, "path_len": path_len,
+	}
+
+
+## Updates animated dot positions for an active pending transport overlay.
+func _animate_pending_path_overlay(pt: Dictionary) -> void:
+	var overlay: Dictionary = pt.get("path_overlay", {})
+	if overlay.is_empty():
+		return
+	var path: Array[Vector2] = overlay.path_points
+	var path_len: float = overlay.path_len
+	if path_len < 1.0:
+		return
+	var spacing: float = path_len / float(_PATH_DOT_COUNT)
+	var phase_wrapped: float = fmod(pt.path_phase, path_len)
+	for i in range(_PATH_DOT_COUNT):
+		var dot: Sprite2D = overlay.dots[i]
+		var t: float = fmod(phase_wrapped + float(i) * spacing, path_len)
+		dot.position = _point_along_path(path, t)
+
+
+## Frees all nodes belonging to a pending transport path overlay.
+func _free_pending_path_overlay(overlay: Dictionary) -> void:
+	if overlay.is_empty():
+		return
+	if is_instance_valid(overlay.get("line")):
+		overlay.line.queue_free()
+	for dot in overlay.get("dots", []):
+		if is_instance_valid(dot):
+			dot.queue_free()
+	if is_instance_valid(overlay.get("dst_marker")):
+		overlay.dst_marker.queue_free()
+
+
+## Returns true if instance.input_buffer satisfies all input requirements for
+## one production cycle. Mirrors BuildingDetailPanel._has_valid_input.
+func _building_has_valid_input(instance: BuildingRegistry.BuildingInstance) -> bool:
+	var table_entry: Dictionary = BuildingRegistry.PRODUCTION_TABLE.get(instance.type, {})
+	for input_spec: Dictionary in table_entry.get("inputs", []):
+		var resource_id: StringName = input_spec["resource_id"]
+		var needed: float = input_spec.get("charge_cost", float(input_spec.get("quantity", 0)))
+		if instance.input_buffer.get(resource_id, 0.0) < needed:
+			return false
+	return not table_entry.get("inputs", []).is_empty()
 
 
 func _building_texture_path(type: int) -> String:
@@ -1205,12 +1889,10 @@ func _building_texture_path(type: int) -> String:
 ## Connects inventory screen signals to the HUD storage panel after all _ready() calls complete.
 ## Deferred so the HUD CanvasLayer has added itself to the "hud" group first.
 func _wire_inventory_hud() -> void:
-	var hud: HUD = get_tree().get_first_node_in_group(&"hud") as HUD
-	if hud == null:
+	if _hud == null:
 		push_warning("[MapRoot] HUD not found in group 'hud' — inventory↔HUD signals not wired")
 		return
-	_inventory_screen.inventory_opened.connect(hud.hide_storage_panel)
-	_inventory_screen.inventory_closed.connect(hud.show_storage_panel)
+
 
 
 ## Maps WorldGrid.TileType to the correct ManualActionType.

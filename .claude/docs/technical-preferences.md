@@ -66,7 +66,10 @@ Adjust `--godot_binary` for your system (e.g. Linux: `$(which godot)`). HTML/XML
 
 ## Forbidden Patterns
 
-- [None configured yet — add as architectural decisions are made]
+- **`Engine.get_singleton("Name")`** — NEVER use for GDScript Autoloads. Returns `null` silently.
+  Access Autoloads directly by their registered name: `PathSystem.has_path(pos)`, `BuildingRegistry.get_movement_cost(id)`.
+  `Engine.get_singleton()` is only for C++ engine singletons and plugin singletons.
+  See `.claude/rules/godot-singletons.md` for the full rule and Autoload table.
 
 ## Allowed Libraries / Addons
 

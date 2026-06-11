@@ -22,7 +22,7 @@ var _player: PlayerCharScript
 const SUPPLY_CONTAINER: StringName = &"test_supply"
 
 
-func before_each() -> void:
+func before_test() -> void:
 	# Build WorldGrid without the scene tree (_init_arrays replaces _ready).
 	_grid = WorldGridScript.new()
 	_grid._init_arrays()
@@ -60,7 +60,7 @@ func test_storage_area_placed_enters_operating_immediately() -> void:
 	var tile := Vector2i(5, 5)
 
 	# Act
-	var result: int = _registry.initiate_build(BuildingRegScript.BuildingType.STORAGE_AREA, tile)
+	var result: int = _registry.initiate_build(BuildingRegScript.BuildingType.COLLECTION_POINT, tile)
 
 	# Assert
 	assert_int(result).is_equal(BuildingRegScript.PlacementResult.SUCCESS)
@@ -73,7 +73,7 @@ func test_storage_area_creates_inventory_container() -> void:
 	var tile := Vector2i(3, 3)
 
 	# Act
-	_registry.initiate_build(BuildingRegScript.BuildingType.STORAGE_AREA, tile)
+	_registry.initiate_build(BuildingRegScript.BuildingType.COLLECTION_POINT, tile)
 
 	# Assert
 	var expected_id: StringName = StringName("storage_%d_%d" % [tile.x, tile.y])
@@ -121,7 +121,7 @@ func test_placement_blocked_by_impassable_tile() -> void:
 	_grid._terrain[tile.x][tile.y] = WorldGridScript.TileType.IMPASSABLE
 
 	# Act
-	var result: int = _registry.initiate_build(BuildingRegScript.BuildingType.STORAGE_AREA, tile)
+	var result: int = _registry.initiate_build(BuildingRegScript.BuildingType.COLLECTION_POINT, tile)
 
 	# Assert
 	assert_int(result).is_equal(BuildingRegScript.PlacementResult.BLOCKED_BY_IMPASSABLE)
@@ -133,7 +133,7 @@ func test_placement_blocked_by_existing_building() -> void:
 	_grid._buildings[tile.x][tile.y] = "pre_existing"
 
 	# Act
-	var result: int = _registry.initiate_build(BuildingRegScript.BuildingType.STORAGE_AREA, tile)
+	var result: int = _registry.initiate_build(BuildingRegScript.BuildingType.COLLECTION_POINT, tile)
 
 	# Assert
 	assert_int(result).is_equal(BuildingRegScript.PlacementResult.BLOCKED_BY_BUILDING)
@@ -144,7 +144,7 @@ func test_placement_blocked_by_out_of_bounds() -> void:
 	var tile := Vector2i(-1, 0)
 
 	# Act
-	var result: int = _registry.initiate_build(BuildingRegScript.BuildingType.STORAGE_AREA, tile)
+	var result: int = _registry.initiate_build(BuildingRegScript.BuildingType.COLLECTION_POINT, tile)
 
 	# Assert
 	assert_int(result).is_equal(BuildingRegScript.PlacementResult.BLOCKED_BY_BOUNDS)
@@ -157,7 +157,7 @@ func test_placement_blocked_by_nonclearable_resource() -> void:
 	_grid._resources[tile.x][tile.y] = [res]
 
 	# Act
-	var result: int = _registry.initiate_build(BuildingRegScript.BuildingType.STORAGE_AREA, tile)
+	var result: int = _registry.initiate_build(BuildingRegScript.BuildingType.COLLECTION_POINT, tile)
 
 	# Assert
 	assert_int(result).is_equal(BuildingRegScript.PlacementResult.BLOCKED_BY_RESOURCE_TILE)
@@ -203,7 +203,7 @@ func test_building_placed_signal_emitted() -> void:
 	var signal_monitor := monitor_signals(_registry)
 
 	# Act
-	_registry.initiate_build(BuildingRegScript.BuildingType.STORAGE_AREA, tile)
+	_registry.initiate_build(BuildingRegScript.BuildingType.COLLECTION_POINT, tile)
 
 	# Assert
 	assert_signal_emitted(signal_monitor, "building_placed")
@@ -233,7 +233,7 @@ func test_clearable_resource_removed_on_placement() -> void:
 	_grid._resources[tile.x][tile.y] = [res]
 
 	# Act
-	_registry.initiate_build(BuildingRegScript.BuildingType.STORAGE_AREA, tile)
+	_registry.initiate_build(BuildingRegScript.BuildingType.COLLECTION_POINT, tile)
 
 	# Assert — WorldGrid resource layer cleared
 	assert_int(_grid._resources[tile.x][tile.y].size()).is_equal(0)

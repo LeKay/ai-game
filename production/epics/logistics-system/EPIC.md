@@ -4,7 +4,7 @@
 > **GDD**: design/gdd/logistics-system.md
 > **Architecture Module**: LogisticsSystem (autoload singleton)
 > **Status**: Ready
-> **Stories**: 8 created (2 Logic, 4 Integration, 1 Visual/Feel, 1 UI)
+> **Stories**: 12 created (4 Logic, 6 Integration, 1 Visual/Feel, 1 UI)
 
 ## Stories
 
@@ -18,6 +18,10 @@
 | 006 | Route Visualization | Visual/Feel | Ready | ADR-0011 |
 | 007 | Efficiency and Carrier Count Formulas | Logic | Ready | ADR-0011 |
 | 008 | Transportation Management UI | UI | Ready | design/ux/transportation.md |
+| 009 | Tile Movement Cost Data Model | Logic | Ready | ADR-0013 |
+| 010 | Weighted A* Pathfinding | Logic | Ready | ADR-0013 |
+| 011 | Logistics Route Path Integration | Integration | Ready | ADR-0013 |
+| 012 | Path Invalidation on Terrain Change | Integration | Ready | ADR-0013 |
 
 ## Overview
 

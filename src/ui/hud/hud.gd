@@ -1,9 +1,8 @@
 class_name HUD extends CanvasLayer
-## HUD: persistent gameplay overlay — energy bar, day counter, tick controls, storage panel.
+## HUD: persistent gameplay overlay — energy bar, day counter, tick controls.
 ##
 ## Partial implementation:
 ##   story-002: Energy + tick controls + day/time display are live.
-##   story-006: Storage panel (collapsed/expanded global resource overview) is live.
 ##
 ## NPC count, food status, toast container, and building detail panel are stubbed
 ## (hidden nodes) pending their system dependencies.
@@ -25,15 +24,8 @@ const ENERGY_BAR_WIDTH  := 120
 const ENERGY_BAR_HEIGHT := 8
 const ENERGY_SEGMENTS   := 10
 const ENERGY_SEG_GAP    := 2
-const MINUTES_PER_DAY   := 1440
 
 const TICK_SPEEDS: Array[float] = [0.5, 1.0, 2.0]
-
-## Storage panel (Element 5 / 6 in UX spec)
-const STORAGE_PANEL_WIDTH      := 160
-const STORAGE_PANEL_MAX_HEIGHT := 300
-const STORAGE_ROW_HEIGHT       := 22   ## estimated height per resource row in px
-const PANEL_ANIM_DURATION      := 0.20 ## 200 ms ease-out per UX spec
 
 # --- Node references (populated in _build_ui) --------------------------------
 
@@ -45,23 +37,21 @@ var _speed_inc_btn:   Button
 var _play_pause_btn:  Button
 var _energy_segments: Array[ColorRect] = []
 
-var _storage_panel:      PanelContainer
-var _storage_label:      Label
-var _storage_toggle_btn: Button
-var _resource_scroll:    ScrollContainer
-var _resource_list:      VBoxContainer
-var _in_transit_badge:   Label
-
 var _building_detail_panel: BuildingDetailPanel
+var _npc_detail_panel:      NpcDetailPanel
+var _transportation_panel:  TransportationPanel
+var _transport_btn:          Button
+var _save_btn:               Button
+var _map_select_prompt:      Label
+var _map_select_step:        String = ""
+var _toast_label:            Label
+var _toast_tween:            Tween = null
 
 # --- System references -------------------------------------------------------
 
 var _player_character: Node = null
 
 var _day_tick_count: int = 0
-
-var _is_panel_expanded: bool = false
-var _panel_tween: Tween = null
 
 
 # --- Lifecycle ---------------------------------------------------------------
@@ -82,25 +72,18 @@ func _exit_tree() -> void:
 		TickSystem.pause_state_changed.disconnect(_on_pause_state_changed)
 	if _player_character != null and _player_character.energy_changed.is_connected(_on_energy_changed):
 		_player_character.energy_changed.disconnect(_on_energy_changed)
-	if InventorySystem.storage_changed.is_connected(_on_storage_changed):
-		InventorySystem.storage_changed.disconnect(_on_storage_changed)
-	if InventorySystem.container_capacity_changed.is_connected(_on_container_capacity_changed):
-		InventorySystem.container_capacity_changed.disconnect(_on_container_capacity_changed)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _is_panel_expanded:
-		return
 	var key := event as InputEventKey
-	if key != null and key.pressed and key.keycode == KEY_ESCAPE:
-		_toggle_storage_panel()
-		get_viewport().set_input_as_handled()
-		return
-	var click := event as InputEventMouseButton
-	if click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
-		if not _storage_panel.get_global_rect().has_point(click.global_position):
-			_toggle_storage_panel()
+	if _map_select_step != "":
+		if key != null and key.pressed and key.keycode == KEY_ESCAPE:
+			notify_building_selected_in_map_select(&"")
 			get_viewport().set_input_as_handled()
+		return
+	if key != null and key.pressed and event.is_action_pressed(InputActions.PAUSE_TOGGLE):
+		TickSystem.set_pause(not TickSystem.is_paused())
+		get_viewport().set_input_as_handled()
 
 
 # --- UI construction ---------------------------------------------------------
@@ -127,13 +110,15 @@ func _build_ui() -> void:
 
 	_add_time_display(hbox)
 	_add_energy_bar(hbox)
+	_add_transport_btn(hbox)
+	_add_save_btn(hbox)
 
 	var right_pad := Control.new()
 	right_pad.custom_minimum_size = Vector2(BAND_PADDING, 0)
 	hbox.add_child(right_pad)
 
-	_add_storage_panel()
 	_add_stubs()
+	_add_toast()
 
 
 func _make_top_band() -> Control:
@@ -168,7 +153,7 @@ func _add_tick_controls(parent: HBoxContainer) -> void:
 	_speed_dec_btn.name = "SpeedDecBtn"
 	_speed_dec_btn.text = "-"
 	_speed_dec_btn.custom_minimum_size = Vector2(24, 24)
-	_speed_dec_btn.focus_mode = Control.FOCUS_ALL
+	_speed_dec_btn.focus_mode = Control.FOCUS_NONE
 	_speed_dec_btn.pressed.connect(_on_speed_dec_pressed)
 	hbox.add_child(_speed_dec_btn)
 
@@ -185,7 +170,7 @@ func _add_tick_controls(parent: HBoxContainer) -> void:
 	_speed_inc_btn.name = "SpeedIncBtn"
 	_speed_inc_btn.text = "+"
 	_speed_inc_btn.custom_minimum_size = Vector2(24, 24)
-	_speed_inc_btn.focus_mode = Control.FOCUS_ALL
+	_speed_inc_btn.focus_mode = Control.FOCUS_NONE
 	_speed_inc_btn.pressed.connect(_on_speed_inc_pressed)
 	hbox.add_child(_speed_inc_btn)
 
@@ -193,7 +178,7 @@ func _add_tick_controls(parent: HBoxContainer) -> void:
 	_play_pause_btn.name = "PlayPauseBtn"
 	_play_pause_btn.text = "▶"
 	_play_pause_btn.custom_minimum_size = Vector2(36, 24)
-	_play_pause_btn.focus_mode = Control.FOCUS_ALL
+	_play_pause_btn.focus_mode = Control.FOCUS_NONE
 	_play_pause_btn.pressed.connect(_on_play_pause_pressed)
 	hbox.add_child(_play_pause_btn)
 
@@ -276,70 +261,82 @@ func _add_energy_bar(parent: HBoxContainer) -> void:
 		_energy_segments.append(seg)
 
 
-## Builds the storage panel (Element 5/5b/6) anchored to the top-right corner
-## beneath the top band. Panel starts collapsed — only "Used: X/Y" is visible.
-func _add_storage_panel() -> void:
-	_storage_panel = PanelContainer.new()
-	_storage_panel.name = "StoragePanel"
-	_storage_panel.anchor_left   = 1.0
-	_storage_panel.anchor_right  = 1.0
-	_storage_panel.anchor_top    = 0.0
-	_storage_panel.anchor_bottom = 0.0
-	_storage_panel.offset_left   = -STORAGE_PANEL_WIDTH
-	_storage_panel.offset_right  = 0
-	_storage_panel.offset_top    = TOP_BAND_HEIGHT
-	_storage_panel.offset_bottom = TOP_BAND_HEIGHT  # PanelContainer sizes to content
-	add_child(_storage_panel)
+## Adds the transport icon button to the HUD top band.
+func _add_transport_btn(parent: HBoxContainer) -> void:
+	_transport_btn = Button.new()
+	_transport_btn.name = "TransportBtn"
+	_transport_btn.text = "🚚"
+	_transport_btn.tooltip_text = "Transportation"
+	_transport_btn.custom_minimum_size = Vector2(36, 28)
+	_transport_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_transport_btn.focus_mode = Control.FOCUS_NONE
+	_transport_btn.pressed.connect(_on_transport_btn_pressed)
+	parent.add_child(_transport_btn)
 
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 2)
-	_storage_panel.add_child(vbox)
 
-	# Header row — always visible (collapsed state)
-	var header := HBoxContainer.new()
-	header.name = "CollapseRow"
-	header.add_theme_constant_override("separation", 4)
-	header.custom_minimum_size = Vector2(0, 28)
-	vbox.add_child(header)
+## Adds the save icon button to the HUD top band.
+func _add_save_btn(parent: HBoxContainer) -> void:
+	_save_btn = Button.new()
+	_save_btn.name = "SaveBtn"
+	_save_btn.text = "💾"
+	_save_btn.tooltip_text = "Save Game"
+	_save_btn.custom_minimum_size = Vector2(36, 28)
+	_save_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_save_btn.focus_mode = Control.FOCUS_NONE
+	_save_btn.pressed.connect(_on_save_btn_pressed)
+	parent.add_child(_save_btn)
 
-	_storage_label = Label.new()
-	_storage_label.name = "StorageLabel"
-	_storage_label.text = "—/—"
-	_storage_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_storage_label.vertical_alignment    = VERTICAL_ALIGNMENT_CENTER
-	_storage_label.add_theme_font_size_override("font_size", 14)
-	header.add_child(_storage_label)
 
-	_storage_toggle_btn = Button.new()
-	_storage_toggle_btn.name = "ToggleBtn"
-	_storage_toggle_btn.text = "▼"
-	_storage_toggle_btn.custom_minimum_size = Vector2(24, 24)
-	_storage_toggle_btn.focus_mode = Control.FOCUS_ALL
-	_storage_toggle_btn.pressed.connect(_on_storage_toggle_pressed)
-	header.add_child(_storage_toggle_btn)
+## Builds the transient toast label shown at the bottom-center of the screen
+## (e.g. "Game saved"). Hidden until show_toast() is called.
+func _add_toast() -> void:
+	_toast_label = Label.new()
+	_toast_label.name = "Toast"
+	_toast_label.visible = false
+	_toast_label.modulate.a = 0.0
+	_toast_label.anchor_left   = 0.5
+	_toast_label.anchor_right  = 0.5
+	_toast_label.anchor_top    = 1.0
+	_toast_label.anchor_bottom = 1.0
+	_toast_label.offset_left   = -180
+	_toast_label.offset_right  =  180
+	_toast_label.offset_top    = -96
+	_toast_label.offset_bottom = -60
+	_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast_label.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	_toast_label.add_theme_font_size_override("font_size", 15)
+	_toast_label.add_theme_color_override("font_color", Color("#F0EDE6"))
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.1, 0.1, 0.1, 0.85)
+	style.corner_radius_top_left     = 4
+	style.corner_radius_top_right    = 4
+	style.corner_radius_bottom_left  = 4
+	style.corner_radius_bottom_right = 4
+	style.content_margin_left   = 12
+	style.content_margin_right  = 12
+	style.content_margin_top    = 6
+	style.content_margin_bottom = 6
+	_toast_label.add_theme_stylebox_override("normal", style)
+	add_child(_toast_label)
 
-	# Scrollable resource list — hidden until expanded
-	_resource_scroll = ScrollContainer.new()
-	_resource_scroll.name = "ResourceScroll"
-	_resource_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_resource_scroll.custom_minimum_size = Vector2(0, 0)
-	_resource_scroll.visible = false
-	vbox.add_child(_resource_scroll)
 
-	_resource_list = VBoxContainer.new()
-	_resource_list.name = "ResourceList"
-	_resource_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_resource_list.add_theme_constant_override("separation", 2)
-	_resource_scroll.add_child(_resource_list)
-
-	# In-transit badge (Element 5b) — floating above the toggle button.
-	# Hidden until story-003 (start_transport) is implemented.
-	_in_transit_badge = Label.new()
-	_in_transit_badge.name = "InTransitBadge"
-	_in_transit_badge.text = ""
-	_in_transit_badge.visible = false
-	_in_transit_badge.add_theme_font_size_override("font_size", 12)
-	add_child(_in_transit_badge)
+## Shows a transient toast message that fades in, holds, then fades out.
+## Pass is_error = true to display the message in red (e.g. blocked actions).
+func show_toast(text: String, hold_seconds: float = 1.6, is_error: bool = false) -> void:
+	if _toast_label == null:
+		return
+	if _toast_tween != null and _toast_tween.is_valid():
+		_toast_tween.kill()
+	_toast_label.text = text
+	_toast_label.add_theme_color_override("font_color",
+		Color("#E57373") if is_error else Color("#F0EDE6"))
+	_toast_label.visible = true
+	_toast_label.modulate.a = 0.0
+	_toast_tween = create_tween()
+	_toast_tween.tween_property(_toast_label, "modulate:a", 1.0, 0.2)
+	_toast_tween.tween_interval(hold_seconds)
+	_toast_tween.tween_property(_toast_label, "modulate:a", 0.0, 0.4)
+	_toast_tween.tween_callback(func() -> void: _toast_label.visible = false)
 
 
 ## Adds hidden placeholder nodes for elements pending system implementation.
@@ -354,7 +351,56 @@ func _add_stubs() -> void:
 
 	_building_detail_panel = BuildingDetailPanel.new()
 	_building_detail_panel.name = "BuildingDetailPanel"
+	_building_detail_panel.transport_management_opened.connect(_on_transport_management_opened)
+	_building_detail_panel.npc_detail_requested.connect(_on_npc_detail_requested)
 	add_child(_building_detail_panel)
+
+	_npc_detail_panel = NpcDetailPanel.new()
+	_npc_detail_panel.name = "NpcDetailPanel"
+	_npc_detail_panel.panel_x_offset = 0.0
+	_npc_detail_panel.food_assigned.connect(
+		func(npc_id: StringName, resource_id: StringName) -> void:
+			HungerSystem.assign_food(npc_id, resource_id))
+	_npc_detail_panel.food_cleared.connect(
+		func(npc_id: StringName) -> void:
+			HungerSystem.clear_food_assignment(npc_id))
+	_npc_detail_panel.food_amount_changed.connect(
+		func(npc_id: StringName, amount: int) -> void:
+			HungerSystem.set_food_amount(npc_id, amount))
+	add_child(_npc_detail_panel)
+
+	_transportation_panel = TransportationPanel.new()
+	_transportation_panel.name = "TransportationPanel"
+	add_child(_transportation_panel)
+
+	# Map-select text prompt — shown during map-select mode over the gameplay view.
+	_map_select_prompt = Label.new()
+	_map_select_prompt.name = "MapSelectPrompt"
+	_map_select_prompt.visible = false
+	_map_select_prompt.anchor_left   = 0.5
+	_map_select_prompt.anchor_right  = 0.5
+	_map_select_prompt.anchor_top    = 1.0
+	_map_select_prompt.anchor_bottom = 1.0
+	_map_select_prompt.offset_left   = -160
+	_map_select_prompt.offset_right  =  160
+	_map_select_prompt.offset_top    = -60
+	_map_select_prompt.offset_bottom = -30
+	_map_select_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_map_select_prompt.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	_map_select_prompt.add_theme_font_size_override("font_size", 14)
+	_map_select_prompt.add_theme_color_override("font_color", Color("#F0EDE6"))
+	var prompt_style := StyleBoxFlat.new()
+	prompt_style.bg_color = Color(0.1, 0.1, 0.1, 0.8)
+	prompt_style.corner_radius_top_left     = 4
+	prompt_style.corner_radius_top_right    = 4
+	prompt_style.corner_radius_bottom_left  = 4
+	prompt_style.corner_radius_bottom_right = 4
+	prompt_style.content_margin_left   = 12
+	prompt_style.content_margin_right  = 12
+	prompt_style.content_margin_top    = 6
+	prompt_style.content_margin_bottom = 6
+	_map_select_prompt.add_theme_stylebox_override("normal", prompt_style)
+	add_child(_map_select_prompt)
 
 
 # --- System wiring -----------------------------------------------------------
@@ -370,8 +416,11 @@ func _connect_systems() -> void:
 	else:
 		_player_character.energy_changed.connect(_on_energy_changed)
 
-	InventorySystem.storage_changed.connect(_on_storage_changed)
-	InventorySystem.container_capacity_changed.connect(_on_container_capacity_changed)
+	_transportation_panel.route_created.connect(_on_transport_route_created)
+	_transportation_panel.route_updated.connect(_on_transport_route_updated)
+	_transportation_panel.route_deleted.connect(_on_transport_route_deleted)
+	_transportation_panel.map_select_requested.connect(_on_map_select_requested)
+	_transportation_panel.panel_closed.connect(_on_transport_panel_closed)
 
 
 func _refresh_initial_state() -> void:
@@ -386,7 +435,6 @@ func _refresh_initial_state() -> void:
 			_player_character.get_current_energy(),
 			_player_character.get_max_energy()
 		)
-	_refresh_storage_panel()
 
 
 # --- Signal handlers ---------------------------------------------------------
@@ -410,16 +458,98 @@ func _on_energy_changed(current: int, max_energy: int) -> void:
 	_update_energy_bar(current, max_energy)
 
 
-func _on_storage_changed(_container_id: StringName) -> void:
-	_refresh_storage_panel()
+func _on_transport_btn_pressed() -> void:
+	if _transportation_panel.visible:
+		_transportation_panel.close()
+	else:
+		_transportation_panel.open("hud")
 
 
-func _on_container_capacity_changed(_container_id: StringName, _old: int, _new: int) -> void:
-	_refresh_storage_panel()
+func _on_transport_management_opened(building_id: String, role: String) -> void:
+	_transportation_panel.open_for_building(StringName(building_id), role)
 
 
-func _on_storage_toggle_pressed() -> void:
-	_toggle_storage_panel()
+func _on_transport_route_created(from_id: StringName, to_id: StringName, npc_id: StringName, item_id: StringName) -> void:
+	# Storage→production: INPUT type (fills input slot on destination).
+	# Production→anywhere: OUTPUT type (fills output slot on source).
+	var from_instance := BuildingRegistry.get_building_instance(str(from_id))
+	var route_type: int = LogisticsRoute.RouteType.INPUT \
+		if from_instance != null and BuildingRegistry.STORAGE_CAPACITY.has(from_instance.type) \
+		else LogisticsRoute.RouteType.OUTPUT
+	var result: Dictionary = LogisticsSystem.create_route(
+		from_id, to_id, npc_id, route_type, item_id)
+	if not result.get("success", false):
+		push_warning("[HUD] Route creation failed: %s" % result.get("error", ""))
+	else:
+		var route: LogisticsRoute = result.get("route")
+		if route != null:
+			LogisticsSystem.start_route(route.id)
+	_transportation_panel.refresh()
+
+
+func _on_transport_route_updated(route_id: StringName, changes: Dictionary) -> void:
+	var route: LogisticsRoute = null
+	for r: LogisticsRoute in LogisticsSystem.get_active_routes():
+		if r.id == route_id:
+			route = r
+			break
+	if route == null:
+		return
+	var new_from    := changes.get("from", route.source_building_id) as StringName
+	var new_to      := changes.get("to",   route.destination_building_id) as StringName
+	var new_npc     := changes.get("npc",  route.npc_id) as StringName
+	var new_item_id := changes.get("item", route.source_item_id) as StringName
+	LogisticsSystem.delete_route(route_id)
+	var result := LogisticsSystem.create_route(new_from, new_to, new_npc, route.route_type, new_item_id)
+	if result.get("success", false) and result.get("route") != null:
+		LogisticsSystem.start_route(result["route"].id)
+	elif not result.get("success", false):
+		push_warning("[HUD] Route update failed: %s" % result.get("error", ""))
+	_transportation_panel.refresh()
+
+
+func _on_transport_route_deleted(route_id: StringName) -> void:
+	LogisticsSystem.delete_route(route_id)
+	_transportation_panel.refresh()
+
+
+func _on_transport_panel_closed(_changes_made: bool) -> void:
+	_exit_map_select_mode()
+
+
+## Returns true while the player is selecting a building on the map for a route.
+func is_map_select_active() -> bool:
+	return _map_select_step != ""
+
+
+## Enters map-select mode: hides all open panels, shows a text prompt.
+## The map_root should call notify_building_selected_in_map_select() when the player
+## clicks a building on the map.
+func _on_map_select_requested(step: String) -> void:
+	_map_select_step = step
+	_transportation_panel.hide_for_map_select()
+	if _building_detail_panel != null and _building_detail_panel.visible:
+		_building_detail_panel.close()
+	var prompt_text := "Select source building" if step == "from" else "Select destination building"
+	_map_select_prompt.text = prompt_text
+	_map_select_prompt.visible = true
+	_transport_btn.disabled = true
+
+
+func _exit_map_select_mode() -> void:
+	_map_select_step = ""
+	_map_select_prompt.visible = false
+	_transport_btn.disabled = false
+
+
+## Called by map_root when the player clicks a building during map-select.
+## Pass building_id = &"" to cancel (clicked empty space).
+func notify_building_selected_in_map_select(building_id: StringName) -> void:
+	if _map_select_step == "":
+		return
+	var step := _map_select_step
+	_exit_map_select_mode()
+	_transportation_panel.resume_map_select(step, building_id)
 
 
 # --- Button handlers ---------------------------------------------------------
@@ -440,148 +570,11 @@ func _on_play_pause_pressed() -> void:
 	TickSystem.set_pause(not TickSystem.is_paused())
 
 
-# --- Storage panel logic -----------------------------------------------------
-
-## Recomputes used/total and per-resource counts; rebuilds the resource list rows.
-## Called on every storage_changed or container_capacity_changed signal.
-func _refresh_storage_panel() -> void:
-	var summary := _compute_storage_summary()
-	var used: int  = summary[&"used"]
-	var total: int = summary[&"total"]
-
-	if total == 0:
-		_storage_label.text = "—/—"
+func _on_save_btn_pressed() -> void:
+	if WorldSaveManager.save_game(1):
+		show_toast("Game saved")
 	else:
-		_storage_label.text = "Used: %d/%d" % [used, total]
-
-	# Rebuild resource rows — clear existing, add one row per resource type.
-	for child in _resource_list.get_children():
-		child.queue_free()
-
-	var resources: Dictionary = summary[&"resources"]
-	if resources.is_empty():
-		var empty_lbl := Label.new()
-		empty_lbl.text = "No storage available"
-		empty_lbl.add_theme_font_size_override("font_size", 14)
-		_resource_list.add_child(empty_lbl)
-	else:
-		for res_id: StringName in resources:
-			_resource_list.add_child(_make_resource_row(res_id, resources[res_id]))
-
-	# If the panel is expanded, update the scroll height to match new row count.
-	if _is_panel_expanded:
-		var row_count: int = _resource_list.get_child_count()
-		var target_h: float = minf(row_count * STORAGE_ROW_HEIGHT, STORAGE_PANEL_MAX_HEIGHT)
-		_resource_scroll.custom_minimum_size = Vector2(0, target_h)
-
-
-## Returns {used: int, total: int, resources: Dictionary[StringName, int]}.
-## Sums across all registered containers.
-func _compute_storage_summary() -> Dictionary:
-	var used: int = 0
-	var total: int = 0
-	var resources: Dictionary[StringName, int] = {}
-	for container: InventoryContainer in InventorySystem.get_all_containers():
-		used  += container.get_occupied_count()
-		total += container.capacity
-		for slot: InventorySlot in container.slots:
-			if not slot.is_empty():
-				var cur: int = resources.get(slot.resource_id, 0)
-				resources[slot.resource_id] = cur + slot.quantity
-	return {&"used": used, &"total": total, &"resources": resources}
-
-
-func _make_resource_row(res_id: StringName, quantity: int) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	row.custom_minimum_size = Vector2(0, STORAGE_ROW_HEIGHT)
-	row.mouse_filter = Control.MOUSE_FILTER_STOP
-
-	var name_lbl := Label.new()
-	name_lbl.text = str(res_id)
-	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_lbl.vertical_alignment    = VERTICAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 14)
-	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(name_lbl)
-
-	var qty_lbl := Label.new()
-	qty_lbl.text = str(quantity)
-	qty_lbl.custom_minimum_size = Vector2(30, 0)
-	qty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	qty_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	qty_lbl.add_theme_font_size_override("font_size", 14)
-	qty_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(qty_lbl)
-
-	row.set_meta(&"is_dragging", false)
-	row.gui_input.connect(func(event: InputEvent) -> void:
-		var mb := event as InputEventMouseButton
-		if mb != null and mb.button_index == MOUSE_BUTTON_LEFT and not mb.pressed:
-			row.set_meta(&"is_dragging", false)
-			return
-		var mm := event as InputEventMouseMotion
-		if mm != null and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) \
-				and not row.get_meta(&"is_dragging", false):
-			if mm.relative.length() > 3.0:
-				row.set_meta(&"is_dragging", true)
-				row.force_drag({&"resource_id": res_id, &"qty": 1},
-						_make_drag_preview(res_id, quantity))
-	)
-
-	return row
-
-
-func _make_drag_preview(res_id: StringName, _quantity: int) -> Control:
-	var panel := PanelContainer.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.2, 0.2, 0.2, 0.9)
-	style.corner_radius_top_left     = 3
-	style.corner_radius_top_right    = 3
-	style.corner_radius_bottom_left  = 3
-	style.corner_radius_bottom_right = 3
-	style.content_margin_left   = 8
-	style.content_margin_right  = 8
-	style.content_margin_top    = 4
-	style.content_margin_bottom = 4
-	panel.add_theme_stylebox_override("panel", style)
-	var lbl := Label.new()
-	lbl.text = "%s ×1" % str(res_id)
-	lbl.add_theme_font_size_override("font_size", 14)
-	lbl.add_theme_color_override("font_color", Color("#F0EDE6"))
-	panel.add_child(lbl)
-	return panel
-
-
-## Toggles the resource list between collapsed (hidden) and expanded (visible).
-## Uses a 200 ms ease-out tween on the scroll container's minimum height.
-func _toggle_storage_panel() -> void:
-	_is_panel_expanded = not _is_panel_expanded
-	_storage_toggle_btn.text = "▲" if _is_panel_expanded else "▼"
-
-	# Kill any in-progress tween to avoid conflicts on rapid toggling.
-	if _panel_tween != null and _panel_tween.is_valid():
-		_panel_tween.kill()
-
-	if _is_panel_expanded:
-		var row_count: int = _resource_list.get_child_count()
-		var target_h: float = minf(row_count * STORAGE_ROW_HEIGHT, STORAGE_PANEL_MAX_HEIGHT)
-		_resource_scroll.custom_minimum_size = Vector2(0, 0)
-		_resource_scroll.visible = true
-		_panel_tween = create_tween()
-		_panel_tween.set_ease(Tween.EASE_OUT)
-		_panel_tween.set_trans(Tween.TRANS_QUAD)
-		_panel_tween.tween_property(
-			_resource_scroll, "custom_minimum_size:y", target_h, PANEL_ANIM_DURATION
-		)
-	else:
-		_panel_tween = create_tween()
-		_panel_tween.set_ease(Tween.EASE_OUT)
-		_panel_tween.set_trans(Tween.TRANS_QUAD)
-		_panel_tween.tween_property(
-			_resource_scroll, "custom_minimum_size:y", 0.0, PANEL_ANIM_DURATION
-		)
-		_panel_tween.tween_callback(func() -> void: _resource_scroll.visible = false)
+		show_toast("Save failed")
 
 
 # --- Visual helpers ----------------------------------------------------------
@@ -608,18 +601,8 @@ func _update_play_pause_btn(is_paused: bool) -> void:
 
 
 func _ticks_to_time_str(tick_count: int) -> String:
-	var total_minutes := int(float(tick_count) / float(TickSystem.TICKS_PER_DAY) * float(MINUTES_PER_DAY))
-	return "%02d:%02d" % [total_minutes / 60, total_minutes % 60]
-
-
-## Hides the HUD storage panel while the inventory overlay is open (UX spec AC: HUD storage panel).
-func hide_storage_panel() -> void:
-	_storage_panel.visible = false
-
-
-## Restores the HUD storage panel when the inventory overlay closes.
-func show_storage_panel() -> void:
-	_storage_panel.visible = true
+	var tph: int = TickSystem.TICKS_PER_DAY / 24  ## 60 ticks per hour; 1 tick = 1 minute
+	return "%02d:%02d" % [tick_count / tph, tick_count % tph]
 
 
 ## Opens the Building Detail Panel for the given building_id.
@@ -640,6 +623,11 @@ func get_shown_building_id() -> String:
 	if _building_detail_panel == null:
 		return ""
 	return _building_detail_panel.get_current_building_id()
+
+
+func _on_npc_detail_requested(npc_id: StringName, npc_state: int) -> void:
+	if _npc_detail_panel != null:
+		_npc_detail_panel.open_for_npc(npc_id, npc_state)
 
 
 func _update_energy_bar(current: int, max_energy: int) -> void:

@@ -1,7 +1,7 @@
 # Story 004: Building Status Integration
 
 > **Epic**: Logistics System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: Integration
 > **Manifest Version**: 2026-05-14
@@ -138,11 +138,20 @@ BuildingRegistry.Status = { OPERATING, BLOCKED, STALLED, CONSTRUCTING, DEMOLISHE
 **Required evidence**:
 - Integration: `tests/integration/logistics/building_status_test.gd` — must exist and pass
 
-**Status**: [ ] Not yet created
+**Status**: [x] Created — `tests/integration/logistics/building_status_test.gd` (14 test functions)
 
 ---
 
 ## Dependencies
 
 - Depends on: Story 001 (route model), Story 002 (carrier FSM states)
+
+---
+
+## Completion Notes
+**Completed**: 2026-06-02
+**Criteria**: 6/6 passing (all auto-verified)
+**Deviations**: ADVISORY — OUTPUT route deactivation does not immediately set STALLED; deferred to next production cycle per GDD Core Rules 6 (intentional override of ADR pseudocode)
+**Test Evidence**: Integration test at `tests/integration/logistics/building_status_test.gd` (14 test functions, AC-1 through AC-5 covered)
+**Code Review**: Skipped (Lean mode)
 - Unlocks: Story 006 (visualization uses building status values)

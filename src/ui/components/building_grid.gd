@@ -9,6 +9,8 @@ const BLOCK_HEIGHT := 84
 const BLOCK_GAP    := 8
 const ICON_SIZE    := 48
 
+const DEMOLISH_SENTINEL := -2
+
 const COLOR_BLOCK_BG       := Color("#2a2a2a")
 const COLOR_BLOCK_BORDER   := Color("#4a4a4a")
 const COLOR_HOVER_BORDER   := Color("#A8A49C")
@@ -151,8 +153,12 @@ func _resource_emoji(res_id: StringName) -> String:
 
 func _building_icon(building_type: int) -> String:
 	match building_type:
-		BuildingRegistry.BuildingType.STORAGE_AREA:      return "📦"
+		DEMOLISH_SENTINEL:                               return "🗑️"
+		PathSystem.PATH_SENTINEL:                        return "🛤️"
+		BuildingRegistry.BuildingType.COLLECTION_POINT:  return "📦"
 		BuildingRegistry.BuildingType.STORAGE_BUILDING:  return "🏗️"
 		BuildingRegistry.BuildingType.RESIDENTIAL_HOUSE: return "🏠"
 		BuildingRegistry.BuildingType.LUMBER_CAMP:       return "🪚"
+		BuildingRegistry.BuildingType.GATHERING_HUT:     return "🧺"
+		BuildingRegistry.BuildingType.TOOL_WORKSHOP:     return "🔨"
 	return "🏛️"

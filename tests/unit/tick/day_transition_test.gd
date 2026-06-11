@@ -20,11 +20,11 @@ func _make_running_system() -> TickSystem:
 	return system
 
 
-# ---- AC-1: Day transition at exactly 1000 ticks ----
+# ---- AC-1: Day transition at exactly 1440 ticks ----
 
 func test_day_transition_at_boundary() -> void:
 	var system := _make_running_system()
-	system._tick_count = 999
+	system._tick_count = 1439
 	assert_int(system.get_tick_count()).is_equal(999)
 	assert_int(system.get_current_day()).is_equal(1)
 	assert_bool(system.is_paused()).is_equal(false)
@@ -55,15 +55,15 @@ func test_day_transition_at_boundary() -> void:
 
 func test_overflow_discarded_at_boundary() -> void:
 	var system := _make_running_system()
-	system._tick_count = 950
-	assert_int(system.get_tick_count()).is_equal(950)
+	system._tick_count = 1390
+	assert_int(system.get_tick_count()).is_equal(1390)
 
 	# Capture day_transition — should fire exactly once.
 	var day_count := [0]
 	system.day_transition.connect(func(_d: int): day_count[0] += 1)
 
-	# Advance 100 ticks → 950 + 100 = 1050 → day fires → tick_count = 1050 - 1000 = 50.
-	# 1050 is not exactly divisible by 1000, so the remainder (50) is kept.
+	# Advance 100 ticks → 1390 + 100 = 1490 → day fires → tick_count = 1490 - 1440 = 50.
+	# 1490 is not exactly divisible by 1440, so the remainder (50) is kept.
 
 	system._accumulate_ticks(100)
 
@@ -77,13 +77,13 @@ func test_overflow_discarded_at_boundary() -> void:
 
 func test_manual_advance_triggers_day_transition() -> void:
 	var system := _make_running_system()
-	system._tick_count = 950
+	system._tick_count = 1390
 
 	# Capture day_transition.
 	var day_fired := [false]
 	system.day_transition.connect(func(_d: int): day_fired[0] = true)
 
-	# Advance 80 manual ticks → 950 + 80 = 1030 → day transition → tick_count = 30.
+	# Advance 80 manual ticks → 1390 + 80 = 1470 → day transition → tick_count = 30.
 	system.advance_ticks_manual(80)
 
 	assert_bool(day_fired[0]).is_equal(true)
@@ -96,7 +96,7 @@ func test_manual_advance_triggers_day_transition() -> void:
 
 func test_no_accumulation_after_day_pause() -> void:
 	var system := _make_running_system()
-	system._tick_count = 999
+	system._tick_count = 1439
 
 	# Trigger day transition.
 	var day_fired := [false]
@@ -117,7 +117,7 @@ func test_no_accumulation_after_day_pause() -> void:
 
 func test_get_current_day_returns_incremented_value() -> void:
 	var system := _make_running_system()
-	system._tick_count = 999
+	system._tick_count = 1439
 	assert_int(system.get_current_day()).is_equal(1)
 
 	system._accumulate_ticks(1)
@@ -129,12 +129,12 @@ func test_get_current_day_returns_incremented_value() -> void:
 
 func test_manual_advance_multi_day() -> void:
 	var system := _make_running_system()
-	system._tick_count = 980
+	system._tick_count = 1420
 
 	var day_count := [0]
 	system.day_transition.connect(func(_d: int): day_count[0] += 1)
 
-	# Advance 40 ticks → 980 + 40 = 1020 → day boundary fires → tick_count = 1020 - 1000 = 20.
+	# Advance 40 ticks → 1420 + 40 = 1460 → day boundary fires → tick_count = 1460 - 1440 = 20.
 	system.advance_ticks_manual(40)
 
 	assert_int(day_count[0]).is_equal(1)
@@ -146,7 +146,7 @@ func test_manual_advance_multi_day() -> void:
 
 func test_day_transition_before_ticks_advanced() -> void:
 	var system := _make_running_system()
-	system._tick_count = 999
+	system._tick_count = 1439
 
 	var event_order := []  # ["day_transition" | "ticks_advanced"]
 	system.day_transition.connect(func(_d: int): event_order.append("day_transition"))

@@ -20,6 +20,9 @@ const COLOR_BLOCK_BORDER := Color("#4a4a4a")
 const COLOR_HOVER_BORDER := Color("#A8A49C")
 const COLOR_QTY_TEXT     := Color("#F0EDE6")
 
+## Seconds the mouse must be held before a drag is initiated instead of a click.
+const DRAG_HOLD_SECONDS := 0.3
+
 ## Set before adding to scene tree to center item blocks horizontally.
 var center: bool = false
 ## Set before adding to scene tree to hide the empty-state label.
@@ -69,6 +72,8 @@ func populate(items: Array[Dictionary]) -> void:
 	if items.is_empty():
 		_flow.visible        = false
 		_empty_label.visible = true
+		if center:
+			_flow.custom_minimum_size.x = 0
 		return
 
 	_flow.visible        = true
@@ -76,6 +81,10 @@ func populate(items: Array[Dictionary]) -> void:
 
 	for item: Dictionary in items:
 		_flow.add_child(_make_block(item[&"resource_id"], item[&"quantity"]))
+
+	if center:
+		var n := items.size()
+		_flow.custom_minimum_size.x = n * BLOCK_WIDTH + maxi(n - 1, 0) * BLOCK_GAP
 
 
 func _make_block(resource_id: StringName, quantity: int) -> Control:
@@ -114,6 +123,7 @@ func _make_block(resource_id: StringName, quantity: int) -> Control:
 
 	var qty_lbl := Label.new()
 	qty_lbl.text                  = "×%d" % quantity
+	qty_lbl.visible               = quantity >= 0
 	qty_lbl.horizontal_alignment  = HORIZONTAL_ALIGNMENT_CENTER
 	qty_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	qty_lbl.add_theme_font_size_override("font_size", 14)
@@ -123,11 +133,24 @@ func _make_block(resource_id: StringName, quantity: int) -> Control:
 
 	panel.mouse_entered.connect(func() -> void: style.border_color = COLOR_HOVER_BORDER)
 	panel.mouse_exited.connect(func() -> void:  style.border_color = COLOR_BLOCK_BORDER)
+	# Dictionary used as a mutable reference shared across lambdas —
+	# GDScript captures primitives by value so bool would not propagate between callbacks.
+	var state := {"drag_pending": false}
 	panel.gui_input.connect(func(event: InputEvent) -> void:
 		var mb := event as InputEventMouseButton
-		if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
-			item_clicked.emit(resource_id)
-			item_drag_started.emit(resource_id)
+		if mb == null or mb.button_index != MOUSE_BUTTON_LEFT:
+			return
+		if mb.pressed:
+			state["drag_pending"] = true
+			get_tree().create_timer(DRAG_HOLD_SECONDS).timeout.connect(func() -> void:
+				if state["drag_pending"]:
+					state["drag_pending"] = false
+					item_drag_started.emit(resource_id)
+			)
+		else:
+			if state["drag_pending"]:
+				state["drag_pending"] = false
+				item_clicked.emit(resource_id)
 	)
 
 	return panel
@@ -135,6 +158,7 @@ func _make_block(resource_id: StringName, quantity: int) -> Control:
 
 func _resource_icon(resource_id: StringName) -> String:
 	match resource_id:
+		&"*":     return "*"
 		&"wood":  return "🪵"
 		&"stone": return "🪨"
 		&"berry": return "🫐"

@@ -8,13 +8,39 @@ const SCHEMA_VERSION: int = 1
 const SAVE_PATH: String = "user://saves/"
 const MAX_SLOTS: int = 10
 
+## Systems serialised on save, in order.
+const SAVE_SYSTEMS: Array[String] = ["InventorySystem", "BuildingRegistry", "PathSystem", "NPCSystem", "HungerSystem", "LogisticsSystem", "TickSystem"]
+
+## Systems deserialised on load; InventorySystem must precede BuildingRegistry
+## (containers must exist before buildings reference them). PathSystem follows
+## BuildingRegistry so path bitmasks can connect to already-placed buildings.
+## NPCSystem follows PathSystem so NPC home bases reference already-placed buildings.
+## HungerSystem follows NPCSystem so food assignments can reference existing NPC IDs.
+## LogisticsSystem follows NPCSystem so routes can reference already-restored NPCs.
+const LOAD_ORDER: Array[String] = ["InventorySystem", "BuildingRegistry", "PathSystem", "NPCSystem", "HungerSystem", "LogisticsSystem", "TickSystem"]
+
 var _registered_systems: Array[String] = []
+## Scene-level WorldGrid node — not an Autoload, registered by MapRoot after it is ready.
+var _world_grid: WorldGrid = null
+
+## Staged load — populated by load_game(), consumed by apply_pending_load().
+var _pending_load_data: Dictionary = {}
+var _has_pending_load: bool = false
+
+
+func _ready() -> void:
+	_startup_cleanup()
 
 
 ## Register a system's save handler. Called by each system in _ready().
 func register_save_system(system_name: String) -> void:
 	if not _registered_systems.has(system_name):
 		_registered_systems.append(system_name)
+
+
+## Register the scene-level WorldGrid node. Called by MapRoot before apply_pending_load().
+func register_world_grid(grid: WorldGrid) -> void:
+	_world_grid = grid
 
 
 ## Returns list of available (non-empty) save slot numbers.
@@ -30,6 +56,7 @@ func get_available_slots() -> Array[int]:
 			var slot_str := file_name.trim_prefix("save_").trim_suffix(".json")
 			if slot_str.is_valid_int():
 				slots.append(slot_str.to_int())
+	slots.sort()
 	return slots
 
 
@@ -54,14 +81,15 @@ func save_game(slot: int) -> bool:
 
 	DirAccess.make_dir_absolute(SAVE_PATH)
 
-	# Collect serialize data from all registered systems
 	var data := {"schema_version": SCHEMA_VERSION, "timestamp": int(Time.get_unix_time_from_system())}
 
-	for system_name in _registered_systems:
-		var system: Object = Engine.get_singleton(system_name)
+	if _world_grid != null:
+		data["WorldGrid"] = _world_grid.serialize()
+
+	for system_name in SAVE_SYSTEMS:
+		var system: Node = get_node_or_null("/root/" + system_name)
 		if system and system.has_method("serialize"):
-			var serialized: Dictionary = system.serialize()
-			data[system_name] = serialized
+			data[system_name] = system.serialize()
 
 	# Write to temp file, then rename for atomicity
 	var tmp_path := SAVE_PATH + "save_" + str(slot) + ".json.tmp"
@@ -89,7 +117,6 @@ func save_game(slot: int) -> bool:
 			"schema_version": SCHEMA_VERSION,
 			"timestamp": data.get("timestamp", 0),
 		}
-		# Extract day/tick if available
 		var tick_data: Dictionary = data.get("TickSystem", {})
 		if tick_data is Dictionary:
 			meta["current_day"] = tick_data.get("current_day", 0)
@@ -104,7 +131,9 @@ func save_game(slot: int) -> bool:
 	return true
 
 
-## Load game from the given slot.
+## Read a save slot from disk and stage it for application.
+## Returns true if the file was read and validated successfully.
+## Call apply_pending_load() after the game scene is fully initialised.
 func load_game(slot: int) -> bool:
 	if slot < 1 or slot > MAX_SLOTS:
 		printerr("[WorldSaveManager] Invalid slot: ", slot)
@@ -126,7 +155,6 @@ func load_game(slot: int) -> bool:
 
 	var data: Dictionary = result
 
-	# Schema version check
 	if data.get("schema_version", 0) > SCHEMA_VERSION:
 		printerr("[WorldSaveManager] Save from newer game version: ", save_path)
 		return false
@@ -134,11 +162,30 @@ func load_game(slot: int) -> bool:
 	if data.get("schema_version", 0) < SCHEMA_VERSION:
 		print("[WorldSaveManager] Migrating save from v", data.get("schema_version", 0), " to v", SCHEMA_VERSION)
 
-	# Process deserialize in load order
-	_process_deserialize_order(data)
-
-	print("[WorldSaveManager] Loaded slot ", slot)
+	_pending_load_data = data
+	_has_pending_load = true
+	print("[WorldSaveManager] Staged slot ", slot, " for load")
 	return true
+
+
+## Returns true if a staged save is waiting to be applied.
+func has_pending_load() -> bool:
+	return _has_pending_load
+
+
+## Apply the staged save data to all registered systems.
+## Must be called after the game scene (MapRoot, BuildingRegistry grid dependency) is ready.
+func apply_pending_load() -> void:
+	if not _has_pending_load:
+		push_warning("[WorldSaveManager] apply_pending_load() called with no pending load")
+		return
+	var data := _pending_load_data
+	_pending_load_data = {}
+	# Flag stays true through deserialize so start-time listeners (e.g. DevStorageSetup,
+	# which reacts to building_placed) can detect a load-in-progress and skip their seeding.
+	_process_deserialize_order(data)
+	_has_pending_load = false
+	print("[WorldSaveManager] Applied pending load")
 
 
 ## Convenience: load the most recently written save slot.
@@ -180,29 +227,27 @@ func delete_save(slot: int) -> bool:
 	return true
 
 
-## Internal: process deserialize in load order.
-## Load order: ResourceRegistry -> GridMap -> Inventory -> Buildings -> NPCs -> Hunger -> Player -> Tick
+## Internal: apply deserialized data in dependency order.
+## WorldGrid is restored first so terrain is valid when BuildingRegistry calls place_building().
 func _process_deserialize_order(data: Dictionary) -> void:
-	# Load order invariant (from ADR-0006)
-	var load_order := [
-		"ResourceRegistry",
-		"GridMap",
-		"Inventory",
-		"Buildings",
-		"NPCs",
-		"Hunger",
-		"Player",
-		"TickSystem",
-	]
-
-	for system_name in load_order:
-		if not _registered_systems.has(system_name):
+	if _world_grid != null:
+		var grid_data: Variant = data.get("WorldGrid")
+		if grid_data is Dictionary:
+			_world_grid.deserialize(grid_data)
+	for system_name in LOAD_ORDER:
+		var system: Node = get_node_or_null("/root/" + system_name)
+		if system == null or not system.has_method("deserialize"):
 			continue
-
-		var system: Object = Engine.get_singleton(system_name)
-		if not system or not system.has_method("deserialize"):
-			continue
-
-		var system_data: Dictionary = data.get(system_name, {})
-		if system_data is Dictionary:
+		var system_data: Variant = data.get(system_name)
+		if system_data != null:
 			system.deserialize(system_data)
+
+
+## Scan for and delete orphaned .tmp files left by a crashed save operation.
+func _startup_cleanup() -> void:
+	DirAccess.make_dir_absolute(SAVE_PATH)
+	var files := DirAccess.get_files_at(SAVE_PATH)
+	for file_name in files:
+		if file_name.ends_with(".tmp"):
+			DirAccess.remove_absolute(SAVE_PATH + file_name)
+			push_warning("[WorldSaveManager] Cleaned up orphaned .tmp file: %s" % file_name)

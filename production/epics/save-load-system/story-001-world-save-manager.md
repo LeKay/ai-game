@@ -1,7 +1,7 @@
 # Story 001: WorldSaveManager Orchestrator
 
 > **Epic**: Save/Load System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Persistence
 > **Type**: Logic
 > **Manifest Version**: Not yet created
@@ -198,7 +198,7 @@ func deserialize(data: Dictionary) -> void
 **Story Type**: Logic
 **Required evidence**: `tests/unit/save_world/save_manager_test.gd` — must exist and pass
 
-**Status**: [ ] Not yet created
+**Status**: [x] Created — `tests/unit/save_world/save_manager_test.gd` (15 test functions)
 
 ---
 
@@ -206,3 +206,16 @@ func deserialize(data: Dictionary) -> void
 
 - Depends on: None (this is the first story; creates the WorldSaveManager Autoload framework)
 - Unlocks: All other save/load stories; individual system serialize()/deserialize() implementations
+
+---
+
+## Completion Notes
+**Completed**: 2026-06-05
+**Criteria**: 5/5 implemented, 1 advisory (AC-5 timestamp prevents byte-for-byte identity; system data fields verified deterministic)
+**Deviations**:
+- ADVISORY: Namespace keys use exact registered name (e.g. "TickSystem") not lowercased as ADR-0006 specifies — downstream system stories must be consistent
+- ADVISORY: Signals (save_completed, save_failed) from ADR skeleton not implemented; printerr()/print() used instead — deferred to UI wiring story
+- ADVISORY: AC-5 timestamp caveat — byte-identical save files unachievable with live timestamp; test verifies system-data equality only
+- OUT OF SCOPE: Metadata files (.meta.json) and atomic writes (.json.tmp → rename) implemented here; Story 002 should update its scope to reflect this
+**Test Evidence**: Logic — `tests/unit/save_world/save_manager_test.gd` (15 test functions)
+**Code Review**: Skipped — Lean mode

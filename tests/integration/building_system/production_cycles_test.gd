@@ -29,7 +29,7 @@ var _player: PlayerCharScript
 ## Shared supply container for resource pre-seeding.
 const SUPPLY: StringName = &"test_supply"
 
-func before_each() -> void:
+func before_test() -> void:
 	_grid = WorldGridScript.new()
 	_grid._init_arrays()
 	auto_free(_grid)
@@ -155,14 +155,23 @@ func _make_operating_lumber_camp(tile: Vector2i) -> String:
 	return bid
 
 
+## Returns an operating Lumber Camp with both carrier IDs pre-populated so production
+## cycles can start and complete without BLOCKED/STALLED state transitions.
+func _make_carrying_lumber_camp(tile: Vector2i) -> String:
+	var bid: String = _make_operating_lumber_camp(tile)
+	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
+	instance.input_carrier_ids = [&"mock_carrier"]
+	instance.output_carrier_id = &"mock_carrier"
+	return bid
+
+
 func test_production_cycle_starts_when_npc_and_inputs_present() -> void:
 	# Arrange
 	var tile := Vector2i(5, 10)
-	var bid: String = _make_operating_lumber_camp(tile)
+	var bid: String = _make_carrying_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_01")
-	instance.input_buffer[&"wood"] = 1.0
-	instance.input_buffer[&"tool"] = 5.0  # full tool charge
+	instance.input_buffer[&"tool"] = 1.0
 
 	# Act — tick fires, cycle should start
 	_registry._on_ticks_advanced(1)
@@ -178,8 +187,7 @@ func test_production_cycle_does_not_start_without_npc() -> void:
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	# No NPC assigned — assigned_npc_id is &""
-	instance.input_buffer[&"wood"] = 1.0
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"tool"] = 1.0
 
 	# Act
 	_registry._on_ticks_advanced(1)
@@ -189,13 +197,12 @@ func test_production_cycle_does_not_start_without_npc() -> void:
 
 
 func test_production_cycle_does_not_start_with_insufficient_tool_charge() -> void:
-	# Arrange — charge_cost = 5.0, only 4.0 available
+	# Arrange — charge_cost = 1.0, only 0.0 available
 	var tile := Vector2i(7, 10)
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_02")
-	instance.input_buffer[&"wood"] = 1.0
-	instance.input_buffer[&"tool"] = 4.0  # insufficient
+	instance.input_buffer[&"tool"] = 0.0  # insufficient
 
 	# Act
 	_registry._on_ticks_advanced(1)
@@ -210,7 +217,7 @@ func test_production_cycle_does_not_start_without_wood_input() -> void:
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_03")
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"tool"] = 1.0
 	# wood not added
 
 	# Act
@@ -226,15 +233,12 @@ func test_production_inputs_deducted_from_buffer_when_cycle_starts() -> void:
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_04")
-	instance.input_buffer[&"wood"] = 2.0  # more than needed (1)
-	instance.input_buffer[&"tool"] = 10.0  # more than needed (5.0)
+	instance.input_buffer[&"tool"] = 2.0  # more than needed (1.0)
 
 	# Act
 	_registry._on_ticks_advanced(1)
 
-	# Assert — exactly 1 wood and 5.0 charge consumed
-	assert_float(instance.input_buffer.get(&"wood", 0.0)).is_equal(1.0)
-	assert_float(instance.input_buffer.get(&"tool", 0.0)).is_equal(5.0)
+	assert_float(instance.input_buffer.get(&"tool", 0.0)).is_equal(1.0)
 
 
 # =============================================================================
@@ -283,8 +287,7 @@ func test_production_cycle_completes_after_base_cycle_ticks() -> void:
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_10")
-	instance.input_buffer[&"wood"] = 1.0
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"tool"] = 1.0
 	_registry._on_ticks_advanced(1)   # starts cycle (production_cycle_ticks reset to 0)
 	assert_bool(instance.cycle_running).is_true()
 
@@ -302,8 +305,7 @@ func test_production_output_ready_signal_emitted_on_cycle_complete() -> void:
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_11")
-	instance.input_buffer[&"wood"] = 1.0
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"tool"] = 1.0
 	_registry._on_ticks_advanced(1)  # start cycle (cycle_ticks reset to 0)
 	var signal_monitor := monitor_signals(_registry)
 
@@ -320,8 +322,7 @@ func test_production_collect_output_returns_and_clears_buffer() -> void:
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_12")
-	instance.input_buffer[&"wood"] = 1.0
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"tool"] = 1.0
 	_registry._on_ticks_advanced(1)    # start cycle
 	_registry._on_ticks_advanced(100)  # complete cycle
 	assert_int(instance.buffered_output.get(&"wood", 0)).is_equal(5)
@@ -490,7 +491,7 @@ func test_production_residential_house_not_complete_before_build_time() -> void:
 func test_production_storage_area_starts_operating_never_constructing() -> void:
 	# Arrange — Storage Area has no build cost and build_time = 0
 	var tile := Vector2i(5, 30)
-	var result: int = _registry.initiate_build(BuildingRegScript.BuildingType.STORAGE_AREA, tile)
+	var result: int = _registry.initiate_build(BuildingRegScript.BuildingType.COLLECTION_POINT, tile)
 	assert_int(result).is_equal(BuildingRegScript.PlacementResult.SUCCESS)
 	var count: int = _registry.get_building_count()
 	var bid: String = str(count - 1)

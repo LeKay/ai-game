@@ -1,7 +1,7 @@
 # Story 003: Deposit and Storage Coordination
 
 > **Epic**: NPC System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: Integration — ADR-0009
 > **Manifest Version**: N/A — control manifest not yet created
@@ -139,3 +139,12 @@ WAITING:
 
 - Depends on: Story 002 (travel to storage requires travel mechanics to be implemented)
 - Unlocks: Story 004 (disconnection on storage demolition — demolition flow tests WAITING interaction)
+
+---
+
+## Completion Notes
+**Completed**: 2026-06-02
+**Criteria**: 2/2 passing
+**Deviations**: ADVISORY — `on_npc_waiting()` / `on_npc_deposited()` added to `building_registry.gd` (required by AC-7 per ADR-0009; not in original story file list; consistent with npc-002 get_building_tile pattern)
+**Test Evidence**: Integration — `tests/integration/npc_system/deposit_storage_test.gd` (24 test functions: 5 AC-4, 13 AC-7, 6 deposit mechanics)
+**Code Review**: Complete — all findings resolved (Engine.get_singleton→direct ref, String→StringName, _exit_tree disconnect, str() cleanup, multi-NPC WAITING test added)

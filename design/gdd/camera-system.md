@@ -31,9 +31,9 @@ The camera defines a **view rectangle** in world space:
 
 ```
 ViewRect = {
-    x: float,           // World-space left edge of viewport (pixels)
-    y: float,           // World-space top edge of viewport (pixels)
-    zoom: float,        // Zoom multiplier (1.0 = 1 screen pixel = 1 world pixel)
+	x: float,           // World-space left edge of viewport (pixels)
+	y: float,           // World-space top edge of viewport (pixels)
+	zoom: float,        // Zoom multiplier (1.0 = 1 screen pixel = 1 world pixel)
 }
 ```
 
@@ -96,7 +96,7 @@ A key bind (default `R`) resets the camera to show the entire map centered and f
 
 ```
 func reset_camera():
-    # If map doesn't fully fit on screen at current zoom, zoom out to min_zoom.
+	# If map doesn't fully fit on screen at current zoom, zoom out to min_zoom.
     if view_width < MAX_X or view_height < MAX_Y:
         zoom = clamp(min(screen_width / MAX_X, screen_height / MAX_Y), MIN_ZOOM, MAX_ZOOM)
         # Recalculate view dimensions at new zoom
@@ -136,11 +136,11 @@ The Camera System exposes a public query that converts screen-space mouse positi
 
 ```
 func screen_to_tile(screen_pos: Vector2) -> Vector2i:
-    world_pos = camera_offset + (screen_pos / zoom)
-    var tile = Vector2i(floor(world_pos.x / TILE_SIZE), floor(world_pos.y / TILE_SIZE))
-    // Clamp to grid bounds — if the screen position is in empty space (view larger than map),
-    // return the nearest valid tile edge instead of an out-of-bounds coordinate.
-    return tile.clamp(Vector2i(0, 0), Vector2i(GRID_SIZE - 1, GRID_SIZE - 1))
+	world_pos = camera_offset + (screen_pos / zoom)
+	var tile = Vector2i(floor(world_pos.x / TILE_SIZE), floor(world_pos.y / TILE_SIZE))
+	// Clamp to grid bounds — if the screen position is in empty space (view larger than map),
+	// return the nearest valid tile edge instead of an out-of-bounds coordinate.
+	return tile.clamp(Vector2i(0, 0), Vector2i(GRID_SIZE - 1, GRID_SIZE - 1))
 ```
 
 This is the same formula defined in the Input System GDD (mouse world position conversion), but the Camera System owns the actual implementation. Input System calls `camera.screen_to_tile(mouse_screen_pos)` for world-to-tile conversion.
@@ -151,9 +151,9 @@ Reverse conversion, used for rendering game objects at correct screen positions:
 
 ```
 func tile_to_screen(tile_pos: Vector2i) -> Vector2:
-    world_pos = tile_pos * TILE_SIZE + TILE_SIZE / 2
-    screen_pos = (world_pos - camera_offset) * zoom
-    return screen_pos
+	world_pos = tile_pos * TILE_SIZE + TILE_SIZE / 2
+	screen_pos = (world_pos - camera_offset) * zoom
+	return screen_pos
 ```
 
 **8. Render Layer Ordering (Depth Sorting)**
@@ -475,4 +475,3 @@ The Camera System provides coordinate data to UI systems but does not own UI ele
 - **Camera focus/follow target** (when NPC or event is highlighted): Add a `set_focus_target(Vector2i tile_pos)` that smoothly moves camera to center on the target tile. Useful for production building error indicators.
 - **Camera presets** (quick zoom to specific areas): Save/restore viewport state for "focus on building X" or "show entire map" buttons. Deferred to HUD System interaction design.
 - **Smooth camera transitions** (instead of instant panning): Add `lerp()`-based interpolation for camera movement. Adds polish but also input lag. Current decision: instant panning for Vertical Slice (no lag). Revisit for MVP if playtest shows panning feels too jarring.
-

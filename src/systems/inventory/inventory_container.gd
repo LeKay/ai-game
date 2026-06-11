@@ -22,9 +22,13 @@ var container_id: StringName = &""
 ## Human-readable label (e.g. "Storage Area").
 var display_name: String = ""
 
-## Logical capacity — how many slots are accessible to new deposits.
-## Slots beyond this index exist in the Array but are inaccessible for deposits.
+## Logical capacity — how many slots are accessible to new deposits (slot-based),
+## or the maximum total item count across all active slots (quantity-based).
 var capacity: int = 0
+
+## When true, capacity limits total item count (sum of quantities) instead of slot count.
+## Used by storage buildings: no per-slot stack limit, but total items are capped.
+var quantity_based: bool = false
 
 ## All slots, including those beyond the current capacity (preserved on shrink).
 ## Index 0 … capacity-1 are "active"; capacity … slots.size()-1 are "overflow".
@@ -49,8 +53,21 @@ func get_occupied_count() -> int:
 	return count
 
 
+## Returns the sum of quantities across all active slots (index 0 … capacity-1).
+## For quantity_based containers this is the authoritative "used" metric.
+func get_total_quantity() -> int:
+	var total: int = 0
+	var active: int = mini(capacity, slots.size())
+	for i: int in active:
+		total += slots[i].quantity
+	return total
+
+
 ## Returns true when every active slot (index 0 … capacity-1) is occupied.
+## For quantity_based containers: returns true when total item count >= capacity.
 func is_full() -> bool:
+	if quantity_based:
+		return get_total_quantity() >= capacity
 	var active: int = mini(capacity, slots.size())
 	for i: int in active:
 		if slots[i].is_empty():
@@ -76,10 +93,10 @@ func get_resource_quantity(resource_id: StringName) -> int:
 func _is_slot_usable(slot: InventorySlot) -> bool:
 	if slot.is_empty():
 		return false
-	var registry: Object = Engine.get_singleton(&"ResourceRegistry")
+	var registry: Object = Engine.get_singleton(&"ResourceRegistry") if Engine.has_singleton(&"ResourceRegistry") else null
 	if registry == null:
 		return true
-	return registry.has_definition(slot.resource_id)
+	return registry.get_definition(slot.resource_id) != null
 
 
 ## Two-phase first-fit allocation. Returns an Array of {slot_index, quantity_added, charge_added}
@@ -136,7 +153,15 @@ func _first_fit_allocate(resource_id: StringName, quantity: int, stack_limit: in
 ## `stack_limit` and `max_charge` must be supplied by the caller (InventorySystem looks
 ## them up from ResourceRegistry so this method stays testable without the Autoload).
 ## Returns FAILURE_FULL if the full batch cannot be placed (no partial deposit).
+## For quantity_based containers: ignores stack_limit; enforces capacity as total item count.
 func try_deposit(resource_id: StringName, quantity: int, stack_limit: int, max_charge: float) -> DepositResult:
+	if quantity_based:
+		if get_total_quantity() + quantity > capacity:
+			return DepositResult.FAILURE_FULL
+		var result: Array = _first_fit_allocate(resource_id, quantity, capacity, max_charge)
+		if result.is_empty() and quantity > 0:
+			return DepositResult.FAILURE_FULL
+		return DepositResult.SUCCESS
 	var result: Array = _first_fit_allocate(resource_id, quantity, stack_limit, max_charge)
 	if result.is_empty() and quantity > 0:
 		return DepositResult.FAILURE_FULL

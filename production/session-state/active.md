@@ -696,3 +696,421 @@ Revised review: APPROVED — completeness 8/8, all GDDs aligned, accessibility c
 - Code review fixes (same session): get_all_buildings() typed return; production_output_ready signal typed; 3 methods extracted to helpers; Array[StringName] typing; Storage Area AC-06 test added (25 tests total)
 - Tech debt logged: None
 - Next recommended: building-system/story-003 (BLOCKED/STALLED states) or building-system/story-004 (NPC assignment)
+
+## Session Extract — /dev-story 2026-06-02 (build-003)
+- Story: production/epics/building-system/story-003-failed-states-blocked-stalled.md — Failed States: BLOCKED and STALLED
+- Files changed:
+  - `src/gameplay/building_registry.gd` — Added: _CycleStartResult enum; input_carrier_id/output_carrier_id fields on BuildingInstance; signals (building_blocked, building_unblocked, building_stalled, building_destalled); _try_start_production_cycle changed void→int return; _advance_production_cycle handles BLOCKED/STALLED transitions; _on_ticks_advanced adds BLOCKED recovery branch; _try_recover_blocked + _cycle_blocked_reason helpers; collect_output handles STALLED→OPERATING; charge_cost fixed 1.0→5.0 (pre-existing bug)
+  - `tests/integration/building_system/production_cycles_test.gd` — Updated: _make_carrying_lumber_camp helper added; 7 AC-09/AC-13 tests updated for carrier IDs; test_production_cycle_does_not_start_without_wood_input renamed/fixed to test_production_cycle_does_not_start_without_tool_input; test_production_new_cycle_does_not_start_while_output_buffered → renamed/improved to test_production_new_cycle_does_not_start_while_stalled
+  - `tests/integration/building_system/failed_states_test.gd` — Created: 21 test functions covering AC-11/12/12b/12c/13/14/23 + state_changed signal
+- Deviations: ADVISORY — charge_cost fix (1.0→5.0) is out of story-003 scope but required to keep story-002 tests valid; story predates control manifest (N/A)
+- Blockers: None
+- Next: /code-review src/gameplay/building_registry.gd tests/integration/building_system/failed_states_test.gd tests/integration/building_system/production_cycles_test.gd then /story-done production/epics/building-system/story-003-failed-states-blocked-stalled.md
+
+## Session Extract — /dev-story 2026-06-02 (npc-001)
+- Story: production/epics/npc-system/story-001-npc-identity-recruitment.md — NPC Identity and Recruitment
+- Files changed:
+  - `src/gameplay/npc_system.gd` — Created: NPCSystem Autoload; NPCInstance nested class (9 fields); _HouseState nested class; TaskState enum (7 states); NPC_CAPACITY_PER_HOUSE/NPC_SPAWN_DELAY_TICKS constants; recruit_npc() with capacity + delay enforcement; get_house_npc_count(), get_npc_count(), get_available_npcs(), get_npc_state(), get_npc_position(); _on_ticks_advanced() for tick tracking; npc_recruited signal
+  - `tests/unit/npc_system/npc_identity_recruitment_test.gd` — Created: 28 test functions covering AC-1 through AC-4 plus edge cases
+- Deviations: ADVISORY — story predates control manifest (N/A — same pattern as build stories); _on_ticks_advanced() tick subscription added (nominally story-002 scope) but required for AC-2 second-slot delay test
+- Blockers: None
+- Next: /code-review src/gameplay/npc_system.gd tests/unit/npc_system/npc_identity_recruitment_test.gd then /story-done production/epics/npc-system/story-001-npc-identity-recruitment.md
+
+## Session Extract — /story-done 2026-06-02 (npc-001)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/npc-system/story-001-npc-identity-recruitment.md — NPC Identity and Recruitment
+- Deviations: ADVISORY — hardcoded constants (project pattern); story predates manifest; Autoload not in project.godot (deferred); _on_ticks_advanced in story-001 scope (required for AC-2)
+- Implementation fixes during story-done: Dictionary[StringName, NPCInstance] → untyped (GDScript 4.x inner class typing); before_each()→before_test() in NPC test + 3 building-system tests; var before renamed to count_before (GdUnitTestSuite.before() shadowing)
+- Test evidence: 27/27 PASSED
+- Tech debt logged: None
+- Next recommended: npc-system/story-002 (task cycle — travel, work, deposit) OR building-system/story-004 (NPC assignment wiring)
+
+## Session Extract — /dev-story 2026-06-02 (npc-002)
+- Story: production/epics/npc-system/story-002-task-cycle-travel-work.md — Task Cycle: Travel and Work
+- Files changed:
+  - `src/gameplay/npc_system.gd` — Extended: TICKS_PER_TILE constant; AssignmentResult enum (SUCCESS, INVALID_NPC_STATE, BUILDING_NOT_FOUND); 5 new signals (npc_assigned, npc_released, npc_travel_started, npc_travel_completed, npc_returned_home); _building_system injectable field; assign_npc() with travel computation; release_npc() with RETURN_TO_BASE; get_assigned_npc() query; _on_ticks_advanced() full travel manager (TRAVEL_TO_BUILDING, TRAVEL_TO_STORAGE, RETURN_TO_BASE); _compute_travel_ticks() (Manhattan inline); _npc_arrived_at_building(); _npc_returned_home_internal()
+  - `tests/integration/npc_system/task_cycle_travel_work_test.gd` — Created: 29 test functions covering AC-3, AC-5, AC-6; uses _BuildingStub inner class for dependency isolation
+- Deviations: ADVISORY — Manhattan distance computed inline (ADR says delegate to GridMap.distance_between(); inline justified for test isolation at VS scope); story predates control manifest (N/A)
+- Blockers: None
+- Next: /code-review src/gameplay/npc_system.gd tests/integration/npc_system/task_cycle_travel_work_test.gd then /story-done production/epics/npc-system/story-002-task-cycle-travel-work.md
+
+## Session Extract — /story-done 2026-06-02 (npc-002)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/npc-system/story-002-task-cycle-travel-work.md — Task Cycle: Travel and Work
+- Deviations: ADVISORY — inline Manhattan distance (TDB-001 logged); hardcoded constants (ongoing pattern)
+- Implementation fixes during story-done: loop typing in get_available_npcs; release_npc doc comment; _on_ticks_advanced doc comment; work_cycle_complete TODO tag; test comment fix ("instant" → "first tick")
+- Test evidence: 29/29 test functions (not run — requires Godot binary)
+- Tech debt logged: TDB-001 (inline Manhattan → GridMap.distance_between() when GridMap integration added)
+- Next recommended: npc-system/story-003 (deposit/storage coordination) or npc-system/story-004 (disconnection/demolition)
+
+## Session Extract — /dev-story 2026-06-02 (npc-003)
+- Story: production/epics/npc-system/story-003-deposit-storage-coordination.md — Deposit and Storage Coordination
+- Files changed:
+  - `src/gameplay/npc_system.gd` — Extended: 2 new signals (npc_deposit_completed, npc_storage_full); NPCInstance fields (current_output_resource, current_output_amount); _inventory_system injectable field + storage_changed connection; TRAVEL_TO_STORAGE tick handler now calls _npc_arrived_at_storage(); new methods: _npc_arrived_at_storage(), _on_storage_changed(), _begin_return_to_base()
+  - `src/gameplay/building_registry.gd` — Added: on_npc_waiting() (OPERATING→STALLED), on_npc_deposited() (STALLED→OPERATING)
+  - `tests/integration/npc_system/deposit_storage_test.gd` — Created: 20 test functions covering AC-4 and AC-7; uses _InventoryStub (try_deposit + storage_changed signal) and extended _BuildingStub (waiting_calls/deposited_calls tracking)
+- Deviations: ADVISORY — on_npc_waiting/on_npc_deposited added to BuildingRegistry as part of this story (not in original story file list, but required by AC-7 per ADR-0009); consistent with get_building_tile stub pattern from npc-002
+- Blockers: None
+- Next: /code-review src/gameplay/npc_system.gd src/gameplay/building_registry.gd tests/integration/npc_system/deposit_storage_test.gd then /story-done production/epics/npc-system/story-003-deposit-storage-coordination.md
+
+## Session Extract — /story-done 2026-06-02 (npc-003)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/npc-system/story-003-deposit-storage-coordination.md — Deposit and Storage Coordination
+- Deviations: ADVISORY — on_npc_waiting/on_npc_deposited added to building_registry.gd (required by AC-7/ADR-0009)
+- Code review fixes applied: Engine.get_singleton→InventorySystem direct ref; String→StringName in BuildingRegistry params; _exit_tree disconnect guard; str() wrappers removed; multi-NPC WAITING test added (24 total)
+- Test evidence: 24/24 test functions (not run — requires Godot binary)
+- Tech debt logged: None
+- Next recommended: npc-system/story-004 (disconnection/demolition) or npc-system/story-005
+
+## Session Extract — /dev-story 2026-06-02 (npc-004)
+- Story: production/epics/npc-system/story-004-disconnection-demolition.md — Disconnection and Demolition
+- Files changed:
+  - `src/gameplay/npc_system.gd` — Extended: 2 new signals (npc_removed, house_demolished); _enter_tree now connects building_demolished+container_removed; _exit_tree disconnects both; 4 new methods: _on_building_demolished(), _on_container_removed(), on_house_demolished(), remove_npc()
+  - `src/gameplay/building_registry.gd` — Added: signal building_demolished (emitted by story-005 demolish_building); get_building_tile() query method (ADVISORY: was missing, called by NPCSystem.assign_npc() from npc-002)
+  - `src/systems/inventory/inventory_system.gd` — Added: signal container_removed; remove_container() method
+  - `tests/integration/npc_system/disconnection_test.gd` — Created: 24 test functions covering AC-9, AC-10, AC-rule8a, AC-rule8b and edge cases
+- Deviations: ADVISORY — get_building_tile() added to BuildingRegistry (was referenced by NPCSystem from npc-002 but missing from production code); building_demolished signal added to BuildingRegistry now (emission point is story-005); container_removed+remove_container added to InventorySystem (required by this story's AC-rule8a/8b)
+- Blockers: None
+- Next: /code-review src/gameplay/npc_system.gd src/gameplay/building_registry.gd src/systems/inventory/inventory_system.gd tests/integration/npc_system/disconnection_test.gd then /story-done production/epics/npc-system/story-004-disconnection-demolition.md
+
+## Session Extract — /code-review fixes 2026-06-02 (npc-004)
+- Applied 6 required changes + 2 suggestions from code review:
+  - npc_system.gd: moved _exit_tree to Lifecycle section; fixed house_demolished signal to Array[StringName]; fixed remove_npc to erase from _house_registry.npc_ids; added home-guard to _begin_return_to_base; added = &"" initializers to NPCInstance assignment fields; replaced bare int 0/1 with InventoryContainer.DepositResult.SUCCESS/FAILURE_FULL
+  - building_registry.gd: get_building_tile param String (not StringName); demolish_building param StringName (match signal)
+  - disconnection_test.gd: fixed house_demolished listener to Array[StringName]; added npc_travel_started not-fired assertion to remove_npc test
+- Next: /story-done production/epics/npc-system/story-004-disconnection-demolition.md
+
+## Session Extract — /story-done 2026-06-02 (npc-004)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/npc-system/story-004-disconnection-demolition.md — Disconnection and Demolition
+- Deviations: ADVISORY — building_registry.gd and inventory_system.gd modified (required signals/methods); AC-10 wording error (npc_released vs npc_removed); production building assigned_npc_id not cleared (story-005 responsibility)
+- Test evidence: 24/24 test functions (not run — requires Godot binary)
+- Tech debt logged: None
+- Next recommended: npc-system/story-005 (UI — recruitment and assignment)
+
+## Session Extract — /dev-story 2026-06-02 (npc-005)
+- Story: production/epics/npc-system/story-005-ui-recruitment-assignment.md — UI: Recruitment and Assignment
+- Files changed:
+  - `project.godot` — registered NPCSystem as autoload
+  - `src/ui/components/building_status_indicator.gd` — added set_stalled() (red mode) for AC-UI-5
+  - `src/gameplay/npc_system.gd` — assign_npc() + release_npc() now sync BuildingRegistry.assigned_npc_id
+  - `src/scenes/map_root.gd` — _refresh_indicator() calls set_stalled() when STALLED state
+  - `src/ui/components/building_detail_panel.gd` — Residential house: worker counter + Recruit button (AC-UI-1/2); Assign popup: real 2-step NPC→storage flow (AC-UI-3/4); release button fixed (AC-UI-5)
+  - `production/qa/evidence/npc-ui-evidence.md` — manual evidence template created
+- Test written: None — UI story, manual evidence required
+- Deviations: ADVISORY — BuildingDetailPanel references NPCSystem via Engine.get_singleton (not direct autoload ref) for null-safety; mock_npc in place_starter_building still sets assigned_npc_id = &"mock_npc" (no NPC in NPCSystem registry, so indicator falls back to yellow — acceptable)
+- Blockers: None
+## Session Extract — /code-review fixes 2026-06-02 (npc-005)
+- Applied 4 required changes + 2 suggestions from code review:
+  - map_root.gd: added indicator.show() before stalled/idle/progress branches in _refresh_indicator
+  - building_detail_panel.gd: replaced queue_free() with free() in _populate_npc_popup_step
+  - building_detail_panel.gd: replaced NPCSystem.NPC_CAPACITY_PER_HOUSE with npc_sys.NPC_CAPACITY_PER_HOUSE (null-safe)
+  - building_detail_panel.gd: _on_npc_released_signal now guards — only refreshes when released NPC matches current building
+  - npc_system.gd: removed dead code second _building_system null check in assign_npc
+- Next: check sprint for next ready story
+
+## Session Extract — /story-done 2026-06-02 (npc-005)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/npc-system/story-005-ui-recruitment-assignment.md — UI: Recruitment and Assignment
+- Deviations: ADVISORY — residential houses not in game scene; NPCs mocked; full cycle unverifiable; project.godot + npc_system.gd touched outside story scope (both required)
+- Test evidence: production/qa/evidence/npc-ui-evidence.md created — sign-off pending game integration
+- Tech debt logged: None
+- Next recommended: sprint review — npc-system epic complete; check building-system or hunger-system for next ready story
+
+## Session Extract — /story-done 2026-06-02 (logistics-001)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/logistics-system/story-001-route-model-and-slot-validation.md — Route Model and Slot Validation
+- Deviations: ADVISORY — MAX_OUTPUT_SLOTS/MAX_INPUT_SLOTS hardcoded as 1 (acceptable for MVP per ADR-0011)
+- Test evidence: tests/unit/logistics/route_model_test.gd (22 tests, all ACs covered)
+- Tech debt logged: None
+- Next recommended: Story 002 (Carrier FSM Core Loop) — production/epics/logistics-system/story-002-carrier-fsm-core-loop.md
+
+## Session Extract — /dev-story 2026-06-02 (logistics-001) — UPDATED
+- Story: production/epics/logistics-system/story-001-route-model-and-slot-validation.md — Route Model and Slot Validation
+- Status: IMPLEMENTED
+- Files changed:
+  - src/systems/logistics/logistics_route.gd — created (LogisticsRoute class, enums, factory)
+  - src/systems/logistics/logistics_system.gd — created (LogisticsSystem, create_route, slot validation)
+  - tests/unit/logistics/route_model_test.gd — created (22 test functions covering AC-1 through AC-5 + edge cases)
+- Test written: tests/unit/logistics/route_model_test.gd (22 test functions)
+- Blockers: None
+- Next: /code-review src/systems/logistics/logistics_route.gd src/systems/logistics/logistics_system.gd then /story-done production/epics/logistics-system/story-001-route-model-and-slot-validation.md
+
+## Session Extract — /dev-story 2026-06-02 (logistics-002)
+- Story: production/epics/logistics-system/story-002-carrier-fsm-core-loop.md — Carrier FSM Core Loop
+- Status: IMPLEMENTED
+- Files changed:
+  - src/systems/logistics/logistics_route.gd — added npc_home_pos field
+  - src/systems/logistics/logistics_system.gd — added FSM: _advance_tick, _process_carrier, start_route, _calc_travel_time, injectable deps
+  - src/gameplay/building_registry.gd — added has_output_buffer, get_output_buffer_total, get_output_buffer_resource
+  - src/gameplay/npc_system.gd — added set_carrier_state, is_available, on_npc_at_location (carrier interface)
+  - tests/integration/logistics/carrier_fsm_test.gd — created (18 test functions covering AC-1 through AC-5)
+- Test written: tests/integration/logistics/carrier_fsm_test.gd (18 test functions)
+- Deviations: AC-1 spec coordinates had errors (home=source=same tile); test uses self-consistent coordinates
+- Blockers: None
+- Next: /code-review src/systems/logistics/logistics_system.gd src/gameplay/building_registry.gd src/gameplay/npc_system.gd then /story-done production/epics/logistics-system/story-002-carrier-fsm-core-loop.md
+
+## Session Extract — /dev-story 2026-06-02 (logistics-003)
+- Story: production/epics/logistics-system/story-003-carrier-waiting-and-timeout.md — Carrier Waiting and Timeout
+- Status: IMPLEMENTED
+- Files changed:
+  - src/systems/logistics/logistics_route.gd — added deactivation_reason field
+  - src/systems/logistics/logistics_system.gd — added carrier_waiting_timeout var, timeout logic in WAITING_SOURCE and WAITING_DESTINATION, _deactivate_route() helper
+  - tests/integration/logistics/carrier_waiting_test.gd — created (14 test functions covering AC-1 through AC-5)
+- Test written: tests/integration/logistics/carrier_waiting_test.gd (14 test functions)
+- Deviations: story-002 Status was "Ready" in file despite implementation existing — updated to "Complete" before proceeding
+- Blockers: None
+- Next: /dev-story production/epics/logistics-system/story-004-building-status-integration.md
+
+## Session Extract — /story-done 2026-06-02 (logistics-003)
+- Verdict: COMPLETE
+- Story: production/epics/logistics-system/story-003-carrier-waiting-and-timeout.md — Carrier Waiting and Timeout
+- Tech debt logged: None
+- Next recommended: Story 004 — Building Status Integration (production/epics/logistics-system/story-004-building-status-integration.md)
+
+## Session Extract — /dev-story 2026-06-02 (logistics-004)
+- Story: production/epics/logistics-system/story-004-building-status-integration.md — Building Status Integration
+- Status: IMPLEMENTED
+- Files changed:
+  - src/gameplay/building_registry.gd — added class_name BuildingRegistry, Status enum, set_status() API, assign_input_carrier(), assign_output_carrier(); removed mock_carrier stubs
+  - src/systems/logistics/logistics_system.gd — added _update_building_status(), _on_route_active_changed(), _assign_carrier_to_building(); wired into create_route, delete_route, _deactivate_route, _advance_tick
+  - tests/integration/logistics/building_status_test.gd — created (14 test functions covering AC-1 through AC-5)
+- Test written: tests/integration/logistics/building_status_test.gd (14 test functions)
+- Deviations: OUTPUT route deactivation intentionally does NOT set STALLED immediately — deferred to next production cycle completion per GDD Core Rules 6 (overrides ADR pseudocode which showed immediate STALLED)
+- Blockers: None
+- Next: /code-review src/systems/logistics/logistics_system.gd src/gameplay/building_registry.gd then /story-done production/epics/logistics-system/story-004-building-status-integration.md
+
+## Session Extract — /story-done 2026-06-02 (logistics-004)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/logistics-system/story-004-building-status-integration.md — Building Status Integration
+- Tech debt logged: None
+- Next recommended: Story 005 — Save/Load for Logistics (production/epics/logistics-system/story-005-save-load-for-logistics.md)
+
+## Session Extract — /dev-story 2026-06-02 (logistics-008)
+- Story: production/epics/logistics-system/story-008-transportation-management-ui.md — Transportation Management UI
+- Status: IMPLEMENTED
+- Files changed:
+  - src/ui/components/transportation_panel.gd — created (TransportationPanel extends Control; two views ActiveRoutesList/RouteDetail; map-select mode; route rows with status badges; NPC picker; route summary; animations with reduced-motion support)
+  - src/systems/logistics/logistics_system.gd — added pause_route(), resume_route(), get_route_efficiency() stub (full Formula 3 pending story 007)
+  - src/ui/components/building_detail_panel.gd — updated _refresh_transport_zone() with real carrier status from LogisticsSystem; efficiency badge; "Manage Transport" link wired
+  - src/ui/hud/hud.gd — added 🚚 transport button; TransportationPanel instance; map-select mode support (notify_building_selected_in_map_select()); all route signals wired to LogisticsSystem
+  - production/qa/evidence/transportation-ui-evidence.md — created (22 AC manual QA checklist)
+- Test written: None — UI story type; evidence doc required at production/qa/evidence/transportation-ui-evidence.md
+- Deviations:
+  - UX spec design/ux/transportation.md status is "In Design" (not formally "Approved") — story was marked Ready, proceeded
+  - Route update (AC-16) implemented as delete+recreate at MVP; preserving carrier mid-trip state is post-MVP
+  - Map-select mode requires map_root.gd wiring of HUD.notify_building_selected_in_map_select() — not yet wired in scene tree (integration task for map_root story)
+  - Efficiency badge uses story-007 stub (1.0/0.5/0.0 by lifecycle state) — full Formula 3 pending story 007
+- Blockers: None
+- Next: /code-review src/ui/components/transportation_panel.gd src/ui/hud/hud.gd then /story-done production/epics/logistics-system/story-008-transportation-management-ui.md
+
+## Session Extract — /story-done 2026-06-02 (logistics-008)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/logistics-system/story-008-transportation-management-ui.md — Transportation Management UI
+- Tech debt logged: None
+- Next recommended: Story 007 — Efficiency and Carrier Count Formulas (production/epics/logistics-system/story-007-efficiency-and-carrier-count-formulas.md)
+
+## Session Extract — /dev-story 2026-06-03 (logistics-006)
+- Story: production/epics/logistics-system/story-006-route-visualization.md — Route Visualization
+- Files changed:
+  - src/ui/components/route_lines.gd — created (RouteLines extends Node2D; Line2D per route; dirty-flag updates via TickSystem; green/yellow/red/gray color encoding by carrier state; hover detection via segment distance; CanvasLayer tooltip with NPC name/distance/round-trip/efficiency)
+  - src/scenes/map_root.gd — RouteLines instantiated in _ready(), grid dependency injected
+  - production/qa/evidence/route-visualization-evidence.md — created (8 AC manual QA checklist)
+- Test written: None — Visual/Feel story type; evidence doc at production/qa/evidence/route-visualization-evidence.md
+- Deviations:
+  - AC for colorblind line patterns (solid/dashed/dotted) DEFERRED per user instruction — marked in evidence doc
+- Blockers: None
+- Next: /code-review src/ui/components/route_lines.gd src/scenes/map_root.gd then /story-done production/epics/logistics-system/story-006-route-visualization.md
+
+## Session Extract — /story-done 2026-06-03 (logistics-006)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/logistics-system/story-006-route-visualization.md — Route Visualization
+- Tech debt logged: None
+- Next recommended: Story 007 — Efficiency and Carrier Count Formulas (production/epics/logistics-system/story-007-efficiency-and-carrier-count-formulas.md)
+
+## Session Extract — /dev-story 2026-06-03 (hunger-001)
+- Story: production/epics/hunger-system/story-001-daily-consumption-and-state-machine.md — Daily Consumption and State Machine
+- Files changed:
+  - src/gameplay/hunger_system.gd — created (HungerSystem Autoload; FED/HUNGRY state machine; apply_daily_consumption(); _compute_total_food_units(); signals: hunger_state_changed, hunger_display_updated; public API: get_hunger_tick_multiplier, get_hunger_output_multiplier, is_hunger_debuff_active, get_days_of_food_remaining)
+  - src/systems/inventory/inventory_system.gd — stub signature fixed: consume_food(_daily_requirement: float) -> Dictionary (was wrong entity_id signature)
+  - project.godot — HungerSystem registered as Autoload after NPCSystem (per ADR-0006 load order)
+  - tests/unit/hunger_system/daily_consumption_test.gd — created (11 test functions covering AC-1 through AC-5, defensive fallback, multiplier checks, formula checks)
+- Test written: tests/unit/hunger_system/daily_consumption_test.gd (11 test functions)
+- Deviations:
+  - ADR tick_count % 1000 guard replaced with null-check only — _tick_count is private (use get_tick_count()); signal handler approach makes modulo guard redundant
+  - InventorySystem.consume_food stub signature was wrong (entity_id + calorie_demand) — fixed to match ADR-0010 interface contract
+- Blockers: None
+- Next: /code-review src/gameplay/hunger_system.gd then /story-done production/epics/hunger-system/story-001-daily-consumption-and-state-machine.md
+
+## Session Extract — /story-done 2026-06-03 (hunger-001)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/hunger-system/story-001-daily-consumption-and-state-machine.md — Daily Consumption and State Machine
+- Tech debt logged: None (advisory deviations noted in story file)
+- Next recommended: Story 002 — Debuff Stacking (production/epics/hunger-system/story-002-debuff-stacking.md)
+
+## Session Extract — /dev-story 2026-06-03 (ui-007)
+- Story: production/epics/ui-system/story-007-day-ledger.md — DayLedger Daily Resource Delta Accumulation
+- Files changed:
+  - src/systems/inventory/inventory_system.gd — added signals item_deposited(resource_id, qty) and item_withdrawn(resource_id, qty); emitted from try_deposit/try_consume on SUCCESS
+  - src/gameplay/hunger_system.gd — added signal food_consumed_daily(items: Dictionary); emitted from apply_daily_consumption() with per-NPC consumed dict
+  - src/ui/day_ledger.gd — created (DayLedger Autoload; _on_deposited/_on_withdrawn/_on_day_transition/_on_hunger_consumed; get_last_day_deltas/get_last_hunger_consumed)
+  - project.godot — DayLedger registered as Autoload after HungerSystem
+  - tests/unit/ui/day_ledger_test.gd — created (11 test functions covering AC-1 through AC-5)
+- Test written: tests/unit/ui/day_ledger_test.gd (11 test functions)
+- Deviations: None
+- Blockers: None
+- Next: /code-review src/ui/day_ledger.gd then /story-done production/epics/ui-system/story-007-day-ledger.md
+
+## Session Extract — /story-done 2026-06-03 (ui-007)
+- Verdict: COMPLETE
+- Story: production/epics/ui-system/story-007-day-ledger.md — DayLedger Daily Resource Delta Accumulation
+- Tech debt logged: None
+- Next recommended: Story 008 — Day Overview Panel (production/epics/ui-system/story-008-day-overview-panel.md)
+
+## Session Extract — /dev-story 2026-06-03 (ui-008)
+- Story: production/epics/ui-system/story-008-day-overview-panel.md — Day Overview Panel
+- Files changed:
+  - src/ui/day_overview_panel.gd — created (DayOverviewPanel CanvasLayer; _on_day_transition/_populate/_fill_resource_list/_on_next_day_pressed)
+  - src/ui/DayOverviewPanel.tscn — created (CanvasLayer layer=10; PanelContainer centered; HeaderRow/HungerList/DeltaList/NextDayButton)
+  - src/scenes/game.tscn — updated (DayOverviewPanel instanced as child of GameWorld)
+  - production/qa/evidence/day-overview-panel-evidence.md — created (manual walkthrough checklist for AC-1 through AC-6)
+- Test written: None — UI story; evidence doc at production/qa/evidence/day-overview-panel-evidence.md
+- Deviations: None
+- Blockers: None
+- Next: /code-review src/ui/day_overview_panel.gd then /story-done production/epics/ui-system/story-008-day-overview-panel.md
+
+## Session Extract — /story-done 2026-06-03 (ui-008)
+- Verdict: COMPLETE
+- Story: production/epics/ui-system/story-008-day-overview-panel.md — Day Overview Panel
+- Tech debt logged: None
+- Next recommended: Check UI System EPIC.md for remaining stories or sprint close-out sequence
+
+## Session Extract — /dev-story 2026-06-03 (efficiency-001)
+- Story: production/epics/efficiency-system/story-001-npc-efficiency-property-and-hunger-integration.md — NPC Efficiency Property and Hunger Integration
+- Files changed:
+  - src/systems/efficiency/efficiency_formulas.gd — created (EfficiencyFormulas static class; F1 calculate_npc_efficiency, F2 calculate_building_efficiency, F3 calculate_effective_cycle_ticks, F4 calculate_effective_travel_ticks)
+  - src/gameplay/npc_system.gd — modified (NPCInstance: efficiency/hunger_modifier/satisfaction_modifier/equipment_modifier fields + recalculate_efficiency(); NPCSystem: _hunger_system ref, hunger_state_changed connection in _enter_tree/_exit_tree, _on_hunger_state_changed, _apply_current_hunger_to_npc; recruit_npc calls _apply_current_hunger_to_npc)
+  - tests/unit/efficiency/npc_efficiency_test.gd — created (17 test functions covering AC-1 through AC-7)
+- Test written: tests/unit/efficiency/npc_efficiency_test.gd (17 test functions)
+- Deviations: None
+- Blockers: None
+- Next: /dev-story production/epics/efficiency-system/story-002-building-efficiency-and-worker-contribution.md
+
+## Session Extract — /story-done 2026-06-03 (efficiency-001)
+- Verdict: COMPLETE
+- Story: production/epics/efficiency-system/story-001-npc-efficiency-property-and-hunger-integration.md — NPC Efficiency Property and Hunger Integration
+- Tech debt logged: None
+- Next recommended: Story 002 — Building Efficiency and Worker Contribution (production/epics/efficiency-system/story-002-building-efficiency-and-worker-contribution.md)
+
+## Session Extract — /dev-story 2026-06-04 (efficiency-002)
+- Story: production/epics/efficiency-system/story-002-building-efficiency-and-worker-contribution.md — Building Efficiency and Worker Contribution
+- Files changed:
+  - src/gameplay/building_registry.gd — modified (BuildingInstance: efficiency/upgrade_bonus fields + recalculate_efficiency(); BuildingRegistry: _npc_system field, _get_assigned_workers() helper, assign_npc() calls recalculate)
+  - src/gameplay/npc_system.gd — modified (_propagate_worker_efficiency_change() added; _on_npc_food_efficiency_changed now calls it after NPC recalculate)
+  - tests/unit/efficiency/building_efficiency_test.gd — created (15 test functions covering AC-1 through AC-7)
+- Test written: tests/unit/efficiency/building_efficiency_test.gd (15 test functions)
+- Deviations: None
+- Blockers: None
+- Next: /dev-story production/epics/efficiency-system/story-003-production-cycle-integration.md
+
+## Session Extract — /story-done 2026-06-04 (efficiency-002)
+- Verdict: COMPLETE
+- Story: production/epics/efficiency-system/story-002-building-efficiency-and-worker-contribution.md — Building Efficiency and Worker Contribution
+- Tech debt logged: None
+- Next recommended: Story 003 — Production Cycle Integration (production/epics/efficiency-system/story-003-production-cycle-integration.md)
+
+## Session Extract — /dev-story 2026-06-04 (logistics-009)
+- Story: production/epics/logistics-system/story-009-tile-movement-cost-data-model.md — Tile Movement Cost Data Model
+- Files changed:
+  - data/resources.json — modified (added movement_cost: 4.0 to all 7 resource definitions)
+  - src/systems/resource_registry.gd — modified (movement_cost field on _ResourceDefinition; parsed in _apply_optional_fields, default 4.0)
+  - src/systems/world_grid.gd — modified (BUILDING_LAYER/RESOURCE_LAYER constants; terrain_changed signal; get_tile_movement_cost(); is_tile_passable(); signal emissions in place_building, remove_building, add_resource_to_tile, remove_one_resource, harvest_resource)
+  - tests/unit/logistics/tile_movement_cost_test.gd — created (14 test functions covering AC-1 through AC-8)
+- Test written: tests/unit/logistics/tile_movement_cost_test.gd (14 test functions)
+- Deviations: None
+- Blockers: None
+- Next: /code-review src/systems/world_grid.gd src/systems/resource_registry.gd then /story-done production/epics/logistics-system/story-009-tile-movement-cost-data-model.md
+
+## Session Extract — /dev-story 2026-06-04 (logistics-010)
+- Story: production/epics/logistics-system/story-010-weighted-astar-pathfinding.md — Weighted A* Pathfinding
+- Files changed:
+  - src/gameplay/path_result.gd — created (PathResult value object: path, cost, found; success/failure factories)
+  - src/gameplay/logistics_pathfinder.gd — created (LogisticsPathfinder static find_path(); 4-dir A*, Manhattan heuristic, duck-typed grid param)
+  - tests/unit/logistics/astar_pathfinder_test.gd — created (27 test functions covering AC-1 through AC-9 and TC-1 through TC-7)
+- Test written: tests/unit/logistics/astar_pathfinder_test.gd (27 test functions)
+- Deviations: Story 009 dependency was implemented but not yet marked Complete (status still "Ready") — implementation verified present in world_grid.gd before proceeding
+- Blockers: None
+- Next: /code-review src/gameplay/logistics_pathfinder.gd src/gameplay/path_result.gd then /story-done production/epics/logistics-system/story-010-weighted-astar-pathfinding.md
+
+## Session Extract — /story-done 2026-06-04 (logistics-010)
+- Verdict: COMPLETE
+- Story: production/epics/logistics-system/story-010-weighted-astar-pathfinding.md — Weighted A* Pathfinding
+- Tech debt logged: None
+- Next recommended: Story 011 — Carrier FSM Path Integration (production/epics/logistics-system/story-011-carrier-fsm-path-integration.md)
+
+## Session Extract — /dev-story 2026-06-04 (logistics-011)
+- Story: production/epics/logistics-system/story-011-route-path-integration.md — Logistics Route Path Integration
+- Files changed:
+  - src/systems/logistics/logistics_route.gd — added 7 path-cache fields (cached_path, cached_path_cost, path_valid, cached_path_cost_home_to_source, cached_path_cost_source_to_home, cached_path_cost_dest_to_home, home_legs_valid)
+  - src/systems/logistics/logistics_system.gd — added _grid_map dependency; updated create_route() with path gate; updated start_route() to cache home legs; swapped all FSM travel-time calls to use cached costs with Manhattan fallback
+  - tests/integration/logistics/route_path_integration_test.gd — created (10 test functions covering AC-1 through AC-5 + home-leg caching)
+- Test written: tests/integration/logistics/route_path_integration_test.gd (10 test functions)
+- Deviations: AC lists 3 required fields; implementation adds 4 more (home-leg costs + validity flag) required to cover all 3 FSM travel legs — no out-of-scope files touched
+- Blockers: None
+- Next: /code-review src/systems/logistics/logistics_system.gd src/systems/logistics/logistics_route.gd then /story-done production/epics/logistics-system/story-011-route-path-integration.md
+
+## Session Extract — /story-done 2026-06-05 (logistics-011)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/logistics-system/story-011-route-path-integration.md — Logistics Route Path Integration
+- Tech debt logged: None
+- Next recommended: Story 012 — Path Invalidation on Terrain Change (production/epics/logistics-system/story-012-path-invalidation-terrain-change.md)
+
+## Session Extract — /dev-story 2026-06-05 (logistics-012)
+- Story: production/epics/logistics-system/story-012-path-invalidation-on-terrain-change.md — Path Invalidation on Terrain Change
+- Files changed:
+  - src/systems/logistics/logistics_system.gd — added set_grid_map() public API; added _on_terrain_changed() handler; added _recalculate_invalid_paths() deferred recalculator
+  - tests/integration/logistics/path_invalidation_test.gd — created (8 test functions covering AC-1 through AC-7)
+- Test written: tests/integration/logistics/path_invalidation_test.gd (8 test functions)
+- Deviations: None — all changes within logistics_system.gd; no out-of-scope files touched
+- Blockers: None
+- Next: /code-review src/systems/logistics/logistics_system.gd then /story-done production/epics/logistics-system/story-012-path-invalidation-on-terrain-change.md
+
+## Session Extract — /story-done 2026-06-05 (logistics-012)
+- Verdict: COMPLETE
+- Story: production/epics/logistics-system/story-012-path-invalidation-on-terrain-change.md — Path Invalidation on Terrain Change
+- Tech debt logged: None
+- Next recommended: Check logistics epic for remaining Ready stories
+
+## Session Extract — /dev-story 2026-06-05 (save-001)
+- Story: production/epics/save-load-system/story-001-world-save-manager.md — WorldSaveManager Orchestrator
+- Files changed:
+  - src/systems/save_world_save_manager.gd — already implemented (no changes needed)
+  - tests/unit/save_world/save_manager_test.gd — created (15 test functions covering AC-1 through AC-5 + schema validation + slot bounds)
+- Test written: tests/unit/save_world/save_manager_test.gd (15 test functions)
+- Deviations: Unit tests use file I/O (user://saves/) because WorldSaveManager's core behavior is file I/O; DI refactor would be a separate story
+- Blockers: None
+- Next: /code-review src/systems/save_world_save_manager.gd tests/unit/save_world/save_manager_test.gd then /story-done production/epics/save-load-system/story-001-world-save-manager.md
+
+## Session Extract — /story-done 2026-06-05 (save-001)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/save-load-system/story-001-world-save-manager.md — WorldSaveManager Orchestrator
+- Tech debt logged: None
+- Next recommended: Story 002 — Save Slot Management (production/epics/save-load-system/story-002-save-slot-management.md)
+  NOTE: Story 002 ACs 6–9 are already implemented by Story 001's scope creep (get_available_slots, get_save_info, atomic writes, metadata files all in save_world_save_manager.gd). Only AC-10 (_startup_cleanup in _ready) needs implementation. Story 002 should be fast.
+
+## Session Extract — /dev-story 2026-06-05 (save-002)
+- Story: production/epics/save-load-system/story-002-save-slot-management.md — Save Slot Management and Metadata
+- Files changed:
+  - src/systems/save_world_save_manager.gd — added _ready(), _startup_cleanup(), added slots.sort() to get_available_slots()
+  - tests/unit/save_world/save_slot_test.gd — created (13 test functions covering AC-6 through AC-10)
+- Test written: tests/unit/save_world/save_slot_test.gd (13 test functions)
+- Deviations: AC-9 atomicity tested indirectly via orphaned .tmp + _startup_cleanup() pattern (cannot hook DirAccess.rename_absolute to force failure in GDScript unit tests)
+- Blockers: None
+- Next: /code-review src/systems/save_world_save_manager.gd tests/unit/save_world/save_slot_test.gd then /story-done production/epics/save-load-system/story-002-save-slot-management.md
+
+## Session Extract — /story-done 2026-06-05 (save-002)
+- Verdict: COMPLETE WITH NOTES
+- Story: production/epics/save-load-system/story-002-save-slot-management.md — Save Slot Management and Metadata
+- Tech debt logged: None
+- Next recommended: Story 003 — Schema Versioning (production/epics/save-load-system/story-003-schema-versioning.md)
+

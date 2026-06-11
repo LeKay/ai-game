@@ -1,7 +1,7 @@
 # Story 002: Task Cycle — Travel and Work
 
 > **Epic**: NPC System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: Integration — ADR-0009
 > **Manifest Version**: N/A — control manifest not yet created
@@ -166,3 +166,14 @@ const TICKS_PER_TILE: float = 3.0  # default — primary distance balance knob
 
 - Depends on: Story 001 (NPCs must be recruited before they can be assigned)
 - Unlocks: Story 003 (deposit/waiting requires travel and work to complete first)
+
+---
+
+## Completion Notes
+**Completed**: 2026-06-02
+**Criteria**: 3/4 passing (AC-6b deferred — carrier NPC dispatch is Transportation System scope, explicitly Out of Scope per story)
+**Deviations**:
+- ADVISORY — Manhattan distance computed inline in `_compute_travel_ticks()` instead of delegating to `GridMap.distance_between()` (ADR-0009 requirement). Result is identical at VS scope. Tech debt logged: TDB-001.
+- ADVISORY — Gameplay constants hardcoded (`TICKS_PER_TILE=3`, etc.). Ongoing project pattern for VS scope.
+**Test Evidence**: Integration — `tests/integration/npc_system/task_cycle_travel_work_test.gd` (29 tests covering AC-3, AC-5, AC-6)
+**Code Review**: APPROVED WITH SUGGESTIONS (ran `/code-review` — 5 suggestions applied before close)

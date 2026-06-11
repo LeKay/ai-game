@@ -58,29 +58,6 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="HeaderRow" type="HBoxContainer" parent="Panel/VBox"]
-layout_mode = 2
-
-[node name="ResourceLabel" type="Label" parent="Panel/VBox/HeaderRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 16
-theme_override_colors/font_color = Color(0.94, 0.93, 0.9, 1)
-
-[node name="CloseButton" type="Button" parent="Panel/VBox/HeaderRow"]
-layout_mode = 2
-custom_minimum_size = Vector2(24, 24)
-focus_mode = 0
-text = "✕"
-theme_override_colors/font_color = Color(0.75, 0.75, 0.75, 1)
-theme_override_colors/font_hover_color = Color(0.94, 0.93, 0.9, 1)
-theme_override_colors/font_pressed_color = Color(1.0, 1.0, 1.0, 1)
-theme_override_font_sizes/font_size = 14
-theme_override_styles/normal = SubResource("StyleBoxFlat_close_normal")
-theme_override_styles/hover = SubResource("StyleBoxFlat_close_hover")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_close_pressed")
-theme_override_styles/focus = SubResource("StyleBoxFlat_close_normal")
-
 [node name="CostRow" type="HBoxContainer" parent="Panel/VBox"]
 layout_mode = 2
 theme_override_constants/separation = 12
@@ -104,5 +81,34 @@ theme_override_colors/font_color = Color(0.88, 0.33, 0.33, 1)
 autowrap_mode = 3
 
 [node name="HarvestButton" type="Button" parent="Panel/VBox"]
+layout_mode = 2
+theme = ExtResource("2_button")
+
+[node name="ClearSeparator" type="HSeparator" parent="Panel/VBox"]
+layout_mode = 2
+
+[node name="ClearCostRow" type="HBoxContainer" parent="Panel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ClearEnergyCostLabel" type="Label" parent="Panel/VBox/ClearCostRow"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.85, 0.75, 1)
+
+[node name="ClearTickCostLabel" type="Label" parent="Panel/VBox/ClearCostRow"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.85, 0.75, 1)
+
+[node name="ClearOutputLabel" type="Label" parent="Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.94, 0.93, 0.9, 1)
+
+[node name="ClearBlockReasonLabel" type="Label" parent="Panel/VBox"]
+layout_mode = 2
+visible = false
+theme_override_colors/font_color = Color(0.88, 0.33, 0.33, 1)
+autowrap_mode = 3
+
+[node name="ClearButton" type="Button" parent="Panel/VBox"]
 layout_mode = 2
 theme = ExtResource("2_button")

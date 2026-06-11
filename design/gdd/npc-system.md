@@ -50,11 +50,25 @@ The cycle repeats until the NPC is reassigned, the building is demolished, or th
 **Rule 5: Movement and Pathfinding**
 NPC movement uses Manhattan distance (consistent with Grid/Map System). Diagonal movement is not supported — NPCs move along grid axes only. NPCs can pass through any non-walkable tile that a building occupies (buildings are transparent to NPC movement). NPCs cannot pass through other NPCs — if the path is blocked, movement pauses until the blocking NPC moves. At Vertical Slice scope, obstacle detours are not modeled — travel time is purely Manhattan distance. At future scope, pathfinding around impassable tiles (water, cliffs) may replace Manhattan distance.
 
-**Rule 6: NPC Status (deferred to post-VS)**
+**Rule 6: NPC Efficiency**
 
-At Vertical Slice scope, all NPCs work at 100% effectiveness. The Perk System (which will evaluate consumption needs and apply effectiveness modifiers) is not yet designed and will be introduced in a later milestone. NPC behavior at VS is binary: an NPC is either working or idle, with no effectiveness modifiers.
+Each NPC carries an `efficiency: float` property (default 1.0, range 0.0–2.0). Efficiency is a speed multiplier: values above 1.0 make the NPC faster, values below 1.0 make them slower. Efficiency is computed as:
 
-Future: The Perk System will drive NPC effectiveness through disabled perks (food, clothing, shelter), with a special case where food deprivation reduces effectiveness to 50%. Population tier consumption requirements will gate perk activation. This rule is retained as a placeholder — no code or behavior is implemented for it at VS scope.
+```
+npc.efficiency = clamp(1.0 × hunger_modifier × satisfaction_modifier × equipment_modifier, 0.0, 2.0)
+```
+
+At Vertical Slice scope, only `hunger_modifier` is active (1.0 when fed, 0.5 when hungry). `satisfaction_modifier` and `equipment_modifier` default to 1.0 and are introduced by later systems.
+
+Worker-NPCs contribute their efficiency delta to their assigned building:
+`building.efficiency += (npc.efficiency - 1.0)` per assigned worker.
+
+Carrier-NPCs apply their efficiency directly to travel time:
+`effective_travel_ticks = max(1, floor(base_travel_ticks / npc.efficiency))`
+
+See `design/quick-specs/efficiency-system-2026-06-03.md` for full formulas, tuning knobs, and UI interpretation rules.
+
+Future: The Perk System will drive `satisfaction_modifier` through consumption needs (food, clothing, shelter). Population tier requirements will gate perk activation.
 
 **Rule 7: NPC Limits**
 Each Residential House has a capacity of 2 NPCs. The total NPC population is bounded by the number of Residential Houses × 2. There is no global population cap beyond housing capacity. Food, housing, and perk satisfaction are the limiting factors.

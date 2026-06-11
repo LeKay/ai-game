@@ -20,6 +20,12 @@ signal storage_changed(container_id: StringName)
 
 ## Emitted when a container's capacity is changed via set_container_capacity().
 signal container_capacity_changed(container_id: StringName, old_capacity: int, new_capacity: int)
+## Emitted when a container is permanently removed via remove_container().
+signal container_removed(container_id: StringName)
+## Emitted after a successful deposit into any container (used by DayLedger).
+signal item_deposited(resource_id: StringName, qty: int)
+## Emitted after a successful consume from any container (used by DayLedger).
+signal item_withdrawn(resource_id: StringName, qty: int)
 
 ## Primary store: container_id → InventoryContainer
 var _containers: Dictionary[StringName, InventoryContainer] = {}
@@ -34,12 +40,23 @@ var _containers: Dictionary[StringName, InventoryContainer] = {}
 ## If a container with the same id already exists, a warning is pushed and the
 ## call is ignored (containers are immutable at creation; use set_container_capacity
 ## to resize).
-func create_container(id: StringName, p_display_name: String, p_capacity: int) -> void:
+func create_container(id: StringName, p_display_name: String, p_capacity: int, p_quantity_based: bool = false) -> void:
 	if _containers.has(id):
 		push_warning("InventorySystem: container '%s' already exists — ignoring create_container call" % id)
 		return
-	_containers[id] = InventoryContainer.new(id, p_display_name, p_capacity)
+	var c := InventoryContainer.new(id, p_display_name, p_capacity)
+	c.quantity_based = p_quantity_based
+	_containers[id] = c
 	container_capacity_changed.emit(id, 0, p_capacity)
+
+
+## Permanently removes the container for the given id and emits container_removed.
+## No-op if the container does not exist.
+func remove_container(id: StringName) -> void:
+	if not _containers.has(id):
+		return
+	_containers.erase(id)
+	container_removed.emit(id)
 
 
 ## Returns the container for the given id, or null if it does not exist.
@@ -113,6 +130,16 @@ func get_occupied_slots(id: StringName) -> int:
 	return container.get_occupied_count()
 
 
+## Returns the sum of quantities across all active slots in the named container.
+## For quantity_based containers this is the authoritative "used items" count.
+func get_total_quantity(id: StringName) -> int:
+	var container: InventoryContainer = _containers.get(id, null)
+	if container == null:
+		return 0
+	return container.get_total_quantity()
+
+
+
 ## Returns the InventorySlot at slot_index, or null if the index is out of range
 ## or the container does not exist.
 func get_slot_data(id: StringName, slot_index: int) -> InventorySlot:
@@ -163,7 +190,7 @@ func try_deposit(container_id: StringName, resource_id: StringName, quantity: in
 	var c: InventoryContainer = _containers.get(container_id, null)
 	if c == null:
 		return InventoryContainer.DepositResult.FAILURE_NO_CONTAINER
-	var registry: Object = Engine.get_singleton(&"ResourceRegistry")
+	var registry: Object = Engine.get_singleton(&"ResourceRegistry") if Engine.has_singleton(&"ResourceRegistry") else null
 	var stack_limit: int = 9999
 	var max_charge: float = 0.0
 	if registry != null:
@@ -174,6 +201,7 @@ func try_deposit(container_id: StringName, resource_id: StringName, quantity: in
 	var result: InventoryContainer.DepositResult = c.try_deposit(resource_id, quantity, stack_limit, max_charge)
 	if result == InventoryContainer.DepositResult.SUCCESS:
 		storage_changed.emit(container_id)
+		item_deposited.emit(resource_id, quantity)
 	return result
 
 
@@ -187,6 +215,7 @@ func try_consume(container_id: StringName, resource_id: StringName, quantity: in
 	var result: InventoryContainer.ConsumeResult = c.try_consume(resource_id, quantity)
 	if result == InventoryContainer.ConsumeResult.SUCCESS:
 		storage_changed.emit(container_id)
+		item_withdrawn.emit(resource_id, quantity)
 	return result
 
 
@@ -196,8 +225,10 @@ func try_consume(container_id: StringName, resource_id: StringName, quantity: in
 
 
 ## STUB (inv-004): Hunger consumption algorithm.
-func consume_food(_entity_id: StringName, _calorie_demand: float) -> void:
-	pass  # story inv-004
+## Returns FoodConsumptionResult: {hunger_debuff_applied: bool, food_consumed: int, remaining_deficit: int}
+## Empty dict return triggers HungerSystem defensive fallback (treats as HUNGRY) until inv-004 implements this.
+func consume_food(_daily_requirement: float) -> Dictionary:
+	return {}  # story inv-004
 
 
 ## STUB (inv-003): Enqueues a transport job; returns a unique transit_id.
@@ -216,11 +247,46 @@ func get_in_transit(_transit_id: StringName) -> TransitItem:
 	return null  # story inv-003
 
 
-## STUB (inv-005): Serialises all containers to an Array of Dictionaries.
+## Serialises all containers to an Array of Dictionaries.
 func serialize() -> Array:
-	return []  # story inv-005
+	var result: Array = []
+	for container_id: StringName in _containers:
+		var container: InventoryContainer = _containers[container_id]
+		var slots_data: Array = []
+		for slot: InventorySlot in container.slots:
+			slots_data.append({
+				"resource_id": str(slot.resource_id),
+				"quantity": slot.quantity,
+				"current_charge": slot.current_charge,
+			})
+		result.append({
+			"container_id": str(container_id),
+			"display_name": container.display_name,
+			"capacity": container.capacity,
+			"quantity_based": container.quantity_based,
+			"slots": slots_data,
+		})
+	return result
 
 
-## STUB (inv-005): Restores containers from a serialised snapshot.
-func deserialize(_snapshots: Array) -> void:
-	pass  # story inv-005
+## Restores containers from a serialised snapshot produced by serialize().
+func deserialize(snapshots: Array) -> void:
+	_containers.clear()
+	for snap: Dictionary in snapshots:
+		var cid: StringName = StringName(snap.get("container_id", ""))
+		if cid == &"":
+			continue
+		var dname: String = snap.get("display_name", "")
+		var cap: int = snap.get("capacity", 0)
+		var container := InventoryContainer.new(cid, dname, cap)
+		container.quantity_based = snap.get("quantity_based", false)
+		var slots_data: Array = snap.get("slots", [])
+		for i: int in range(slots_data.size()):
+			var sd: Dictionary = slots_data[i]
+			# Grow slots array if the save had overflow slots beyond capacity.
+			while container.slots.size() <= i:
+				container.slots.append(InventorySlot.new())
+			container.slots[i].resource_id = StringName(sd.get("resource_id", ""))
+			container.slots[i].quantity = sd.get("quantity", 0)
+			container.slots[i].current_charge = sd.get("current_charge", 0.0)
+		_containers[cid] = container
