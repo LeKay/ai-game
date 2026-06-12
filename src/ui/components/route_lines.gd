@@ -427,6 +427,13 @@ func _update_carrier_icon(route: LogisticsRoute) -> void:
 	elif not icon.visible:
 		icon.position = icon_pos
 
+	# Show the "×N" cargo-count badge when carrying more than one item (carrier capacity > 1).
+	var count_lbl: Label = icon.get_node_or_null("CountLabel")
+	if count_lbl != null:
+		count_lbl.visible = route.cargo > 1
+		if count_lbl.visible:
+			count_lbl.text = "×%d" % route.cargo
+
 	_icon_target[route.id] = icon_pos
 	icon.visible = true
 
@@ -448,7 +455,12 @@ func _calc_carrier_world_pos(route: LogisticsRoute, world_path: Array[Vector2],
 			return world_path[world_path.size() - 1]
 
 		var total_ticks: int = int(floor(route.cached_path_cost * LogisticsSystem.TICKS_PER_TILE))
-		var elapsed: float = float(maxi(0, total_ticks - route.remaining_ticks))
+		# F4: the leg's real duration is efficiency-scaled (captured at leg start). Derive the
+		# 0..1 progress from that, then map it onto the base-cost-weighted tile budget below so
+		# high-cost tiles still slow the icon proportionally.
+		var leg_total: int = route.current_leg_total_ticks if route.current_leg_total_ticks > 0 else total_ticks
+		var t: float = clampf(float(leg_total - route.remaining_ticks) / float(maxi(leg_total, 1)), 0.0, 1.0)
+		var elapsed: float = t * float(total_ticks)
 		var accumulated: float = 0.0
 
 		# Leaving-tile semantics: segment world_path[i] → world_path[i+1] uses cost(cached_path[i]).
@@ -465,12 +477,14 @@ func _calc_carrier_world_pos(route: LogisticsRoute, world_path: Array[Vector2],
 			accumulated += tile_ticks
 		return world_path[world_path.size() - 1]
 
-	# Fallback: linear progress when no path cache is available
+	# Fallback: linear progress when no path cache is available. Use the F4-scaled leg
+	# duration when known, else the base estimate.
 	var total_cost: float = route.cached_path_cost if route.path_valid else float(
 		absi(dst_tile.x - src_tile.x) + absi(dst_tile.y - src_tile.y))
 	var fallback_ticks: int = int(floor(total_cost * LogisticsSystem.TICKS_PER_TILE))
-	var progress: float = 1.0 if fallback_ticks <= 0 else \
-		clampf(1.0 - float(route.remaining_ticks) / float(fallback_ticks), 0.0, 1.0)
+	var leg_total: int = route.current_leg_total_ticks if route.current_leg_total_ticks > 0 else fallback_ticks
+	var progress: float = 1.0 if leg_total <= 0 else \
+		clampf(1.0 - float(route.remaining_ticks) / float(leg_total), 0.0, 1.0)
 	return _point_along_path(world_path, progress * _path_length(world_path))
 
 
@@ -490,6 +504,18 @@ func _make_carrier_icon(resource_id: StringName) -> Node2D:
 	if tex_size.x > 0.0 and tex_size.y > 0.0:
 		icon_spr.scale = Vector2(icon_px / tex_size.x, icon_px / tex_size.y)
 	container.add_child(icon_spr)
+
+	# Cargo-count badge ("×N") — shown only when the carrier hauls more than one item.
+	var count_lbl := Label.new()
+	count_lbl.name = "CountLabel"
+	count_lbl.add_theme_font_size_override("font_size", 10)
+	count_lbl.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))
+	count_lbl.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0))
+	count_lbl.add_theme_constant_override("outline_size", 4)
+	count_lbl.position = Vector2(float(ICON_RADIUS) * 0.5, -float(ICON_RADIUS) * 1.9)
+	count_lbl.z_index = 1
+	count_lbl.visible = false
+	container.add_child(count_lbl)
 
 	return container
 

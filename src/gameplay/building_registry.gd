@@ -104,7 +104,14 @@ class BuildingInstance:
 	## All other buildings use F2 (1.0 + worker delta + upgrade_bonus).
 	func recalculate_efficiency(assigned_workers: Array) -> void:
 		if ADJACENCY_REQUIREMENTS.has(type):
-			efficiency = EfficiencyFormulas.calculate_adjacency_efficiency(adjacency_tile_count)
+			# Balancing 2026-06-11: combine layout AND worker food (adjacency × worker eff),
+			# so feeding speeds up gatherers too (previously food had no effect on them).
+			var adj: float = EfficiencyFormulas.calculate_adjacency_efficiency(adjacency_tile_count)
+			var worker_eff: float = 1.0
+			if not assigned_workers.is_empty():
+				worker_eff = assigned_workers[0].efficiency
+			efficiency = clampf(adj * worker_eff,
+					EfficiencyFormulas.EFFICIENCY_MIN, EfficiencyFormulas.BUILDING_EFFICIENCY_MAX)
 			return
 		var worker_efficiencies: Array[float] = []
 		for worker in assigned_workers:
@@ -135,15 +142,18 @@ const BUILD_COST: Dictionary = {
 	BuildingType.TOOL_WORKSHOP:     {&"wood": 10, &"stone": 5},
 }
 
+## Build times rescaled for pacing (balancing 2026-06-11): anchor 1 tick ≈ 1 minute,
+## 1440 ticks/day. Construction now takes hours-to-days (was seconds) so the in-game day
+## is a real planning unit. Hut ≈ 0.4 day, house/camp/mason ≈ 0.8–1.1 days, workshop ≈ 2 days.
 const BUILD_TIME: Dictionary = {
 	BuildingType.COLLECTION_POINT:  0,
-	BuildingType.STORAGE_BUILDING:  120,
-	BuildingType.RESIDENTIAL_HOUSE: 150,
-	BuildingType.LUMBER_CAMP:       200,
+	BuildingType.STORAGE_BUILDING:  960,
+	BuildingType.RESIDENTIAL_HOUSE: 1200,
+	BuildingType.LUMBER_CAMP:       1600,
 	BuildingType.ROAD:              0,
-	BuildingType.GATHERING_HUT:     80,
-	BuildingType.STONE_MASON:       200,
-	BuildingType.TOOL_WORKSHOP:     250,
+	BuildingType.GATHERING_HUT:     640,
+	BuildingType.STONE_MASON:       1600,
+	BuildingType.TOOL_WORKSHOP:     3000,
 }
 
 ## Movement cost for buildings that NPCs and carriers can traverse.
@@ -186,15 +196,16 @@ const ADJACENCY_REQUIREMENTS: Dictionary = {
 
 ## Maps WorldGrid.TileType → resource output produced per cycle by GATHERING_HUT.
 const TERRAIN_HARVEST_OUTPUT: Dictionary = {
-	WorldGrid.TileType.BERRY: {&"berry": 3},
+	WorldGrid.TileType.BERRY: {&"berry": 4},
 	WorldGrid.TileType.GRASS: {&"fiber": 2},
 }
 
 ## Formula 7 scalar: energy cost per resource unit in build cost.
 const ENERGY_PER_RESOURCE: float = 0.10
 
-## Formula 3 scalar: ticks per map tile for carrier travel time calculation.
-const TICKS_PER_TILE: float = 3.0
+## Formula 3 scalar: base ticks per map tile at 100% efficiency (in sync with
+## LogisticsSystem/NPCSystem). Anchored 2026-06-12 so 50% efficiency = 10/tile.
+const TICKS_PER_TILE: float = 5.0
 
 ## NPC spawn interval for Residential House (Formula 8), in ticks.
 const NPC_SPAWN_INTERVAL: int = 1000
@@ -206,25 +217,28 @@ const MAX_HOUSE_NPCS: int = 2
 ## Each entry defines input costs, base output, and cycle duration.
 ## Inputs use float for tool charge_cost; wood uses quantity (int stored as float for uniformity).
 ## Format: { inputs: [{resource_id, quantity | charge_cost}], output: {resource_id: qty}, base_cycle_ticks: int, npc_required: bool }
+## Cycle ticks rescaled for pacing (balancing 2026-06-11): ~5–6 cycles/day for basic
+## producers (was ~14). Tool charge_cost 1/30 → one delivered tool (1.0 buffer charge)
+## powers 30 production cycles, making tools a durable capital good instead of per-cycle fuel.
 const PRODUCTION_TABLE: Dictionary = {
 	BuildingType.LUMBER_CAMP: {
 		"inputs": [
-			{"resource_id": &"tool", "charge_cost": 1.0},
+			{"resource_id": &"tool", "charge_cost": 1.0 / 30.0},
 		],
 		"output": {&"wood": 5},
 		"output_capacity": 20,
 		"input_capacity": 5,
-		"base_cycle_ticks": 100,
+		"base_cycle_ticks": 250,
 		"npc_required": true,
 	},
 	BuildingType.STONE_MASON: {
 		"inputs": [
-			{"resource_id": &"tool", "charge_cost": 1.0},
+			{"resource_id": &"tool", "charge_cost": 1.0 / 30.0},
 		],
 		"output": {&"stone": 5},
 		"output_capacity": 20,
 		"input_capacity": 5,
-		"base_cycle_ticks": 100,
+		"base_cycle_ticks": 250,
 		"npc_required": true,
 	},
 	BuildingType.GATHERING_HUT: {
@@ -232,7 +246,7 @@ const PRODUCTION_TABLE: Dictionary = {
 		"output": {},  ## actual output computed dynamically via gathering_output
 		"output_capacity": 20,
 		"input_capacity": 0,
-		"base_cycle_ticks": 100,
+		"base_cycle_ticks": 250,
 		"npc_required": true,
 	},
 	BuildingType.TOOL_WORKSHOP: {
@@ -244,7 +258,7 @@ const PRODUCTION_TABLE: Dictionary = {
 		"output": {&"tool": 1},
 		"output_capacity": 10,
 		"input_capacity": 10,
-		"base_cycle_ticks": 150,
+		"base_cycle_ticks": 375,
 		"npc_required": true,
 	},
 }
@@ -599,6 +613,12 @@ func _advance_production_cycle(instance: BuildingInstance, delta: int) -> void:
 				building_state_changed.emit(instance.building_id, instance.state, reason)
 		return
 	instance.production_cycle_ticks += delta
+	# F3 (live): recompute the effective duration from the CURRENT building efficiency every tick,
+	# so feeding / placement changes affect the in-progress cycle immediately (not only the next
+	# one). base / efficiency: eff 1.0 → base, eff 0.5 → 2× base, eff 0.25 → 4× base.
+	if PRODUCTION_TABLE.has(instance.type):
+		instance.production_cycle_duration = EfficiencyFormulas.calculate_effective_cycle_ticks(
+				PRODUCTION_TABLE[instance.type].get("base_cycle_ticks", 0), instance.efficiency)
 	if instance.production_cycle_ticks < instance.production_cycle_duration:
 		return
 	# Cycle complete — deposit output to buffer.
@@ -729,7 +749,10 @@ func _try_start_production_cycle(instance: BuildingInstance) -> int:
 		instance.input_buffer[resource_id] = instance.input_buffer.get(resource_id, 0.0) - cost
 		if instance.input_buffer[resource_id] <= 0.0:
 			instance.input_buffer.erase(resource_id)
-	instance.production_cycle_duration = calculate_cycle_duration(table_entry.get("base_cycle_ticks", 0))
+	# F3 wired (balancing 2026-06-11): effective cycle = base / building_efficiency.
+	# Hungry/poorly-placed buildings now actually run slower; well-fed/placed run faster.
+	instance.production_cycle_duration = EfficiencyFormulas.calculate_effective_cycle_ticks(
+			table_entry.get("base_cycle_ticks", 0), instance.efficiency)
 	instance.production_cycle_ticks = 0
 	instance.cycle_running = true
 	return _CycleStartResult.SUCCESS
@@ -845,11 +868,14 @@ func calculate_cycle_duration(base_cycle_ticks: int) -> int:
 func _get_assigned_workers(instance: BuildingInstance) -> Array:
 	if instance.assigned_npc_id == &"":
 		return []
-	if _npc_system == null:
-		_npc_system = Engine.get_singleton("NPCSystem")
-	if _npc_system == null:
+	# Direct Autoload access — Engine.get_singleton() returns null for GDScript Autoloads
+	# (forbidden pattern, see .claude/rules/godot-singletons.md). This bug made the worker drop
+	# out of building-efficiency recalcs at assign/adjacency time, so NPC efficiency didn't reach
+	# production. _npc_system stays injectable for tests; fall back to the NPCSystem Autoload.
+	var npc_sys: Object = _npc_system if _npc_system != null else NPCSystem
+	if npc_sys == null:
 		return []
-	var npc: Object = _npc_system.get_npc_instance(instance.assigned_npc_id)
+	var npc: Object = npc_sys.get_npc_instance(instance.assigned_npc_id)
 	if npc == null:
 		return []
 	return [npc]

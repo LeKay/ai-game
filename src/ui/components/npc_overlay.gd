@@ -61,18 +61,14 @@ func _sync_npc_icons() -> void:
 	if _grid == null:
 		return
 
-	# Build npc_id → LogisticsRoute lookup for O(1) access inside the NPC loop.
-	var npc_to_route: Dictionary = {}
-	for route: LogisticsRoute in LogisticsSystem.get_active_routes():
-		if route.npc_id != &"":
-			npc_to_route[route.npc_id] = route
-
 	var active_ids: Dictionary = {}
 
 	for npc in NPCSystem.all_npcs.values():
 		var npc_id: StringName = npc.npc_id
 		var state: int = npc.state
-		var route: LogisticsRoute = npc_to_route.get(npc_id)
+		# Shared-carrier model: follow the carrier's ONE currently-active route (the one it is
+		# executing), not an arbitrary route — a carrier can be assigned to several routes.
+		var route: LogisticsRoute = LogisticsSystem.get_active_route_for_npc(npc_id)
 
 		# Logistics carriers: use route.carrier_state directly.
 		# npc.state is unreliable for carriers — NPCSystem's internal travel timer
@@ -142,29 +138,26 @@ func _calc_world_pos(npc: Variant, route: LogisticsRoute) -> Vector2:
 	if route != null:
 		match route.carrier_state:
 			LogisticsRoute.CarrierState.TRAVEL_TO_SOURCE:
-				var total: int = int(floor(
-					route.cached_path_cost_current_leg * LogisticsSystem.TICKS_PER_TILE))
+				# F4: use the effective leg duration captured at leg start, so the icon's
+				# speed matches the carrier's (efficiency-scaled) real travel time.
+				var total: int = route.current_leg_total_ticks
 				var elapsed: int = maxi(0, total - route.remaining_ticks)
 				if route.current_leg_path.size() >= 2:
 					return _follow_path(route.current_leg_path, total, elapsed)
 				return _lerp_travel(
 					route.npc_start_pos,
 					BuildingRegistry.get_building_tile(str(route.source_building_id)),
-					route.cached_path_cost_current_leg,
+					total,
 					route.remaining_ticks
 				)
 			LogisticsRoute.CarrierState.RETURN_HOME:
 				var from_tile: Vector2i = _return_from_tile.get(npc.npc_id,
 					BuildingRegistry.get_building_tile(str(route.destination_building_id)))
-				var src_tile: Vector2i = BuildingRegistry.get_building_tile(
-					str(route.source_building_id))
-				var cost: float = route.cached_path_cost_source_to_home \
-					if from_tile == src_tile else route.cached_path_cost_dest_to_home
-				var total_r: int = int(floor(cost * LogisticsSystem.TICKS_PER_TILE))
+				var total_r: int = route.current_leg_total_ticks
 				var elapsed_r: int = maxi(0, total_r - route.remaining_ticks)
 				if route.current_leg_path.size() >= 2:
 					return _follow_path(route.current_leg_path, total_r, elapsed_r)
-				return _lerp_travel(from_tile, route.npc_home_pos, cost, route.remaining_ticks)
+				return _lerp_travel(from_tile, route.npc_home_pos, total_r, route.remaining_ticks)
 
 	# Direct NPC assignment — follow path if computed, otherwise linear lerp.
 	if npc.travel_ticks_total <= 0:
@@ -183,22 +176,50 @@ func _follow_path(path: Array[Vector2i], total_ticks: int, elapsed_ticks: int) -
 	var num_segs: int = path.size() - 1
 	if num_segs <= 0:
 		return _grid.tile_to_world(path[0])
+	# Weight each segment by the movement cost of the tile being left, so the icon slows on
+	# high-cost tiles (TREE/STONE = 4, EMPTY = 1, road = 0.5) — matching the carrier's cargo-leg
+	# animation and the cost-weighted travel time. (Was: equal time per segment = constant speed.)
+	var weights: Array[float] = []
+	var total_w: float = 0.0
+	for i in range(num_segs):
+		var w: float = _safe_tile_cost(path[i])
+		weights.append(w)
+		total_w += w
 	var t: float = clampf(float(elapsed_ticks) / float(maxi(total_ticks, 1)), 0.0, 1.0)
-	var seg_t: float = t * float(num_segs)
-	var seg_idx: int = clamp(int(seg_t), 0, num_segs - 1)
-	var seg_progress: float = seg_t - float(seg_idx)
-	return _grid.tile_to_world(path[seg_idx]).lerp(
-		_grid.tile_to_world(path[seg_idx + 1]), seg_progress)
+	if total_w <= 0.0:
+		var seg_t: float = t * float(num_segs)
+		var seg_idx: int = clampi(int(seg_t), 0, num_segs - 1)
+		return _grid.tile_to_world(path[seg_idx]).lerp(
+			_grid.tile_to_world(path[seg_idx + 1]), seg_t - float(seg_idx))
+	var target: float = t * total_w
+	var acc: float = 0.0
+	for i in range(num_segs):
+		if target < acc + weights[i]:
+			var frac: float = (target - acc) / weights[i] if weights[i] > 0.0 else 1.0
+			return _grid.tile_to_world(path[i]).lerp(
+				_grid.tile_to_world(path[i + 1]), clampf(frac, 0.0, 1.0))
+		acc += weights[i]
+	return _grid.tile_to_world(path[num_segs])
 
 
-## Linear interpolation from from_tile to to_tile using remaining_ticks and path_cost.
+## Movement cost of a tile for animation weighting; INF / non-positive (buildings, OOB) → 1.0.
+func _safe_tile_cost(tile: Vector2i) -> float:
+	if _grid == null:
+		return 1.0
+	var c: float = _grid.get_tile_movement_cost(tile)
+	if c == INF or c <= 0.0:
+		return 1.0
+	return c
+
+
+## Linear interpolation from from_tile to to_tile using remaining_ticks and the effective
+## leg duration (total_ticks already includes F4 efficiency scaling).
 func _lerp_travel(from_tile: Vector2i, to_tile: Vector2i,
-		path_cost: float, remaining_ticks: int) -> Vector2:
-	var total: int = int(floor(path_cost * LogisticsSystem.TICKS_PER_TILE))
-	if total <= 0:
+		total_ticks: int, remaining_ticks: int) -> Vector2:
+	if total_ticks <= 0:
 		return _grid.tile_to_world(to_tile)
-	var elapsed: int = maxi(0, total - remaining_ticks)
-	var progress: float = clampf(float(elapsed) / float(total), 0.0, 1.0)
+	var elapsed: int = maxi(0, total_ticks - remaining_ticks)
+	var progress: float = clampf(float(elapsed) / float(total_ticks), 0.0, 1.0)
 	return _grid.tile_to_world(from_tile).lerp(_grid.tile_to_world(to_tile), progress)
 
 # ---- Cleanup -----------------------------------------------------------------

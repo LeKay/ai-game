@@ -13,7 +13,7 @@ extends Node
 var _food_assignments: Dictionary = {}
 
 ## Emitted after day-transition consumption for each NPC whose modifier changed.
-## food_modifier = EfficiencyFormulas.calculate_food_modifier(units_consumed).
+## food_modifier = EfficiencyFormulas.calculate_food_modifier(nutrition_of_one_ration).
 signal npc_food_efficiency_changed(npc_id: StringName, food_modifier: float)
 ## Emitted after daily consumption with the items actually consumed: {resource_id: qty}.
 ## Used by DayLedger to track food consumption separately from general inventory deltas.
@@ -84,24 +84,36 @@ func apply_daily_consumption() -> void:
 		var amount: int = entry.get(&"amount", 1)
 
 		if food_id == &"":
-			npc_food_efficiency_changed.emit(npc_id, 1.0)
+			npc_food_efficiency_changed.emit(npc_id, EfficiencyFormulas.calculate_food_modifier(0.0))
 			continue
 
 		var container_id: StringName = _inventory.find_container_with(food_id)
 		if container_id == &"":
-			npc_food_efficiency_changed.emit(npc_id, 1.0)
+			npc_food_efficiency_changed.emit(npc_id, EfficiencyFormulas.calculate_food_modifier(0.0))
 			continue
 
 		if _inventory.try_consume(container_id, food_id, amount) != InventoryContainer.ConsumeResult.SUCCESS:
-			npc_food_efficiency_changed.emit(npc_id, 1.0)
+			# Unfed → nutrition 0 → modifier for 0.25 efficiency (very inefficient, never frozen).
+			npc_food_efficiency_changed.emit(npc_id, EfficiencyFormulas.calculate_food_modifier(0.0))
 		else:
 			consumed[food_id] = consumed.get(food_id, 0) + amount
-			npc_food_efficiency_changed.emit(npc_id, EfficiencyFormulas.calculate_food_modifier(amount))
+			# Efficiency is driven by TOTAL nutrition consumed = amount × food nutrition.
+			# So 5 berries (5×1) == 1 bread (1×5) == 100%; bread just needs fewer items.
+			var total_nutrition: float = _get_food_nutrition(food_id) * float(amount)
+			npc_food_efficiency_changed.emit(npc_id, EfficiencyFormulas.calculate_food_modifier(total_nutrition))
 
 	food_consumed_daily.emit(consumed)
 
 func _on_day_transition(_days_elapsed: int) -> void:
 	apply_daily_consumption()
+
+
+## Returns the nutrition value of a food resource from ResourceRegistry (0.0 if unknown).
+func _get_food_nutrition(food_id: StringName) -> float:
+	var def: Object = ResourceRegistry.get_definition(food_id)
+	if def == null:
+		return 0.0
+	return def.nutrition
 
 
 ## Serialise food assignments to a JSON-compatible dictionary.

@@ -23,6 +23,12 @@ const RECIPE_ENERGY_COST: Dictionary = {
 	&"tool": 15,
 }
 
+## recipe_id → tick cost (balancing 2026-06-11). Crafting is no longer instant: it advances
+## the world clock like a manual action (1 tick ≈ 1 minute; tool ≈ 1.5 h of work).
+const RECIPE_TICKS: Dictionary = {
+	&"tool": 90,
+}
+
 ## recipe_id → output { resource_id: StringName, quantity: int }
 const RECIPE_OUTPUT: Dictionary = {
 	&"tool": {&"resource_id": &"tool", &"quantity": 1},
@@ -79,6 +85,11 @@ func try_craft(recipe_id: StringName) -> int:
 
 	# 6. Deposit output
 	InventorySystem.try_deposit(target_id, out_res, out_qty)
+
+	# 7. Advance the world clock — crafting takes time (no longer instant).
+	var tick_cost: int = RECIPE_TICKS.get(recipe_id, 0)
+	if tick_cost > 0:
+		TickSystem.advance_ticks_manual(tick_cost)
 
 	recipe_crafted.emit(recipe_id, out_qty)
 	return CraftResult.SUCCESS

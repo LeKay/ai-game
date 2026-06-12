@@ -730,8 +730,8 @@ func _get_route_trips_per_day(route: LogisticsRoute) -> int:
 	if from_inst == null or to_inst == null:
 		return 0
 	var dist := absi(to_inst.tile.x - from_inst.tile.x) + absi(to_inst.tile.y - from_inst.tile.y)
-	const TICKS_PER_TILE := 3
-	var round_trip := dist * 2 * TICKS_PER_TILE
+	# Canonical logistics value (no local copy — avoids drift); nominal fed-carrier estimate.
+	var round_trip := dist * 2 * int(LogisticsSystem.TICKS_PER_TILE)
 	return TICKS_PER_DAY / round_trip if round_trip > 0 else 0
 
 

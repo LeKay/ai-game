@@ -29,6 +29,8 @@ class _ResourceDefinition:
 	var tags: Array[String] = []
 	var deprecated: bool = false
 	var movement_cost: float = 4.0
+	## Nutrition value — drives NPC efficiency via EfficiencyFormulas curve. 0 = inedible.
+	var nutrition: float = 0.0
 
 
 func _ready() -> void:
@@ -226,3 +228,6 @@ func _apply_optional_fields(def: _ResourceDefinition, entry: Dictionary) -> void
 
 	var raw_movement_cost: Variant = entry.get("movement_cost")
 	def.movement_cost = float(raw_movement_cost) if raw_movement_cost != null else 4.0
+
+	var raw_nutrition: Variant = entry.get("nutrition")
+	def.nutrition = float(raw_nutrition) if raw_nutrition != null else 0.0

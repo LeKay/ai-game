@@ -51,12 +51,14 @@ const COLOR_TILE_BORDER_FILLED  := Color(0.29, 0.49, 0.66, 1.0)
 const STATUS_COLORS: Dictionary = {
 	"transporting": Color(0.298, 0.686, 0.314),  ## green
 	"idle":         Color(0.843, 0.627, 0.212),  ## yellow/amber
+	"queued":       Color(0.45, 0.58, 0.75),     ## blue-gray — carrier busy on another route
 	"paused":       Color(0.55, 0.55, 0.55),     ## gray
 	"deactivated":  Color(0.55, 0.55, 0.55),     ## gray
 }
 const STATUS_LABELS: Dictionary = {
 	"transporting": "Transporting",
 	"idle":         "Idle",
+	"queued":       "Queued",
 	"paused":       "Paused",
 	"deactivated":  "Inactive",
 }
@@ -439,8 +441,9 @@ func _refresh_route_summary() -> void:
 		return
 
 	var dist: int = absi(to_tile.x - from_tile.x) + absi(to_tile.y - from_tile.y)
-	const TICKS_PER_TILE: float = 3.0
-	var one_way: int = int(floor(float(dist) * TICKS_PER_TILE))
+	# Use the canonical logistics value (no local copy — avoids drift). Nominal (fed-carrier)
+	# round trip; actual scales with the assigned carrier's food-efficiency (F4).
+	var one_way: int = int(floor(float(dist) * LogisticsSystem.TICKS_PER_TILE))
 	var round_trip: int = one_way * 2
 	var max_per_day: int = TICKS_PER_DAY / round_trip if round_trip > 0 else 0
 
@@ -453,18 +456,29 @@ func _refresh_npc_picker() -> void:
 	for child in _npc_popup_list.get_children():
 		child.queue_free()
 
-	var idle_npcs: Array[StringName] = NPCSystem.get_available_npcs()
-	if idle_npcs.is_empty():
+	# Shared-carrier model: offer idle NPCs AND NPCs already carrying (they can take more routes).
+	var candidates: Array[StringName] = NPCSystem.get_carrier_candidates()
+	if candidates.is_empty():
 		var empty_lbl := Label.new()
-		empty_lbl.text = "No idle carriers available."
+		empty_lbl.text = "No carriers available."
 		empty_lbl.add_theme_font_size_override("font_size", 12)
 		empty_lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
 		_npc_popup_list.add_child(empty_lbl)
 		return
 
-	for npc_id: StringName in idle_npcs:
+	# Count existing routes per carrier so the player sees who is already hauling, and how much.
+	var route_count: Dictionary = {}
+	for route: LogisticsRoute in LogisticsSystem.get_active_routes():
+		if route.npc_id != &"":
+			route_count[route.npc_id] = int(route_count.get(route.npc_id, 0)) + 1
+
+	for npc_id: StringName in candidates:
 		var btn := Button.new()
-		btn.text = NPCSystem.get_npc_display_name(npc_id)
+		var n: int = int(route_count.get(npc_id, 0))
+		var label: String = NPCSystem.get_npc_display_name(npc_id)
+		if n > 0:
+			label += "  (%d route%s)" % [n, "" if n == 1 else "s"]
+		btn.text = label
 		btn.focus_mode = Control.FOCUS_ALL
 		btn.toggle_mode = true
 		btn.button_pressed = (npc_id == _selected_npc_id)
@@ -724,6 +738,10 @@ func _carrier_status_key(route: LogisticsRoute) -> String:
 		if route.lifecycle_state == LogisticsRoute.LifecycleState.PAUSED:
 			return "paused"
 		return "deactivated"
+	# Shared carrier: if the carrier is currently executing a DIFFERENT route, this one is queued.
+	var active_route: LogisticsRoute = LogisticsSystem.get_active_route_for_npc(route.npc_id)
+	if active_route != null and active_route.id != route.id:
+		return "queued"
 	match route.carrier_state:
 		LogisticsRoute.CarrierState.IDLE:
 			return "idle"

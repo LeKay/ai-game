@@ -12,8 +12,9 @@ extends Node
 const NPC_CAPACITY_PER_HOUSE: int = 2
 ## Ticks that must elapse after first recruitment before the second slot opens.
 const NPC_SPAWN_DELAY_TICKS: int = 1000
-## Ticks of travel time per tile of Manhattan distance (Formula 1 from ADR-0009).
-const TICKS_PER_TILE: int = 3
+## Base travel ticks per tile at 100% efficiency (matches LogisticsSystem). Travel is then
+## scaled by the NPC's food-efficiency (F4). Anchored 2026-06-12 so 50% efficiency = 10/tile.
+const TICKS_PER_TILE: int = 5
 
 # ---- Enums -------------------------------------------------------------------
 
@@ -198,7 +199,7 @@ func get_house_npcs(home_base: Vector2i) -> Array[StringName]:
 		return []
 	return house.npc_ids.duplicate()
 
-## Returns all NPC IDs currently in IDLE state.
+## Returns all NPC IDs currently in IDLE state and not already serving as a carrier.
 func get_available_npcs() -> Array[StringName]:
 	var on_route: Dictionary = {}
 	for route: LogisticsRoute in LogisticsSystem.get_active_routes():
@@ -208,6 +209,22 @@ func get_available_npcs() -> Array[StringName]:
 	for npc: NPCInstance in all_npcs.values():
 		if npc.state == TaskState.IDLE and not on_route.has(npc.npc_id):
 			result.append(npc.npc_id)
+	return result
+
+
+## Returns NPC IDs eligible to be a route carrier: idle non-workers PLUS NPCs already serving
+## as carriers (so one carrier can be assigned to multiple routes — shared-carrier model).
+func get_carrier_candidates() -> Array[StringName]:
+	var on_route: Dictionary = {}
+	for route: LogisticsRoute in LogisticsSystem.get_active_routes():
+		if route.npc_id != &"":
+			on_route[route.npc_id] = true
+	var result: Array[StringName] = []
+	for npc: NPCInstance in all_npcs.values():
+		if on_route.has(npc.npc_id):
+			result.append(npc.npc_id)  # existing carrier — can take on more routes
+		elif npc.state == TaskState.IDLE and npc.assigned_building_id == &"":
+			result.append(npc.npc_id)  # idle, not a building worker — free to become a carrier
 	return result
 
 ## Returns the TaskState of the given NPC, or -1 if not found.
@@ -397,13 +414,18 @@ func _compute_travel_path(npc: NPCInstance, from: Vector2i, to: Vector2i) -> int
 	if from == to:
 		npc.travel_path = [to]
 		return 0
+	# F4 (balancing 2026-06-11): travel scales with the NPC's food-efficiency — a hungry
+	# worker walks slowly; effective = floor(base / efficiency).
+	var eff: float = npc.efficiency if npc.efficiency > 0.0 else 1.0
 	if _grid != null:
 		var result: PathResult = LogisticsPathfinder.find_path(from, to, _grid)
 		if result.found and result.path.size() >= 2:
 			npc.travel_path = result.path
-			return maxi(1, int(floor(result.cost * TICKS_PER_TILE)))
+			var base_ticks: int = maxi(1, int(floor(result.cost * TICKS_PER_TILE)))
+			return EfficiencyFormulas.calculate_effective_travel_ticks(base_ticks, eff)
 	npc.travel_path = [from, to]
-	return (absi(to.x - from.x) + absi(to.y - from.y)) * TICKS_PER_TILE
+	var manhattan: int = (absi(to.x - from.x) + absi(to.y - from.y)) * TICKS_PER_TILE
+	return EfficiencyFormulas.calculate_effective_travel_ticks(maxi(1, manhattan), eff)
 
 func _npc_arrived_at_building(npc: NPCInstance) -> void:
 	npc.position = npc.travel_destination

@@ -35,6 +35,7 @@ var _rename_dialog:   Control
 var _rename_input:    LineEdit
 var _npc_state_lbl:     Label
 var _npc_efficiency_lbl: Label
+var _nutrition_lbl: Label
 var _food_slot_tile:  PanelContainer
 var _food_slot_style: StyleBoxFlat
 var _food_slot_icon:  Label
@@ -143,14 +144,38 @@ func _refresh_food_slot() -> void:
 
 ## Shows the potential efficiency delta above the food tile: +X% / -X% vs current locked efficiency.
 ## Hidden when no food is assigned.
+## Updates the "Nutrition: x/y" label — x = amount × food nutrition, y = nutrition for 100%.
+func _refresh_nutrition() -> void:
+	if _nutrition_lbl == null:
+		return
+	var per_unit: float = 0.0
+	if _assigned_food != &"":
+		var def: Object = ResourceRegistry.get_definition(_assigned_food)
+		if def != null:
+			per_unit = def.nutrition
+	var x: int = roundi(per_unit * float(_food_amount))
+	var y: int = roundi(EfficiencyFormulas.nutrition_for_full())
+	_nutrition_lbl.text = "Nutrition: %d/%d" % [x, y]
+	if x >= y:
+		_nutrition_lbl.add_theme_color_override("font_color", Color(0.4, 0.85, 0.4))
+	elif x > 0:
+		_nutrition_lbl.add_theme_color_override("font_color", Color(0.95, 0.75, 0.2))
+	else:
+		_nutrition_lbl.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
+
+
 func _refresh_food_delta() -> void:
+	_refresh_nutrition()
 	if _food_delta_lbl == null:
 		return
 	var npc: NPCSystem.NPCInstance = NPCSystem.get_npc_instance(_npc_id)
 	if npc == null or _assigned_food == &"":
 		_food_delta_lbl.visible = false
 		return
-	var food_mod := EfficiencyFormulas.calculate_food_modifier(_food_amount)
+	# Efficiency comes from TOTAL nutrition = assigned amount × the food's nutrition value.
+	var food_def: Object = ResourceRegistry.get_definition(_assigned_food)
+	var per_unit: float = food_def.nutrition if food_def != null else 0.0
+	var food_mod := EfficiencyFormulas.calculate_food_modifier(per_unit * float(_food_amount))
 	var potential := EfficiencyFormulas.calculate_npc_efficiency(
 			food_mod, npc.satisfaction_modifier, npc.equipment_modifier)
 	var delta_pct := roundi((potential - npc.efficiency) * 100.0)
@@ -299,6 +324,13 @@ func _build_ui() -> void:
 	_npc_efficiency_lbl.add_theme_font_size_override("font_size", 12)
 	_npc_efficiency_lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
 	title_col.add_child(_npc_efficiency_lbl)
+
+	# Daily nutrition the assigned food provides vs. the amount needed for full efficiency.
+	_nutrition_lbl = Label.new()
+	_nutrition_lbl.add_theme_font_size_override("font_size", 12)
+	_nutrition_lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+	_nutrition_lbl.tooltip_text = "Total nutrition fed per day vs. needed for 100% (amount × food nutrition)."
+	title_col.add_child(_nutrition_lbl)
 
 	_rename_btn = Button.new()
 	_rename_btn.name = "RenameBtn"

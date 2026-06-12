@@ -16,10 +16,16 @@ signal route_deleted(route_id: StringName)
 const MAX_OUTPUT_SLOTS: int = 1
 ## Fallback max input slots for buildings with no PRODUCTION_TABLE entry (storage, unknown).
 const MAX_INPUT_SLOTS: int = 1
-## Ticks per tile of Manhattan distance for carrier travel (matches NPC ticks_per_tile).
-const TICKS_PER_TILE: float = 3.0
-## Default carrier cargo capacity in items per trip (MVP).
-const CARRIER_CAPACITY: int = 1
+## Base ticks per tile of carrier travel = the travel time at 100% carrier efficiency.
+## Effective travel is then divided by the carrier's food-efficiency (F4) in _set_carrier_state,
+## so faster carriers traverse quicker. Anchored 2026-06-12 so that a 50%-efficient carrier
+## travels at 10 ticks/tile (the previous value): base/0.5 = 10 → base = 5. Thus 100% = 5/tile,
+## 50% = 10/tile, 25% = 20/tile. (Was a flat 10 = the 100% case before F4 was anchored.)
+const TICKS_PER_TILE: float = 5.0
+## Default carrier cargo capacity in items per trip. Raised to 2 (2026-06-12) so one carrier can
+## keep pace with one producer out to ~typical distances (capacity 1 made the carrier the binding
+## bottleneck and forced too many carriers). Intended to become a per-carrier upgradeable stat.
+const CARRIER_CAPACITY: int = 2
 ## Kept for save-file compatibility only — timeouts were removed because they caused
 ## carriers to discard held cargo and create pointless home-and-back movement.
 var carrier_waiting_timeout: int = 300
@@ -38,6 +44,11 @@ var _grid_map: Node = null
 
 var _active_routes: Array[LogisticsRoute] = []
 var _priority_offset: int = 0
+
+## Shared-carrier model (2026-06-12): one NPC can be the carrier for several routes but serves
+## ONE at a time. Maps npc_id (StringName) → route_id (StringName) the carrier is currently
+## executing. Absent / &"" = carrier has no active route (free or idle-waiting).
+var _carrier_active_route: Dictionary = {}
 
 # ---- Lifecycle ---------------------------------------------------------------
 
@@ -107,44 +118,28 @@ func create_route(
 	return {"success": true, "route": route, "error": ""}
 
 
-## Starts a carrier trip: transitions the carrier from IDLE → TRAVEL_TO_SOURCE.
-## Records the NPC's current position as npc_home_pos for the RETURN_HOME leg.
-## Returns false if the route is not found or carrier is not IDLE.
+## Registers a route with its carrier and lets the shared-carrier scheduler decide the next move.
+## The carrier only travels to a route that actually HAS WORK (cargo at source + space at dest);
+## otherwise it waits in place instead of trekking to an empty source. If the carrier is already
+## executing another route, the new route just joins the round-robin (picked up after a delivery).
 func start_route(route_id: StringName) -> bool:
 	var route: LogisticsRoute = _get_route(route_id)
-	if route == null or route.carrier_state != LogisticsRoute.CarrierState.IDLE:
+	if route == null:
 		return false
-
+	var npc_id: StringName = route.npc_id
 	var home_pos: Vector2i = Vector2i.ZERO
 	if _npc_system != null:
-		home_pos = _npc_system.get_npc_position(route.npc_id)
+		home_pos = _npc_system.get_npc_position(npc_id)
 	route.npc_home_pos = home_pos
 	route.npc_start_pos = home_pos
 
-	var source_tile: Vector2i = _get_building_tile(route.source_building_id)
-	var travel_ticks: int
-
-	if _grid_map != null:
-		var dest_tile: Vector2i = _get_building_tile(route.destination_building_id)
-		var h2s: PathResult = LogisticsPathfinder.find_path(home_pos, source_tile, _grid_map)
-		var s2h: PathResult = LogisticsPathfinder.find_path(source_tile, home_pos, _grid_map)
-		var d2h: PathResult = LogisticsPathfinder.find_path(dest_tile, home_pos, _grid_map)
-		route.cached_path_cost_home_to_source = h2s.cost
-		route.cached_path_cost_source_to_home = s2h.cost
-		route.cached_path_cost_dest_to_home = d2h.cost
-		route.home_legs_valid = true
-		travel_ticks = int(floor(h2s.cost * TICKS_PER_TILE))
-		route.cached_path_cost_current_leg = h2s.cost
-		route.current_leg_path = h2s.path
-		route.cached_leg_path_home_to_source = h2s.path
-	else:
-		travel_ticks = _calc_travel_time(home_pos, source_tile)
-		route.cached_path_cost_current_leg = float(travel_ticks) / TICKS_PER_TILE
-		route.current_leg_path = [home_pos, source_tile]
-		route.cached_leg_path_home_to_source = [home_pos, source_tile]
-
-	route.remaining_ticks = travel_ticks
-	_set_carrier_state(route, LogisticsRoute.CarrierState.TRAVEL_TO_SOURCE)
+	# Only (re)schedule when the carrier is free: no active route, or its active route is the
+	# idle-waiting placeholder. A busy carrier keeps its current trip; the new route waits its turn.
+	var active_id: StringName = _carrier_active_route.get(npc_id, &"")
+	var active: LogisticsRoute = _get_route(active_id) if active_id != &"" else null
+	if active == null or not active.active \
+			or active.carrier_state == LogisticsRoute.CarrierState.IDLE:
+		_carrier_pick_next(npc_id, active)
 	return true
 
 
@@ -168,19 +163,30 @@ func get_active_routes() -> Array[LogisticsRoute]:
 	return _active_routes
 
 
+## Returns the route the given carrier NPC is currently executing, or null if none/idle.
+## Used by the overlay/route visuals so the icon follows the carrier's ONE active route.
+func get_active_route_for_npc(npc_id: StringName) -> LogisticsRoute:
+	var rid: StringName = _carrier_active_route.get(npc_id, &"")
+	if rid == &"":
+		return null
+	return _get_route(rid)
+
+
 ## Remove a route by ID, free its building slot, and update building status.
-## If the carrier is mid-route (not IDLE), release the NPC immediately so they
-## return home and become available for new routes.
+## Shared carrier: the NPC is only sent home if it has no other routes left; otherwise it keeps
+## serving its remaining routes.
 func delete_route(route_id: StringName) -> void:
 	for i in range(_active_routes.size()):
 		if _active_routes[i].id == route_id:
 			var route: LogisticsRoute = _active_routes[i]
+			var npc_id: StringName = route.npc_id
 			route.active = false
-			_on_route_active_changed(route)
-			if route.carrier_state != LogisticsRoute.CarrierState.IDLE \
-					and _npc_system != null:
-				_npc_system.release_npc(route.npc_id)
+			_on_route_active_changed(route)   # clears the active-route map entry if this was it
 			_active_routes.remove_at(i)
+			if _carrier_routes(npc_id).is_empty():
+				_carrier_active_route.erase(npc_id)
+				if _npc_system != null:
+					_npc_system.release_npc(npc_id)
 			route_deleted.emit(route_id)
 			return
 
@@ -232,16 +238,118 @@ func _advance_tick(delta_ticks: int) -> void:
 	var count: int = _active_routes.size()
 	if count == 0:
 		return
+	# Shared-carrier service step: ensure every carrier has a valid active route and wake
+	# idle (waiting-in-place) carriers that now have work. Runs once per tick batch.
+	_service_carriers()
 	var start: int = _priority_offset % count
 	_priority_offset = (_priority_offset + 1) % maxi(count, 1)
 	for j in range(count):
 		var route: LogisticsRoute = _active_routes[(start + j) % count]
 		if not route.active:
 			continue
+		# Only the carrier's currently-active route advances; its other routes stay dormant.
+		if not _is_active_route(route):
+			continue
 		for _i in range(delta_ticks):
 			_process_carrier(route)
 		if route.active:
 			_update_building_status(route)
+
+
+# ---- Shared-carrier scheduling ----------------------------------------------
+
+## True when `route` is the one its carrier is currently executing.
+func _is_active_route(route: LogisticsRoute) -> bool:
+	return _carrier_active_route.get(route.npc_id, &"") == route.id
+
+## Distinct carrier npc_ids that have at least one active route.
+func _carrier_npc_ids() -> Array:
+	var seen: Dictionary = {}
+	for r: LogisticsRoute in _active_routes:
+		if r.active and r.npc_id != &"":
+			seen[r.npc_id] = true
+	return seen.keys()
+
+## All active routes assigned to a carrier npc, in stable creation order.
+func _carrier_routes(npc_id: StringName) -> Array[LogisticsRoute]:
+	var out: Array[LogisticsRoute] = []
+	for r: LogisticsRoute in _active_routes:
+		if r.active and r.npc_id == npc_id:
+			out.append(r)
+	return out
+
+## A route "has work" when its source has cargo AND its destination has space.
+func _route_has_work(route: LogisticsRoute) -> bool:
+	return _source_has_cargo(route) and _destination_has_space(route)
+
+## The carrier's current tile (last confirmed NPC position).
+func _carrier_tile(npc_id: StringName) -> Vector2i:
+	if _npc_system != null:
+		return _npc_system.get_npc_position(npc_id)
+	return Vector2i.ZERO
+
+## Per-tick: assign an active route to carriers that lack one, and re-evaluate idle
+## (waiting-in-place) carriers in case work appeared on one of their routes.
+func _service_carriers() -> void:
+	for npc_id: StringName in _carrier_npc_ids():
+		var active_id: StringName = _carrier_active_route.get(npc_id, &"")
+		var active: LogisticsRoute = _get_route(active_id) if active_id != &"" else null
+		if active == null or not active.active:
+			_carrier_pick_next(npc_id, null)
+		elif active.carrier_state == LogisticsRoute.CarrierState.IDLE:
+			_carrier_pick_next(npc_id, active)
+
+## Decision point: the carrier has no cargo in hand and chooses its next route. Picks the next
+## route WITH WORK round-robin (starting AFTER current_route — "switch after each delivery"),
+## then travels to its source from the carrier's current tile. If no route has work, the carrier
+## waits in place (active route → IDLE), re-checked each tick by _service_carriers.
+func _carrier_pick_next(npc_id: StringName, current_route: LogisticsRoute) -> void:
+	var routes: Array[LogisticsRoute] = _carrier_routes(npc_id)
+	if routes.is_empty():
+		_carrier_active_route.erase(npc_id)
+		return
+	var start: int = 0
+	if current_route != null:
+		var idx: int = routes.find(current_route)
+		start = (idx + 1) if idx >= 0 else 0
+	var from_tile: Vector2i = _carrier_tile(npc_id)
+	for k in range(routes.size()):
+		var cand: LogisticsRoute = routes[(start + k) % routes.size()]
+		if _route_has_work(cand):
+			# Mark the previously-active route dormant BEFORE starting the new leg so the NPC's
+			# state ends up synced to the new route (not overwritten with IDLE).
+			if current_route != null and current_route != cand:
+				current_route.carrier_state = LogisticsRoute.CarrierState.IDLE
+			_carrier_active_route[npc_id] = cand.id
+			_begin_travel_to_source(cand, from_tile)
+			return
+	# No route has work — wait in place (keep an active-route ref for per-tick re-checks).
+	var keep: LogisticsRoute = current_route if current_route != null else routes[0]
+	_carrier_active_route[npc_id] = keep.id
+	if keep.carrier_state != LogisticsRoute.CarrierState.IDLE:
+		_set_carrier_state(keep, LogisticsRoute.CarrierState.IDLE)
+
+## Begins a TRAVEL_TO_SOURCE leg for `route` from `from_tile` (the carrier's current position),
+## pathfinding when the grid is available. _set_carrier_state applies F4 + records leg duration.
+func _begin_travel_to_source(route: LogisticsRoute, from_tile: Vector2i) -> void:
+	var source_tile: Vector2i = _get_building_tile(route.source_building_id)
+	route.npc_start_pos = from_tile
+	if _grid_map != null:
+		var pr: PathResult = LogisticsPathfinder.find_path(from_tile, source_tile, _grid_map)
+		if pr.found:
+			route.remaining_ticks = int(floor(pr.cost * TICKS_PER_TILE))
+			route.cached_path_cost_current_leg = pr.cost
+			route.current_leg_path = pr.path
+		else:
+			route.remaining_ticks = _calc_travel_time(from_tile, source_tile)
+			route.cached_path_cost_current_leg = float(route.remaining_ticks) / TICKS_PER_TILE
+			route.current_leg_path = [from_tile, source_tile]
+	else:
+		route.remaining_ticks = _calc_travel_time(from_tile, source_tile)
+		route.cached_path_cost_current_leg = float(route.remaining_ticks) / TICKS_PER_TILE
+		route.current_leg_path = [from_tile, source_tile]
+	route.wait_ticks = 0
+	_set_carrier_state(route, LogisticsRoute.CarrierState.TRAVEL_TO_SOURCE)
 
 # ---- Carrier FSM ------------------------------------------------------------
 
@@ -271,24 +379,15 @@ func _process_carrier(route: LogisticsRoute) -> void:
 					route.current_leg_path = [src_tile, dest_tile]
 				_set_carrier_state(route, LogisticsRoute.CarrierState.TRAVEL_TO_DESTINATION)
 			else:
+				# No cargo here (carrier empty) → free to move on. Try the carrier's other routes;
+				# if none has work, it idles in place. (Was: WAITING_SOURCE / wait forever.)
 				route.wait_ticks = 0
-				_set_carrier_state(route, LogisticsRoute.CarrierState.WAITING_SOURCE)
+				_carrier_pick_next(route.npc_id, route)
 
 		LogisticsRoute.CarrierState.WAITING_SOURCE:
-			# No timeout — carrier waits at source until cargo arrives.
-			# Going home and back when the source is empty would create pointless movement.
-			if _source_has_cargo(route):
-				_do_pickup(route)
-				if route.path_valid:
-					route.remaining_ticks = int(floor(route.cached_path_cost * TICKS_PER_TILE))
-					route.current_leg_path = route.cached_path
-				else:
-					var dest_tile: Vector2i = _get_building_tile(route.destination_building_id)
-					var src_tile: Vector2i = _get_building_tile(route.source_building_id)
-					route.remaining_ticks = _calc_travel_time(src_tile, dest_tile)
-					route.current_leg_path = [src_tile, dest_tile]
-				route.wait_ticks = 0
-				_set_carrier_state(route, LogisticsRoute.CarrierState.TRAVEL_TO_DESTINATION)
+			# Legacy state (no longer entered by new code; kept for save-file compatibility).
+			# Carrier is empty here → route it through the shared-carrier decision point.
+			_carrier_pick_next(route.npc_id, route)
 
 		LogisticsRoute.CarrierState.TRAVEL_TO_DESTINATION:
 			route.remaining_ticks -= 1
@@ -303,49 +402,24 @@ func _process_carrier(route: LogisticsRoute) -> void:
 				_do_deposit(route)
 				route.cargo = 0
 				route.cargo_resource = null
-				var dest_tile: Vector2i = _get_building_tile(route.destination_building_id)
-				var src_tile: Vector2i = _get_building_tile(route.source_building_id)
-				route.npc_start_pos = dest_tile
-				if route.path_valid:
-					route.remaining_ticks = int(floor(route.cached_path_cost * TICKS_PER_TILE))
-					route.cached_path_cost_current_leg = route.cached_path_cost
-					var rev: Array[Vector2i] = route.cached_path.duplicate()
-					rev.reverse()
-					route.current_leg_path = rev
-				else:
-					route.remaining_ticks = _calc_travel_time(dest_tile, src_tile)
-					route.cached_path_cost_current_leg = float(route.remaining_ticks) / TICKS_PER_TILE
-					route.current_leg_path = [dest_tile, src_tile]
 				route.wait_ticks = 0
-				_set_carrier_state(route, LogisticsRoute.CarrierState.TRAVEL_TO_SOURCE)
+				# Delivered → decision point: switch to the next route with work (round-robin).
+				_carrier_pick_next(route.npc_id, route)
 			else:
 				route.wait_ticks = 0
 				_set_carrier_state(route, LogisticsRoute.CarrierState.WAITING_DESTINATION)
 
 		LogisticsRoute.CarrierState.WAITING_DESTINATION:
-			# No timeout — carrier holds cargo and waits until space opens up.
-			# Timing out would cause the carrier to pick up a new item before delivering
-			# the held one, silently destroying cargo.
+			# Holding cargo and the destination was full — must wait here (switching now would
+			# pick up new cargo before delivering the held one, destroying it). Once space frees,
+			# deposit and go to the decision point.
 			var has_space: bool = _destination_has_space(route)
 			if has_space:
 				_do_deposit(route)
 				route.cargo = 0
 				route.cargo_resource = null
-				var dest_tile2: Vector2i = _get_building_tile(route.destination_building_id)
-				var src_tile2: Vector2i = _get_building_tile(route.source_building_id)
-				route.npc_start_pos = dest_tile2
-				if route.path_valid:
-					route.remaining_ticks = int(floor(route.cached_path_cost * TICKS_PER_TILE))
-					route.cached_path_cost_current_leg = route.cached_path_cost
-					var rev2: Array[Vector2i] = route.cached_path.duplicate()
-					rev2.reverse()
-					route.current_leg_path = rev2
-				else:
-					route.remaining_ticks = _calc_travel_time(dest_tile2, src_tile2)
-					route.cached_path_cost_current_leg = float(route.remaining_ticks) / TICKS_PER_TILE
-					route.current_leg_path = [dest_tile2, src_tile2]
 				route.wait_ticks = 0
-				_set_carrier_state(route, LogisticsRoute.CarrierState.TRAVEL_TO_SOURCE)
+				_carrier_pick_next(route.npc_id, route)
 
 		LogisticsRoute.CarrierState.RETURN_HOME:
 			route.remaining_ticks -= 1
@@ -380,10 +454,31 @@ func _deactivate_route(route: LogisticsRoute, reason: String) -> void:
 
 
 ## Calls NPCSystem.set_carrier_state on transition only (never per-tick no-op).
+## On entry to a travel leg, scales the freshly-set base travel ticks by the carrier's
+## food-efficiency (F4): effective = floor(base / efficiency). Starving carriers crawl;
+## bread-fed carriers haul faster. Applied once per transition (remaining_ticks is the base
+## value set by the caller just before this call).
 func _set_carrier_state(route: LogisticsRoute, new_state: int) -> void:
+	if new_state == LogisticsRoute.CarrierState.TRAVEL_TO_SOURCE \
+			or new_state == LogisticsRoute.CarrierState.TRAVEL_TO_DESTINATION \
+			or new_state == LogisticsRoute.CarrierState.RETURN_HOME:
+		route.remaining_ticks = EfficiencyFormulas.calculate_effective_travel_ticks(
+				route.remaining_ticks, _carrier_efficiency(route))
+		# Capture the effective leg duration so the overlay animations stay in sync with F4.
+		route.current_leg_total_ticks = route.remaining_ticks
 	route.carrier_state = new_state
 	if _npc_system != null:
 		_npc_system.set_carrier_state(route.npc_id, new_state)
+
+
+## Returns the carrier NPC's current efficiency (food-driven), or 1.0 if unavailable.
+func _carrier_efficiency(route: LogisticsRoute) -> float:
+	if _npc_system == null:
+		return 1.0
+	var npc: Object = _npc_system.get_npc_instance(route.npc_id)
+	if npc == null or npc.efficiency <= 0.0:
+		return 1.0
+	return npc.efficiency
 
 
 ## Returns the tile position of a building, or Vector2i(-1,-1) if not found.
@@ -480,8 +575,10 @@ func _do_deposit(route: LogisticsRoute) -> void:
 func _do_pickup(route: LogisticsRoute) -> void:
 	if _is_storage_source(route):
 		var container_id := _get_container_id(route.source_building_id)
-		_inventory_system.try_consume(container_id, route.source_item_id, 1)
-		route.cargo = 1
+		var available: int = _inventory_system.get_resource_quantity(container_id, route.source_item_id)
+		var pickup: int = mini(available, CARRIER_CAPACITY)
+		_inventory_system.try_consume(container_id, route.source_item_id, pickup)
+		route.cargo = pickup
 		route.cargo_resource = route.source_item_id
 	else:
 		var res_id: StringName
@@ -656,6 +753,13 @@ func deserialize(data: Dictionary) -> void:
 		var route := _deserialize_route(route_data)
 		_active_routes.append(route)
 		_assign_carrier_to_building(route)
+	# Reconstruct the shared-carrier active-route map: a non-IDLE route is the one its carrier
+	# was executing. First non-IDLE route per carrier wins; the rest stay dormant.
+	_carrier_active_route.clear()
+	for route: LogisticsRoute in _active_routes:
+		if route.active and route.carrier_state != LogisticsRoute.CarrierState.IDLE \
+				and not _carrier_active_route.has(route.npc_id):
+			_carrier_active_route[route.npc_id] = route.id
 
 
 func _serialize_route(route: LogisticsRoute) -> Dictionary:
@@ -674,6 +778,7 @@ func _serialize_route(route: LogisticsRoute) -> Dictionary:
 		"cargo": route.cargo,
 		"cargo_resource": str(route.cargo_resource) if route.cargo_resource != null else "",
 		"remaining_ticks": route.remaining_ticks,
+		"current_leg_total_ticks": route.current_leg_total_ticks,
 		"wait_ticks": route.wait_ticks,
 		"npc_home_pos": {"x": route.npc_home_pos.x, "y": route.npc_home_pos.y},
 		"npc_start_pos": {"x": route.npc_start_pos.x, "y": route.npc_start_pos.y},
@@ -704,6 +809,7 @@ func _deserialize_route(data: Dictionary) -> LogisticsRoute:
 	var cr: String = data.get("cargo_resource", "")
 	route.cargo_resource = StringName(cr) if cr != "" else null
 	route.remaining_ticks = data.get("remaining_ticks", 0)
+	route.current_leg_total_ticks = data.get("current_leg_total_ticks", 0)
 	route.wait_ticks = data.get("wait_ticks", 0)
 	var hp: Dictionary = data.get("npc_home_pos", {"x": 0, "y": 0})
 	route.npc_home_pos = Vector2i(hp.get("x", 0), hp.get("y", 0))
@@ -731,6 +837,10 @@ func _deserialize_route(data: Dictionary) -> LogisticsRoute:
 ## OUTPUT route deactivated → source slot cleared; STALLED is deferred until next
 ##   production cycle completes with empty output buffer (per GDD Core Rules 6).
 func _on_route_active_changed(route: LogisticsRoute) -> void:
+	# Shared carrier: if this route was the one the carrier was executing, drop the active-route
+	# entry so _service_carriers reassigns the carrier to another of its routes next tick.
+	if not route.active and _carrier_active_route.get(route.npc_id, &"") == route.id:
+		_carrier_active_route.erase(route.npc_id)
 	if _building_registry == null:
 		return
 	if not route.active:

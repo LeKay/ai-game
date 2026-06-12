@@ -57,6 +57,10 @@ var npc_home_pos: Vector2i
 var npc_start_pos: Vector2i
 ## Path cost for the current TRAVEL_TO_SOURCE leg — used by NpcOverlay for position lerp.
 var cached_path_cost_current_leg: float = 0.0
+## Effective duration (ticks) of the current travel leg, captured at leg start AFTER the F4
+## efficiency scaling. Animations use this as the denominator so the icon's progress matches
+## the real (efficiency-scaled) travel time. 0 when not currently travelling.
+var current_leg_total_ticks: int = 0
 ## Human-readable reason set by _deactivate_route() when lifecycle_state → DEACTIVATED.
 var deactivation_reason: String = ""
 ## Item this carrier is configured to pick up from a storage source. &"" for non-storage sources.
@@ -96,7 +100,11 @@ static func create(
 		p_route_type: int,
 		p_source_item: StringName = &"") -> LogisticsRoute:
 	var route := LogisticsRoute.new()
-	route.id = StringName("route_" + npc)
+	# Unique per route, NOT per NPC: a shared carrier can own several routes, so the id must
+	# include source+destination (a carrier can have at most one route per source→dest pair).
+	# (Was "route_<npc>", which collided when one NPC had multiple routes — breaking the active-
+	# route map and the per-id line/icon lookups in the overlays.)
+	route.id = StringName("route_%s_%s_%s" % [npc, source, destination])
 	route.source_building_id = source
 	route.destination_building_id = destination
 	route.npc_id = npc
@@ -112,6 +120,7 @@ static func create(
 	route.npc_home_pos = Vector2i.ZERO
 	route.npc_start_pos = Vector2i.ZERO
 	route.cached_path_cost_current_leg = 0.0
+	route.current_leg_total_ticks = 0
 	route.cached_path = []
 	route.cached_path_cost = 0.0
 	route.path_valid = false

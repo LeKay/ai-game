@@ -56,6 +56,7 @@
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/berry.png",
 	  "description": "Wild berries. Edible and nutritious.",
+	  "nutrition": 1,
 	  "tags": ["food"]
 	},
 	{
@@ -69,7 +70,8 @@
 	  "max_charge": 100.0,
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/bread.png",
-	  "description": "Baked bread. Worth two food units.",
+	  "description": "Baked bread. Dense, efficient food.",
+	  "nutrition": 5,
 	  "tags": ["food"]
 	},
 	{
