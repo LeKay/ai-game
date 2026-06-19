@@ -1,7 +1,12 @@
 class_name NpcDetailPanel extends Control
-## NPC Detail Panel — per-NPC food assignment and daily amount UI.
-## Opened from the NPCs tab when clicking an NPC tile.
-## All state writes go via signals; this panel is display-only.
+## NPC Detail Panel — per-NPC supply assignment (Daily Food + perk goods) and identity UI.
+## Opened from the NPCs tab when clicking an NPC tile. All state writes go via signals / system
+## calls; this panel is display-only.
+##
+## Daily Food and perks share one uniform "supply grid" (2 columns, scrollable): each cell has a
+## title (perk name, or "Daily Food"), a tile showing the REQUIRED amount of its good, and [− n +]
+## controls for the ASSIGNED amount. A tile is greyed out when the perk/food was not consumed at the
+## last day transition (inactive). Hover shows the effect plus, when inactive, why.
 
 signal food_assigned(npc_id: StringName, resource_id: StringName)
 signal food_cleared(npc_id: StringName)
@@ -10,24 +15,25 @@ signal panel_closed
 
 ## Food resource IDs the picker will offer (order = display order).
 const FOOD_ITEM_IDS: Array[StringName] = [&"berry", &"bread"]
-const PANEL_WIDTH   := 300
-const PANEL_HEIGHT  := 300
+const PANEL_WIDTH   := 320
+const PANEL_HEIGHT  := 520
 const ANIM_DURATION := 0.12
 ## Horizontal shift applied after PRESET_CENTER so the panel sits right of the inventory modal.
-## Matches InventoryScreen.MODAL_WIDTH / 2 (= 450) plus an 8 px gap.
 const PANEL_LEFT_OFFSET := 458.0
 
 ## Override before adding to the scene tree to reposition the panel.
-## Default keeps the panel to the right of the inventory modal.
-## Set to 0.0 to center the panel (e.g. when opening from BuildingDetailPanel).
 var panel_x_offset: float = PANEL_LEFT_OFFSET
 
-const COLOR_BG         := Color(0.176, 0.176, 0.176, 0.97)
+const COLOR_BG         := UiPalette.PANEL_BG
 const COLOR_TEXT       := Color(0.941, 0.929, 0.902)
 const COLOR_TEXT_DIM   := Color(0.659, 0.643, 0.612)
 const COLOR_BTN_NORMAL := Color(0.353, 0.353, 0.353)
 const COLOR_BTN_HOVER  := Color(0.290, 0.494, 0.659)
-const COLOR_SEP        := Color(0.35, 0.35, 0.35, 1.0)
+const COLOR_SEP        := UiPalette.SEPARATOR
+const COLOR_XP_BAR_BG   := Color("#2A2A2A")
+const COLOR_XP_BAR_FILL := Color("#D4A85C")
+const COLOR_XP_BAR_MAX  := Color("#E8C860")
+const COLOR_DISABLED    := Color(0.5, 0.5, 0.5, 0.45)
 
 var _panel:           DraggableWindow
 var _rename_btn:      Button
@@ -35,16 +41,12 @@ var _rename_dialog:   Control
 var _rename_input:    LineEdit
 var _npc_state_lbl:     Label
 var _npc_efficiency_lbl: Label
-var _nutrition_lbl: Label
-var _food_slot_tile:  PanelContainer
-var _food_slot_style: StyleBoxFlat
-var _food_slot_icon:  Label
-var _food_slot_qty:   Label
-var _food_delta_lbl:  Label
-var _amount_row:      Control
-var _minus_btn:       Button
-var _amount_label:    Label
-var _plus_btn:        Button
+var _npc_level_lbl:     Label
+var _xp_bar_outer:      Control
+var _xp_bar_fill:       ColorRect
+var _xp_label:          Label
+var _profession_lbl:  Label
+var _supply_grid:     GridContainer
 var _food_popup:      Control
 var _food_popup_flow: HFlowContainer
 
@@ -96,9 +98,16 @@ func open_for_npc(npc_id: StringName, npc_state: int) -> void:
 	_panel.title  = NPCSystem.get_npc_display_name(npc_id)
 	_npc_state_lbl.text = _state_label(npc_state)
 	_refresh_efficiency()
-	_refresh_food_slot()
+	_refresh_xp()
+	_refresh_supply()
 	if not NPCSystem.npc_renamed.is_connected(_on_npc_renamed):
 		NPCSystem.npc_renamed.connect(_on_npc_renamed)
+	if not NPCSystem.npc_xp_gained.is_connected(_on_npc_xp_gained):
+		NPCSystem.npc_xp_gained.connect(_on_npc_xp_gained)
+	if not NPCSystem.npc_leveled_up.is_connected(_on_npc_leveled_up):
+		NPCSystem.npc_leveled_up.connect(_on_npc_leveled_up)
+	if not NPCSystem.npc_perk_chosen.is_connected(_on_npc_perk_chosen):
+		NPCSystem.npc_perk_chosen.connect(_on_npc_perk_chosen)
 	_animate_in()
 
 
@@ -107,17 +116,30 @@ func close() -> void:
 	_close_rename_dialog()
 	if NPCSystem.npc_renamed.is_connected(_on_npc_renamed):
 		NPCSystem.npc_renamed.disconnect(_on_npc_renamed)
+	if NPCSystem.npc_xp_gained.is_connected(_on_npc_xp_gained):
+		NPCSystem.npc_xp_gained.disconnect(_on_npc_xp_gained)
+	if NPCSystem.npc_leveled_up.is_connected(_on_npc_leveled_up):
+		NPCSystem.npc_leveled_up.disconnect(_on_npc_leveled_up)
+	if NPCSystem.npc_perk_chosen.is_connected(_on_npc_perk_chosen):
+		NPCSystem.npc_perk_chosen.disconnect(_on_npc_perk_chosen)
 	_animate_out()
 	panel_closed.emit()
 
-# ── Refresh ───────────────────────────────────────────────────────────────────
+# ── Header refresh (state / efficiency / XP) ───────────────────────────────────
 
 func _refresh_efficiency() -> void:
 	var npc: NPCSystem.NPCInstance = NPCSystem.get_npc_instance(_npc_id)
 	if npc == null or _npc_efficiency_lbl == null:
 		return
 	var pct: int = roundi(npc.efficiency * 100.0)
-	_npc_efficiency_lbl.text = "Efficiency: %d%%" % pct
+	var text: String = "Efficiency: %d%%" % pct
+	# Pending change: the realized efficiency only updates at the next day transition, so preview the
+	# delta from the currently SELECTED food + amount as "(+/−X%)" next to the live value.
+	var delta_pct: int = roundi(_projected_efficiency(npc) * 100.0) - pct
+	if delta_pct != 0:
+		text += " (%+d%%)" % delta_pct
+	_npc_efficiency_lbl.text = text
+	_npc_efficiency_lbl.tooltip_text = _npc_efficiency_tooltip(npc)
 	if npc.efficiency >= 1.0:
 		_npc_efficiency_lbl.add_theme_color_override("font_color", Color(0.4, 0.85, 0.4))
 	elif npc.efficiency >= 0.5:
@@ -126,71 +148,342 @@ func _refresh_efficiency() -> void:
 		_npc_efficiency_lbl.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
 
 
-func _refresh_food_slot() -> void:
-	if _assigned_food == &"":
-		_food_slot_icon.text   = "+"
-		_food_slot_qty.visible = false
-		_amount_row.visible    = false
-		_refresh_food_delta()
+## Updates the Level row, XP bar fill, and "x / y XP" readout (Experience System F3).
+func _refresh_xp() -> void:
+	var npc: NPCSystem.NPCInstance = NPCSystem.get_npc_instance(_npc_id)
+	if npc == null or _npc_level_lbl == null:
 		return
-	var qty: int = InventorySystem.get_global_quantity(_assigned_food)
-	_food_slot_icon.text   = _food_icon(_assigned_food)
-	_food_slot_qty.text    = "×%d" % qty
-	_food_slot_qty.visible = true
-	_amount_label.text     = str(_food_amount)
-	_amount_row.visible    = true
-	_refresh_food_delta()
-
-
-## Shows the potential efficiency delta above the food tile: +X% / -X% vs current locked efficiency.
-## Hidden when no food is assigned.
-## Updates the "Nutrition: x/y" label — x = amount × food nutrition, y = nutrition for 100%.
-func _refresh_nutrition() -> void:
-	if _nutrition_lbl == null:
-		return
-	var per_unit: float = 0.0
-	if _assigned_food != &"":
-		var def: Object = ResourceRegistry.get_definition(_assigned_food)
-		if def != null:
-			per_unit = def.nutrition
-	var x: int = roundi(per_unit * float(_food_amount))
-	var y: int = roundi(EfficiencyFormulas.nutrition_for_full())
-	_nutrition_lbl.text = "Nutrition: %d/%d" % [x, y]
-	if x >= y:
-		_nutrition_lbl.add_theme_color_override("font_color", Color(0.4, 0.85, 0.4))
-	elif x > 0:
-		_nutrition_lbl.add_theme_color_override("font_color", Color(0.95, 0.75, 0.2))
+	_npc_level_lbl.text = "Level %d" % npc.level
+	var span: int = ExperienceFormulas.xp_span_of_level(npc.level)
+	var into: int = ExperienceFormulas.xp_into_level(npc.xp, npc.level)
+	if span <= 0:
+		_xp_bar_fill.anchor_right = 1.0
+		_xp_bar_fill.color        = COLOR_XP_BAR_MAX
+		_xp_label.text            = "MAX"
 	else:
-		_nutrition_lbl.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
+		_xp_bar_fill.anchor_right = clampf(float(into) / float(span), 0.0, 1.0)
+		_xp_bar_fill.color        = COLOR_XP_BAR_FILL
+		_xp_label.text            = "%d / %d XP" % [into, span]
 
 
-func _refresh_food_delta() -> void:
-	_refresh_nutrition()
-	if _food_delta_lbl == null:
+func _on_npc_xp_gained(npc_id: StringName, _total: int, _into: int, _span: int) -> void:
+	if npc_id == _npc_id and visible:
+		_refresh_xp()
+
+
+func _on_npc_leveled_up(npc_id: StringName, _new_level: int) -> void:
+	if npc_id == _npc_id and visible:
+		_refresh_xp()
+
+
+func _on_npc_perk_chosen(npc_id: StringName, _perk_id: StringName) -> void:
+	if npc_id == _npc_id and visible:
+		_refresh_supply()
+
+# ── Supply grid (Daily Food + perks, uniform cells) ─────────────────────────────
+
+## Rebuilds the supply grid: the Daily Food cell first, then one cell per acquired perk.
+func _refresh_supply() -> void:
+	if _supply_grid == null:
 		return
 	var npc: NPCSystem.NPCInstance = NPCSystem.get_npc_instance(_npc_id)
-	if npc == null or _assigned_food == &"":
-		_food_delta_lbl.visible = false
-		return
-	# Efficiency comes from TOTAL nutrition = assigned amount × the food's nutrition value.
-	var food_def: Object = ResourceRegistry.get_definition(_assigned_food)
-	var per_unit: float = food_def.nutrition if food_def != null else 0.0
-	var food_mod := EfficiencyFormulas.calculate_food_modifier(per_unit * float(_food_amount))
-	var potential := EfficiencyFormulas.calculate_npc_efficiency(
-			food_mod, npc.satisfaction_modifier, npc.equipment_modifier)
-	var delta_pct := roundi((potential - npc.efficiency) * 100.0)
-	if delta_pct > 0:
-		_food_delta_lbl.text = "+%d%%" % delta_pct
-		_food_delta_lbl.add_theme_color_override("font_color", Color(0.4, 0.85, 0.4))
-	elif delta_pct < 0:
-		_food_delta_lbl.text = "%d%%" % delta_pct
-		_food_delta_lbl.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
+	if npc != null and int(npc.profession) != -1:
+		_profession_lbl.text    = "Profession: %s" % PerkRegistry.building_type_name(int(npc.profession))
+		_profession_lbl.visible = true
 	else:
-		_food_delta_lbl.text = "±0%"
-		_food_delta_lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
-	_food_delta_lbl.visible = true
+		_profession_lbl.visible = false
 
-# ── Food picker ───────────────────────────────────────────────────────────────
+	for child in _supply_grid.get_children():
+		child.queue_free()
+	_supply_grid.add_child(_make_food_cell())
+	if npc != null:
+		for i: int in range(npc.perks.size()):
+			_supply_grid.add_child(_make_perk_cell(npc.perks[i], i))
+
+
+## Daily Food cell: title, food tile (click to pick), and the assigned-amount controls.
+func _make_food_cell() -> Control:
+	var required: int = _food_required()
+	var active: bool = _assigned_food != &"" and HungerSystem.was_food_consumed(_npc_id)
+	var max_pct: int = roundi(_npc_max_efficiency() * 100.0)
+	var tip: String
+	if _assigned_food == &"":
+		tip = "Daily Food — no food assigned. Click to choose."
+	else:
+		var fdef: Object = ResourceRegistry.get_definition(_assigned_food)
+		var fname: String = fdef.display_name if fdef != null else str(_assigned_food)
+		tip = "Daily Food: %s — feeds efficiency." % fname
+		if required > 0:
+			tip += "\nNeeds %d/day to reach max efficiency (%d%%)." % [required, max_pct]
+		else:
+			tip += "\nAlready at max efficiency (%d%%) — no food needed." % max_pct
+		if not active:
+			tip += "\nInactive — not consumed at the last day change."
+
+	var cell := _new_cell("Daily Food")
+	cell.add_child(_make_supply_tile(_assigned_food, required, active, tip, true))
+	if _assigned_food != &"":
+		cell.add_child(_make_amount_row(_food_amount, func(d: int) -> void: _on_food_amount_delta(d)))
+	return cell
+
+
+## Perk cell: perk name, bound-good tile (shows required), and the assigned-amount controls.
+func _make_perk_cell(perk: Dictionary, index: int) -> Control:
+	var def: Dictionary = PerkRegistry.get_def(perk.get(&"perk_id", &""))
+	var good: StringName = perk.get(&"good", &"")
+	var required: int = int(def.get("required", 1))
+	var active: bool = bool(perk.get(&"active", false))
+	var tip: String = str(def.get("desc", ""))
+	var bt: int = int(perk.get(&"building_type", -1))
+	if bt != -1:
+		tip = tip.replace("this building type", PerkRegistry.building_type_name(bt))
+	if not active:
+		var assigned: int = int(perk.get(&"amount", 1))
+		if assigned < required:
+			tip += "\nDisabled — set to 0 (no good consumed; not reported as undersupplied)." if assigned <= 0 \
+				else "\nDisabled — assigned below the required amount; no good consumed."
+		else:
+			tip += "\nInactive — the good could not be consumed at the last day change."
+
+	var cell := _new_cell(str(def.get("name", perk.get(&"perk_id", "?"))))
+	cell.add_child(_make_supply_tile(good, required, active, tip, false))
+	cell.add_child(_make_amount_row(int(perk.get(&"amount", 1)),
+			func(d: int) -> void: _on_perk_amount_changed(index, d)))
+	return cell
+
+
+func _new_cell(title: String) -> VBoxContainer:
+	var cell := VBoxContainer.new()
+	cell.add_theme_constant_override("separation", 2)
+	var lbl := Label.new()
+	lbl.text = title
+	lbl.clip_text = true
+	lbl.custom_minimum_size = Vector2(ItemGrid.BLOCK_WIDTH, 0)
+	lbl.add_theme_font_size_override("font_size", 12)
+	lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+	cell.add_child(lbl)
+	return cell
+
+
+## Builds a supply tile: good icon (or "+" when none), the REQUIRED amount (×N), greyed when
+## inactive, with a hover tooltip. When `clickable`, left-click opens the food picker.
+func _make_supply_tile(good: StringName, required: int, active: bool, tooltip: String, clickable: bool) -> Control:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(ItemGrid.BLOCK_WIDTH, ItemGrid.BLOCK_HEIGHT)
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.tooltip_text = tooltip
+	if clickable:
+		panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	if good != &"" and not active:
+		panel.modulate = COLOR_DISABLED
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = ItemGrid.COLOR_BLOCK_BG
+	style.set_border_width_all(1)
+	style.border_color = ItemGrid.COLOR_BLOCK_BORDER
+	panel.add_theme_stylebox_override("panel", style)
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 2)
+	panel.add_child(vbox)
+
+	var icon_container := Control.new()
+	icon_container.custom_minimum_size   = Vector2(ItemGrid.ICON_SIZE, ItemGrid.ICON_SIZE)
+	icon_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	icon_container.mouse_filter          = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(icon_container)
+
+	if good == &"":
+		var plus_lbl := Label.new()
+		plus_lbl.text = "+"
+		plus_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		plus_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+		plus_lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		plus_lbl.add_theme_font_size_override("font_size", 28)
+		plus_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_container.add_child(plus_lbl)
+	else:
+		var rect := TextureRect.new()
+		rect.texture      = ResourceRegistry.get_icon_texture(good, ItemGrid.ICON_SIZE / 2)
+		rect.expand_mode  = TextureRect.EXPAND_IGNORE_SIZE
+		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_container.add_child(rect)
+
+	if required > 0:
+		var qty := Label.new()
+		qty.text                  = "×%d" % required
+		qty.horizontal_alignment  = HORIZONTAL_ALIGNMENT_CENTER
+		qty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		qty.add_theme_font_size_override("font_size", 14)
+		qty.add_theme_color_override("font_color", ItemGrid.COLOR_QTY_TEXT)
+		qty.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vbox.add_child(qty)
+
+	if clickable:
+		panel.mouse_entered.connect(func() -> void: style.border_color = ItemGrid.COLOR_HOVER_BORDER)
+		panel.mouse_exited.connect(func() -> void:  style.border_color = ItemGrid.COLOR_BLOCK_BORDER)
+		panel.gui_input.connect(func(event: InputEvent) -> void:
+			var mb := event as InputEventMouseButton
+			if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+				_open_food_popup()
+		)
+	return panel
+
+
+## [− n +] controls (tile width). `on_delta` is called with -1 / +1 on the buttons.
+func _make_amount_row(amount: int, on_delta: Callable) -> Control:
+	var row := HBoxContainer.new()
+	row.custom_minimum_size = Vector2(ItemGrid.BLOCK_WIDTH, 0)
+	row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	row.add_theme_constant_override("separation", 0)
+
+	var minus := Button.new()
+	minus.text = "−"
+	minus.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	minus.focus_mode = Control.FOCUS_ALL
+	minus.pressed.connect(func() -> void: on_delta.call(-1))
+	_apply_icon_btn_style(minus)
+	row.add_child(minus)
+
+	var lbl := Label.new()
+	lbl.text = str(amount)
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 15)
+	lbl.add_theme_color_override("font_color", COLOR_TEXT)
+	row.add_child(lbl)
+
+	var plus := Button.new()
+	plus.text = "+"
+	plus.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	plus.focus_mode = Control.FOCUS_ALL
+	plus.pressed.connect(func() -> void: on_delta.call(1))
+	_apply_icon_btn_style(plus)
+	row.add_child(plus)
+	return row
+
+
+## Required food amount = units of the assigned food to reach this NPC's max efficiency.
+## Units of the assigned food needed to raise this NPC to its MAX efficiency — the exact inverse
+## of HungerSystem's daily consumption. Accounts for every related perk:
+##   • Master's Touch (#3) and NPC level raise the cap that food must fill (more food needed),
+##   • Frugal (#1) supplies free nutrition each day (less food needed),
+##   • Hardy (#9) raises the unfed floor — if that floor already meets the max, no food is needed.
+## Only counts perks currently active (good supplied), matching HungerSystem. -1 = none/inedible.
+func _food_required() -> int:
+	if _assigned_food == &"":
+		return -1
+	var def: Object = ResourceRegistry.get_definition(_assigned_food)
+	var nut: float = def.nutrition if def != null else 0.0
+	if nut <= 0.0:
+		return -1
+	var level: int = 1
+	var eff_cap_bonus: float = 0.0
+	var perk_nutrition: float = 0.0
+	var floor_eff: float = 0.0
+	var inst: Object = NPCSystem.get_npc_instance(_npc_id)
+	if inst != null:
+		level = int(inst.level)
+		eff_cap_bonus = NPCSystem.npc_perk_bonus(_npc_id, PerkRegistry.EFFECT_NPC_EFF_CAP)
+		perk_nutrition = NPCSystem.npc_perk_bonus(_npc_id, PerkRegistry.EFFECT_NUTRITION_REDUCE)
+		floor_eff = NPCSystem.npc_perk_bonus(_npc_id, PerkRegistry.EFFECT_UNFED_FLOOR)
+	# Hardy: if the unfed floor already reaches the max, food adds nothing.
+	if floor_eff >= _npc_max_efficiency():
+		return 0
+	# Frugal's free nutrition subtracts from the daily target before converting to food units.
+	var needed_nutrition: float = EfficiencyFormulas.nutrition_for_full(level, eff_cap_bonus) - perk_nutrition
+	return maxi(0, ceili(needed_nutrition / nut))
+
+
+## This NPC's maximum reachable efficiency [0.0–2.0], including level + Master's Touch (cap) and
+## the Hardy floor. Drives the "max efficiency (xx%)" readout and the Hardy short-circuit above.
+func _npc_max_efficiency() -> float:
+	var level: int = 1
+	var eff_cap_bonus: float = 0.0
+	var floor_eff: float = 0.0
+	var inst: Object = NPCSystem.get_npc_instance(_npc_id)
+	if inst != null:
+		level = int(inst.level)
+		eff_cap_bonus = NPCSystem.npc_perk_bonus(_npc_id, PerkRegistry.EFFECT_NPC_EFF_CAP)
+		floor_eff = NPCSystem.npc_perk_bonus(_npc_id, PerkRegistry.EFFECT_UNFED_FLOOR)
+	var fed_max: float = EfficiencyFormulas.NUTRITION_UNFED_EFFICIENCY \
+			+ EfficiencyFormulas.nutrition_bonus_cap(level, eff_cap_bonus)
+	return maxf(fed_max, floor_eff)
+
+
+## Projected NPC efficiency if the currently SELECTED food + amount were consumed at the next day
+## change. Mirrors HungerSystem's daily calc (nutrition curve + Frugal/Hardy/Master's Touch perks),
+## then applies this NPC's current satisfaction/equipment modifiers. Drives the "(+/−X%)" preview.
+func _projected_efficiency(npc: NPCSystem.NPCInstance) -> float:
+	var consumed_nutrition: float = 0.0
+	if _assigned_food != &"" and _food_amount > 0:
+		var def: Object = ResourceRegistry.get_definition(_assigned_food)
+		var nut: float = def.nutrition if def != null else 0.0
+		consumed_nutrition = nut * float(_food_amount)
+	var perk_nutrition: float = NPCSystem.npc_perk_bonus(_npc_id, PerkRegistry.EFFECT_NUTRITION_REDUCE)
+	var floor_eff: float = NPCSystem.npc_perk_bonus(_npc_id, PerkRegistry.EFFECT_UNFED_FLOOR)
+	var eff_cap_bonus: float = NPCSystem.npc_perk_bonus(_npc_id, PerkRegistry.EFFECT_NPC_EFF_CAP)
+	var modifier: float = EfficiencyFormulas.calculate_food_modifier(
+			consumed_nutrition + perk_nutrition, int(npc.level), eff_cap_bonus)
+	if floor_eff > 0.0:
+		modifier = maxf(modifier, floor_eff / EfficiencyFormulas.BASE_NPC_EFFICIENCY)
+	return EfficiencyFormulas.calculate_npc_efficiency(
+			modifier, npc.satisfaction_modifier, npc.equipment_modifier)
+
+
+## Hover breakdown for the NPC efficiency label: unfed floor + food bonus (level/perk-capped),
+## with the Hardy floor and any satisfaction/equipment multipliers (1.0 placeholders for now).
+func _npc_efficiency_tooltip(npc: NPCSystem.NPCInstance) -> String:
+	var floor_base: float = EfficiencyFormulas.NUTRITION_UNFED_EFFICIENCY
+	var cap: float = EfficiencyFormulas.nutrition_bonus_cap(
+			int(npc.level), NPCSystem.npc_perk_bonus(_npc_id, PerkRegistry.EFFECT_NPC_EFF_CAP))
+	var hardy: float = NPCSystem.npc_perk_bonus(_npc_id, PerkRegistry.EFFECT_UNFED_FLOOR)
+	# food_modifier already carries the (post-Hardy) nutrition curve: e_food = 0.5 × modifier.
+	var e_food: float = EfficiencyFormulas.BASE_NPC_EFFICIENCY * npc.food_modifier
+	var binding_floor: float = floor_base
+	var food_bonus: float = maxf(0.0, e_food - floor_base)
+	if hardy > 0.0 and hardy >= e_food - 0.0001:
+		binding_floor = hardy  # Hardy floor dominates; food has not yet exceeded it
+		food_bonus = 0.0
+
+	var lines: PackedStringArray = PackedStringArray()
+	lines.append("Efficiency breakdown")
+	lines.append("Unfed floor: %d%%%s" % [
+			roundi(binding_floor * 100.0), " (Hardy)" if binding_floor > floor_base else ""])
+	lines.append("Food: +%d%% (max +%d%%)" % [roundi(food_bonus * 100.0), roundi(cap * 100.0)])
+	if not is_equal_approx(npc.satisfaction_modifier, 1.0):
+		lines.append("× Satisfaction: %d%%" % roundi(npc.satisfaction_modifier * 100.0))
+	if not is_equal_approx(npc.equipment_modifier, 1.0):
+		lines.append("× Equipment: %d%%" % roundi(npc.equipment_modifier * 100.0))
+	lines.append("= %d%% (max %d%%)" % [
+			roundi(npc.efficiency * 100.0), roundi(_npc_max_efficiency() * 100.0)])
+	return "\n".join(lines)
+
+
+func _on_food_amount_delta(delta: int) -> void:
+	if _assigned_food == &"":
+		return
+	_food_amount = maxi(0, _food_amount + delta)
+	food_amount_changed.emit(_npc_id, _food_amount)
+	_refresh_efficiency()
+	_refresh_supply()
+
+
+func _on_perk_amount_changed(index: int, delta: int) -> void:
+	var npc: NPCSystem.NPCInstance = NPCSystem.get_npc_instance(_npc_id)
+	if npc == null or index < 0 or index >= npc.perks.size():
+		return
+	var current: int = int((npc.perks[index] as Dictionary).get(&"amount", 1))
+	# System clamps to [0, required] — 0 disables the perk like food set to 0.
+	NPCSystem.set_perk_amount(_npc_id, index, current + delta)
+	_refresh_efficiency()
+	_refresh_supply()
+
+# ── Food picker popup ───────────────────────────────────────────────────────────
 
 func _open_food_popup() -> void:
 	for child in _food_popup_flow.get_children():
@@ -216,24 +509,8 @@ func _on_food_selected(resource_id: StringName) -> void:
 	else:
 		_assigned_food = resource_id
 		food_assigned.emit(_npc_id, resource_id)
-	_refresh_food_slot()
-
-# ── Amount controls ───────────────────────────────────────────────────────────
-
-func _on_minus_pressed() -> void:
-	if _food_amount <= 1:
-		return
-	_food_amount -= 1
-	_amount_label.text = str(_food_amount)
-	food_amount_changed.emit(_npc_id, _food_amount)
-	_refresh_food_delta()
-
-
-func _on_plus_pressed() -> void:
-	_food_amount += 1
-	_amount_label.text = str(_food_amount)
-	food_amount_changed.emit(_npc_id, _food_amount)
-	_refresh_food_delta()
+	_refresh_efficiency()
+	_refresh_supply()
 
 # ── Animations ────────────────────────────────────────────────────────────────
 
@@ -259,13 +536,6 @@ func _animate_out() -> void:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-func _food_icon(resource_id: StringName) -> String:
-	match resource_id:
-		&"berry": return "🫐"
-		&"bread": return "🍞"
-		_:        return "🍽️"
-
-
 func _state_label(state: int) -> String:
 	match state:
 		0: return "Idle"
@@ -286,7 +556,6 @@ func _build_ui() -> void:
 	_panel = DraggableWindow.new()
 	_panel.name = "Panel"
 	_panel.custom_minimum_size = Vector2(PANEL_WIDTH, PANEL_HEIGHT)
-	# Centre first (same pattern as TransportationPanel), then shift right of the inventory modal.
 	_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	_panel.offset_left  += panel_x_offset
 	_panel.offset_right += panel_x_offset
@@ -304,8 +573,6 @@ func _build_ui() -> void:
 	vbox.add_theme_constant_override("separation", 10)
 	body_margin.add_child(vbox)
 
-	# NPC name lives in the DraggableWindow title bar (set in update()).
-	# State + efficiency stay in the body; the window provides the close button.
 	var header_row := HBoxContainer.new()
 	header_row.add_theme_constant_override("separation", 6)
 	vbox.add_child(header_row)
@@ -323,14 +590,47 @@ func _build_ui() -> void:
 	_npc_efficiency_lbl = Label.new()
 	_npc_efficiency_lbl.add_theme_font_size_override("font_size", 12)
 	_npc_efficiency_lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+	_npc_efficiency_lbl.mouse_filter = Control.MOUSE_FILTER_STOP  # needed for the hover tooltip
 	title_col.add_child(_npc_efficiency_lbl)
 
-	# Daily nutrition the assigned food provides vs. the amount needed for full efficiency.
-	_nutrition_lbl = Label.new()
-	_nutrition_lbl.add_theme_font_size_override("font_size", 12)
-	_nutrition_lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
-	_nutrition_lbl.tooltip_text = "Total nutrition fed per day vs. needed for 100% (amount × food nutrition)."
-	title_col.add_child(_nutrition_lbl)
+	# Experience: level row + XP bar + "x / y XP" readout.
+	var level_row := HBoxContainer.new()
+	level_row.add_theme_constant_override("separation", 8)
+	title_col.add_child(level_row)
+
+	_npc_level_lbl = Label.new()
+	_npc_level_lbl.add_theme_font_size_override("font_size", 12)
+	_npc_level_lbl.add_theme_color_override("font_color", COLOR_XP_BAR_MAX)
+	level_row.add_child(_npc_level_lbl)
+
+	_xp_label = Label.new()
+	_xp_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_xp_label.horizontal_alignment  = HORIZONTAL_ALIGNMENT_RIGHT
+	_xp_label.add_theme_font_size_override("font_size", 11)
+	_xp_label.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+	level_row.add_child(_xp_label)
+
+	_xp_bar_outer = Control.new()
+	_xp_bar_outer.custom_minimum_size   = Vector2(0, 6)
+	_xp_bar_outer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_xp_bar_outer.mouse_filter          = Control.MOUSE_FILTER_IGNORE
+	title_col.add_child(_xp_bar_outer)
+
+	var xp_bg := ColorRect.new()
+	xp_bg.color        = COLOR_XP_BAR_BG
+	xp_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	xp_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_xp_bar_outer.add_child(xp_bg)
+
+	_xp_bar_fill = ColorRect.new()
+	_xp_bar_fill.color         = COLOR_XP_BAR_FILL
+	_xp_bar_fill.mouse_filter  = Control.MOUSE_FILTER_IGNORE
+	_xp_bar_fill.anchor_left   = 0.0
+	_xp_bar_fill.anchor_top    = 0.0
+	_xp_bar_fill.anchor_right  = 0.0
+	_xp_bar_fill.anchor_bottom = 1.0
+	_xp_bar_fill.offset_right  = 0.0
+	_xp_bar_outer.add_child(_xp_bar_fill)
 
 	_rename_btn = Button.new()
 	_rename_btn.name = "RenameBtn"
@@ -345,126 +645,29 @@ func _build_ui() -> void:
 
 	_build_separator(vbox)
 
-	# Food section label
-	var food_lbl := Label.new()
-	food_lbl.text = "Daily Food"
-	food_lbl.add_theme_font_size_override("font_size", 12)
-	food_lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
-	vbox.add_child(food_lbl)
+	_profession_lbl = Label.new()
+	_profession_lbl.add_theme_font_size_override("font_size", 12)
+	_profession_lbl.add_theme_color_override("font_color", COLOR_TEXT)
+	_profession_lbl.visible = false
+	vbox.add_child(_profession_lbl)
 
-	# Efficiency delta label above food tile — hidden until food is assigned
-	_food_delta_lbl = Label.new()
-	_food_delta_lbl.visible = false
-	_food_delta_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_food_delta_lbl.add_theme_font_size_override("font_size", 13)
-	_food_delta_lbl.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	vbox.add_child(_food_delta_lbl)
+	# Uniform supply grid: Daily Food + perks, 2 columns, scrollable.
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size    = Vector2(0, 260)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal  = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical    = Control.SIZE_EXPAND_FILL
+	vbox.add_child(scroll)
 
-	# Food slot tile (click to open picker) — shrink to tile width, don't fill panel
-	var slot_row := HBoxContainer.new()
-	slot_row.add_theme_constant_override("separation", 0)
-	slot_row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	vbox.add_child(slot_row)
-
-	_food_slot_tile = _build_food_slot_tile()
-	slot_row.add_child(_food_slot_tile)
-
-	# Amount controls row: [−]  n  [+]  — same width as food tile, hidden when no food assigned
-	_amount_row = HBoxContainer.new()
-	_amount_row.name = "AmountRow"
-	_amount_row.visible = false
-	_amount_row.custom_minimum_size = Vector2(ItemGrid.BLOCK_WIDTH, 0)
-	_amount_row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	_amount_row.add_theme_constant_override("separation", 0)
-	vbox.add_child(_amount_row)
-
-	_minus_btn = Button.new()
-	_minus_btn.text = "−"
-	_minus_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_minus_btn.focus_mode = Control.FOCUS_ALL
-	_minus_btn.pressed.connect(_on_minus_pressed)
-	_apply_icon_btn_style(_minus_btn)
-	_amount_row.add_child(_minus_btn)
-
-	_amount_label = Label.new()
-	_amount_label.text               = "1"
-	_amount_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_amount_label.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	_amount_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_amount_label.size_flags_vertical   = Control.SIZE_SHRINK_CENTER
-	_amount_label.add_theme_font_size_override("font_size", 15)
-	_amount_label.add_theme_color_override("font_color", COLOR_TEXT)
-	_amount_row.add_child(_amount_label)
-
-	_plus_btn = Button.new()
-	_plus_btn.text = "+"
-	_plus_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_plus_btn.focus_mode = Control.FOCUS_ALL
-	_plus_btn.pressed.connect(_on_plus_pressed)
-	_apply_icon_btn_style(_plus_btn)
-	_amount_row.add_child(_plus_btn)
+	_supply_grid = GridContainer.new()
+	_supply_grid.columns = 2
+	_supply_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_supply_grid.add_theme_constant_override("h_separation", 14)
+	_supply_grid.add_theme_constant_override("v_separation", 12)
+	scroll.add_child(_supply_grid)
 
 	_build_food_popup()
 	_build_npc_rename_dialog()
-
-
-func _build_food_slot_tile() -> PanelContainer:
-	var panel := PanelContainer.new()
-	panel.name = "FoodSlotTile"
-	panel.custom_minimum_size = Vector2(ItemGrid.BLOCK_WIDTH, ItemGrid.BLOCK_HEIGHT)
-	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-
-	_food_slot_style = StyleBoxFlat.new()
-	_food_slot_style.bg_color            = ItemGrid.COLOR_BLOCK_BG
-	_food_slot_style.border_width_left   = 1
-	_food_slot_style.border_width_right  = 1
-	_food_slot_style.border_width_top    = 1
-	_food_slot_style.border_width_bottom = 1
-	_food_slot_style.border_color        = ItemGrid.COLOR_BLOCK_BORDER
-	panel.add_theme_stylebox_override("panel", _food_slot_style)
-
-	var vbox := VBoxContainer.new()
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_theme_constant_override("separation", 2)
-	panel.add_child(vbox)
-
-	var icon_container := Control.new()
-	icon_container.custom_minimum_size   = Vector2(ItemGrid.ICON_SIZE, ItemGrid.ICON_SIZE)
-	icon_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	icon_container.mouse_filter          = Control.MOUSE_FILTER_IGNORE
-	vbox.add_child(icon_container)
-
-	_food_slot_icon = Label.new()
-	_food_slot_icon.text                 = "+"
-	_food_slot_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_food_slot_icon.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	_food_slot_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_food_slot_icon.add_theme_font_size_override("font_size", 28)
-	_food_slot_icon.mouse_filter         = Control.MOUSE_FILTER_IGNORE
-	icon_container.add_child(_food_slot_icon)
-
-	_food_slot_qty = Label.new()
-	_food_slot_qty.text                  = ""
-	_food_slot_qty.visible               = false
-	_food_slot_qty.horizontal_alignment  = HORIZONTAL_ALIGNMENT_CENTER
-	_food_slot_qty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_food_slot_qty.add_theme_font_size_override("font_size", 14)
-	_food_slot_qty.add_theme_color_override("font_color", ItemGrid.COLOR_QTY_TEXT)
-	_food_slot_qty.mouse_filter          = Control.MOUSE_FILTER_IGNORE
-	vbox.add_child(_food_slot_qty)
-
-	panel.mouse_entered.connect(func() -> void:
-		_food_slot_style.border_color = ItemGrid.COLOR_HOVER_BORDER)
-	panel.mouse_exited.connect(func() -> void:
-		_food_slot_style.border_color = ItemGrid.COLOR_BLOCK_BORDER)
-	panel.gui_input.connect(func(event: InputEvent) -> void:
-		var mb := event as InputEventMouseButton
-		if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
-			_open_food_popup()
-	)
-
-	return panel
 
 
 func _build_food_popup() -> void:
@@ -510,15 +713,17 @@ func _build_food_popup() -> void:
 
 
 func _build_clear_tile() -> PanelContainer:
-	return _build_picker_tile(&"", "✕", "")
+	return _build_picker_tile(&"", "")
 
 
 func _build_food_tile(food_id: StringName, qty: int) -> PanelContainer:
 	var qty_text: String = "×%d" % qty if qty > 0 else "×0"
-	return _build_picker_tile(food_id, _food_icon(food_id), qty_text)
+	return _build_picker_tile(food_id, qty_text)
 
 
-func _build_picker_tile(resource_id: StringName, icon_text: String, sub_text: String) -> PanelContainer:
+## Picker popup tile. Shows current STOCK (helps the player choose); the detail grid tiles show
+## the required amount instead.
+func _build_picker_tile(resource_id: StringName, sub_text: String) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(ItemGrid.BLOCK_WIDTH, ItemGrid.BLOCK_HEIGHT)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -526,10 +731,7 @@ func _build_picker_tile(resource_id: StringName, icon_text: String, sub_text: St
 
 	var style := StyleBoxFlat.new()
 	style.bg_color            = ItemGrid.COLOR_BLOCK_BG
-	style.border_width_left   = 1
-	style.border_width_right  = 1
-	style.border_width_top    = 1
-	style.border_width_bottom = 1
+	style.set_border_width_all(1)
 	style.border_color        = ItemGrid.COLOR_BLOCK_BORDER
 	panel.add_theme_stylebox_override("panel", style)
 
@@ -544,14 +746,23 @@ func _build_picker_tile(resource_id: StringName, icon_text: String, sub_text: St
 	icon_container.mouse_filter          = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(icon_container)
 
-	var icon_lbl := Label.new()
-	icon_lbl.text                 = icon_text
-	icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	icon_lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	icon_lbl.add_theme_font_size_override("font_size", 28)
-	icon_lbl.mouse_filter         = Control.MOUSE_FILTER_IGNORE
-	icon_container.add_child(icon_lbl)
+	if resource_id == &"":
+		var x_lbl := Label.new()
+		x_lbl.text                 = "✕"
+		x_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		x_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+		x_lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		x_lbl.add_theme_font_size_override("font_size", 28)
+		x_lbl.mouse_filter         = Control.MOUSE_FILTER_IGNORE
+		icon_container.add_child(x_lbl)
+	else:
+		var icon_rect := TextureRect.new()
+		icon_rect.texture      = ResourceRegistry.get_icon_texture(resource_id, ItemGrid.ICON_SIZE / 2)
+		icon_rect.expand_mode  = TextureRect.EXPAND_IGNORE_SIZE
+		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_container.add_child(icon_rect)
 
 	if sub_text != "":
 		var sub_lbl := Label.new()
@@ -570,7 +781,6 @@ func _build_picker_tile(resource_id: StringName, icon_text: String, sub_text: St
 		if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
 			_on_food_selected(resource_id)
 	)
-
 	return panel
 
 # ── Rename ───────────────────────────────────────────────────────────────────
@@ -649,17 +859,10 @@ func _build_npc_rename_dialog() -> void:
 	_apply_icon_btn_style(cancel_btn)
 	btn_row.add_child(cancel_btn)
 
-
 # ── Style helpers ─────────────────────────────────────────────────────────────
 
 func _build_separator(parent: Control) -> void:
-	var sep := HSeparator.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color              = COLOR_SEP
-	style.content_margin_top    = 0
-	style.content_margin_bottom = 0
-	sep.add_theme_stylebox_override("separator", style)
-	parent.add_child(sep)
+	parent.add_child(StyleFactory.separator(COLOR_SEP))
 
 
 func _apply_panel_style(panel: PanelContainer) -> void:

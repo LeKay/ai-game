@@ -1,9 +1,34 @@
 # Recipe Database System
 
-> **Status**: In Design
+> **Status**: Partially Implemented — design target; see implementation note (2026-06-13)
 > **Author**: User + Claude (Sonnet 4.5)
-> **Last Updated**: 2026-05-05
+> **Last Updated**: 2026-06-13
 > **Implements Pillar**: Pillar 2 (Information Transparency), Pillar 3 (Optimization Over Expansion)
+>
+> **Implementation note (2026-06-16):** The centralized `res://data/recipes.json`
+> registry described below is **not yet built**. The current implementation splits
+> recipes across two code tables:
+> - **Manual crafting** — `src/gameplay/crafting_registry.gd` (`CraftingRegistry`
+>   Autoload): five recipes — `axe` (3 Wood + 2 Stone, 20 Energy, 120 ticks → 1 Axe),
+>   `pickaxe` (3 Stone + 1 Wood, 20 Energy, 120 ticks → 1 Pickaxe),
+>   `spindle` (2 Wood + 2 Fiber, 15 Energy, 90 ticks → 1 Spindle),
+>   `cloth` (4 Fiber, 20 Energy, 180 ticks → 1 Cloth), and `clothing`
+>   (3 Cloth + 2 Fiber, 25 Energy, 240 ticks → 1 Clothing). Crafting advances the world
+>   clock via `advance_ticks_manual` — it is not instant (balancing 2026-06-11).
+>   No tool-charge inputs on the manual path.
+> - **Building production** — `BuildingRegistry.RECIPES` (see `design/gdd/building-system.md`):
+>   cycle recipes as arrays per building type (index 0 = main recipe, index 1+ = fallback).
+>   Buildings with fallback recipes expose a recipe selector in BuildingDetailPanel.
+>   Current building recipes: Lumber Camp (requires Axe), Stone Mason (requires Pickaxe),
+>   Gathering Hut, Tool Workshop (3 recipes: Axe/Pickaxe/Spindle), **Weaver**
+>   (Fiber+Spindle→Cloth, 250/750 ticks), **Tailor** (Cloth+Spindle→Clothing, 300/900 ticks),
+>   **Sawmill** (2 Wood + 1 Axe → 3 Plank, 250 ticks),
+>   **Farm** (WHEAT-adjacent gathering → 5 Wheat, 250 ticks; efficiency scales with adjacent WHEAT count),
+>   **Mill** (2 Wheat → 3 Flour, 250 ticks), **Bakery** (2 Flour → 4 Bread, 300 ticks).
+>   New intermediate resource: `flour` (production_good / intermediate).
+> Migrating both tables into the JSON registry below remains the design goal
+> (data-driven content rule); treat the rest of this document as the target design,
+> not the implemented state.
 
 ## Overview
 
@@ -140,7 +165,7 @@ Recipes can have unlock conditions that gate their availability. Conditions are 
       "category": "processing",
       "inputs": [
         {"resource_id": "wood", "quantity": 1},
-        {"resource_id": "tool", "charge_cost": 5.0}
+        {"resource_id": "axe", "charge_cost": 5.0}
       ],
       "outputs": [
         {"resource_id": "plank", "quantity": 5}
@@ -285,10 +310,10 @@ When a recipe input specifies `charge_cost`, the system selects which storage sl
 
 **Example:**
 ```
-Recipe: "Produce Planks" requires tool with charge_cost: 5.0
+Recipe: "Produce Planks" requires axe with charge_cost: 5.0
 Storage contains:
-  - Slot A: tool, current_charge = 12.0 (e.g. 1 tool at 12/100)
-  - Slot B: tool, current_charge = 435.0 (e.g. 5 tools at 87/100 each)
+  - Slot A: axe, current_charge = 12.0 (e.g. 1 axe at 12/100)
+  - Slot B: axe, current_charge = 435.0 (e.g. 5 axes at 87/100 each)
   - Slot C: wood, current_charge = 300.0 — EXCLUDED (wrong resource_id)
 
 Filtered candidates: [Slot A (12.0), Slot B (435.0)]
@@ -333,7 +358,7 @@ Used to compare manual vs. building recipes producing the same output, and by AI
 **Example:**
 ```
 Recipe: "Sawmill Planks"
-Inputs: 1 Wood (value: 2 gold), 1 Tool charge -5 (ignore charge cost for efficiency)
+Inputs: 1 Wood (value: 2 gold), 1 Axe charge -5 (ignore charge cost for efficiency)
 Outputs: 5 Planks (value: 3 gold each)
 Tick cost: 50
 
@@ -342,7 +367,7 @@ V_in = 1 × 2 = 2 gold
 η = 15 / (50 + 2) = 15 / 52 = 0.288
 
 Compare to manual recipe "Chop Tree":
-Inputs: 1 Tool charge -10
+Inputs: 1 Axe charge -10
 Outputs: 5 Wood (value: 2 gold each)
 Tick cost: 80
 
@@ -602,7 +627,7 @@ The Recipe Database System has the following designer-adjustable values:
 
 4. **GIVEN** a building recipe in loop mode with inputs for 3 iterations (6 Wood available, recipe consumes 2 Wood/iteration), **WHEN** NPC assigned and recipe started, **THEN** recipe executes exactly 3 times (consuming all 6 Wood), then stops with status "Inputs Exhausted"
 
-5. **GIVEN** a recipe input with `charge_cost: 5.0` for tool, **WHEN** storage has Slot A (tool, current_charge 12.0) and Slot B (tool, current_charge 435.0), **THEN** system selects Slot A (lowest charge) and reduces it from 12.0 to 7.0
+5. **GIVEN** a recipe input with `charge_cost: 5.0` for axe, **WHEN** storage has Slot A (axe, current_charge 12.0) and Slot B (axe, current_charge 435.0), **THEN** system selects Slot A (lowest charge) and reduces it from 12.0 to 7.0
 
 6. **GIVEN** a milestone requiring 50 Wood + 30 Stone, **WHEN** player stockpiles exactly 50 Wood and 30 Stone, **THEN** milestone unlocks and all gated recipes become available permanently
 
@@ -616,11 +641,11 @@ The Recipe Database System has the following designer-adjustable values:
 
 ### Item Charge Consumption (Blocking)
 
-11. **GIVEN** a recipe input with `charge_cost: 20.0` for tool AND the only slot has current_charge 15.0 (insufficient), **WHEN** player attempts to execute recipe, **THEN** recipe transitions to Unavailable AND slot is NOT modified AND status message shows "Insufficient charge"
+11. **GIVEN** a recipe input with `charge_cost: 20.0` for axe AND the only slot has current_charge 15.0 (insufficient), **WHEN** player attempts to execute recipe, **THEN** recipe transitions to Unavailable AND slot is NOT modified AND status message shows "Insufficient charge"
 
 12. **GIVEN** a recipe input with `charge_cost: 15.0` AND a slot has exactly current_charge 15.0, **WHEN** recipe executes to completion, **THEN** slot.current_charge becomes 0.0 AND slot is cleared (resource_id = null, quantity = 0)
 
-13. **GIVEN** Slot A (tool, current_charge 50.0, slot_index 3) AND Slot B (tool, current_charge 50.0, slot_index 7), **WHEN** recipe needs charge_cost 10.0, **THEN** Slot A selected (lower slot_index as tiebreaker per Formula 1)
+13. **GIVEN** Slot A (axe, current_charge 50.0, slot_index 3) AND Slot B (axe, current_charge 50.0, slot_index 7), **WHEN** recipe needs charge_cost 10.0, **THEN** Slot A selected (lower slot_index as tiebreaker per Formula 1)
 
 ### Recipe Execution Failures (Blocking)
 

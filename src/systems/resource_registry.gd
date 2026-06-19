@@ -31,6 +31,14 @@ class _ResourceDefinition:
 	var movement_cost: float = 4.0
 	## Nutrition value — drives NPC efficiency via EfficiencyFormulas curve. 0 = inedible.
 	var nutrition: float = 0.0
+	## Emoji/text glyph used by UI grids when no raster icon is shown.
+	var glyph: String = "📦"
+	## World-space badge art for terrain resources (env tile icons). "" = not a terrain resource.
+	var world_icon_path: String = ""
+	## Fallback dot color when world_icon_path art is missing.
+	var fallback_color: Color = Color(0.8, 0.8, 0.8)
+	## Eligible to be drawn as a perk's bound good (Perk System). Default false.
+	var perk_eligible: bool = false
 
 
 func _ready() -> void:
@@ -95,6 +103,71 @@ func is_valid_id(id: StringName) -> bool:
 	return id in _definitions
 
 
+## Returns all non-deprecated resource IDs in the registry, sorted alphabetically.
+func get_all_resource_ids() -> Array[StringName]:
+	var result: Array[StringName] = []
+	for id: StringName in _definitions:
+		var def: _ResourceDefinition = _definitions[id]
+		if not def.deprecated:
+			result.append(id)
+	result.sort()
+	return result
+
+
+## Returns the UI glyph (emoji/text) for a resource, or "📦" for unknown ids.
+func get_glyph(id: StringName) -> String:
+	var def: _ResourceDefinition = _definitions.get(id, null)
+	return def.glyph if def != null else "📦"
+
+
+## Returns true if the resource has world-badge art (i.e. is a terrain resource).
+func has_world_icon(id: StringName) -> bool:
+	var def: _ResourceDefinition = _definitions.get(id, null)
+	return def != null and def.world_icon_path != ""
+
+
+## Loads the world-badge texture for a terrain resource. Falls back to a colored
+## circle of radius `fallback_radius_px` when the art is missing. Returns the
+## fallback for unknown ids.
+func get_world_icon_texture(id: StringName, fallback_radius_px: int) -> Texture2D:
+	var def: _ResourceDefinition = _definitions.get(id, null)
+	if def != null and def.world_icon_path != "" and ResourceLoader.exists(def.world_icon_path):
+		var tex := load(def.world_icon_path) as Texture2D
+		if tex != null:
+			return tex
+	var color: Color = def.fallback_color if def != null else Color(0.8, 0.8, 0.8)
+	return TextureFactory.circle(fallback_radius_px, color)
+
+
+## Loads the best available icon texture for any resource — for use in transport
+## animations, carrier icons, and UI displays.
+## Priority: icon_path (UI icon) → world_icon_path → colored circle fallback.
+func get_icon_texture(id: StringName, fallback_radius_px: int) -> Texture2D:
+	var def: _ResourceDefinition = _definitions.get(id, null)
+	if def != null and def.icon_path != "":
+		var ui_path: String = "res://" + def.icon_path
+		if ResourceLoader.exists(ui_path):
+			var tex := load(ui_path) as Texture2D
+			if tex != null:
+				return tex
+	if def != null and def.world_icon_path != "" and ResourceLoader.exists(def.world_icon_path):
+		var tex := load(def.world_icon_path) as Texture2D
+		if tex != null:
+			return tex
+	var color: Color = def.fallback_color if def != null else Color(0.8, 0.8, 0.8)
+	return TextureFactory.circle(fallback_radius_px, color)
+
+
+## Returns all non-deprecated resource IDs in JSON insertion order.
+func get_all_ids() -> Array[StringName]:
+	var result: Array[StringName] = []
+	for id: StringName in _definitions.keys():
+		var def: _ResourceDefinition = _definitions[id]
+		if not def.deprecated:
+			result.append(id)
+	return result
+
+
 ## Returns a fresh Array of all definitions matching category. O(n).
 ## Intended for startup-only queries — callers that need repeated results should
 ## cache the returned Array. Mutating the Array does not affect _definitions.
@@ -109,6 +182,34 @@ func get_all_by_category(category: ResourceCategory) -> Array:
 ## Returns the schema version number stored in the loaded JSON file.
 func get_registry_version() -> int:
 	return _registry_version
+
+
+## Returns all non-deprecated resource IDs with nutrition > 0 (edible food), sorted alphabetically.
+func get_food_resource_ids() -> Array[StringName]:
+	var result: Array[StringName] = []
+	for id: StringName in _definitions:
+		var def: _ResourceDefinition = _definitions[id]
+		if not def.deprecated and def.nutrition > 0.0:
+			result.append(id)
+	result.sort()
+	return result
+
+
+## Returns the nutrition value for a resource (0.0 for non-food or unknown id).
+func get_nutrition(id: StringName) -> float:
+	var def: _ResourceDefinition = _definitions.get(id, null)
+	return def.nutrition if def != null else 0.0
+
+
+## Returns all non-deprecated resource IDs flagged `perk_eligible` (Perk System bound-good pool).
+func get_perk_eligible_ids() -> Array[StringName]:
+	var result: Array[StringName] = []
+	for id: StringName in _definitions:
+		var def: _ResourceDefinition = _definitions[id]
+		if def.perk_eligible and not def.deprecated:
+			result.append(id)
+	result.sort()
+	return result
 
 
 func _parse_resources(entries: Variant) -> bool:
@@ -231,3 +332,16 @@ func _apply_optional_fields(def: _ResourceDefinition, entry: Dictionary) -> void
 
 	var raw_nutrition: Variant = entry.get("nutrition")
 	def.nutrition = float(raw_nutrition) if raw_nutrition != null else 0.0
+
+	var raw_glyph: Variant = entry.get("glyph")
+	def.glyph = str(raw_glyph) if raw_glyph != null else "📦"
+
+	var raw_world_icon: Variant = entry.get("world_icon_path")
+	def.world_icon_path = str(raw_world_icon) if raw_world_icon != null else ""
+
+	var raw_fallback: Variant = entry.get("fallback_color")
+	if raw_fallback is Array and raw_fallback.size() >= 3:
+		def.fallback_color = Color(float(raw_fallback[0]), float(raw_fallback[1]), float(raw_fallback[2]))
+
+	var raw_perk_eligible: Variant = entry.get("perk_eligible")
+	def.perk_eligible = raw_perk_eligible if raw_perk_eligible is bool else false

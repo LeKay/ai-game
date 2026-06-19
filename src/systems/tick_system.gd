@@ -159,7 +159,7 @@ func _accumulate_ticks(ticks: int) -> void:
 ## values, never modified by speed_multiplier. Works regardless of pause
 ## state: a paused world advances by the action cost, then re-freezes.
 ## Handles day transitions via a while loop: if the cost pushes tick_count
-## past 1000, the remainder after subtracting TICKS_PER_DAY wraps to the
+## past TICKS_PER_DAY, the remainder after subtracting TICKS_PER_DAY wraps to the
 ## next day, current_day increments, and the game auto-pauses. Manual
 ## actions that cross a day boundary still trigger pause.
 func advance_ticks_manual(cost: int) -> void:

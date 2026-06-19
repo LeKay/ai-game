@@ -48,8 +48,6 @@ var cargo: int
 var cargo_resource = null
 ## Ticks remaining until carrier reaches its next waypoint.
 var remaining_ticks: int
-## Ticks spent waiting at source or destination (timeout counter).
-var wait_ticks: int
 ## The NPC's home tile — recorded when start_route() is called. Used for RETURN_HOME distance.
 var npc_home_pos: Vector2i
 ## Start tile of the current TRAVEL_TO_SOURCE leg.
@@ -61,10 +59,23 @@ var cached_path_cost_current_leg: float = 0.0
 ## efficiency scaling. Animations use this as the denominator so the icon's progress matches
 ## the real (efficiency-scaled) travel time. 0 when not currently travelling.
 var current_leg_total_ticks: int = 0
+## Nominal (efficiency-independent) duration of the in-progress source→destination delivery leg,
+## captured at pickup BEFORE F4 scaling. Used by the Experience System to grant time-based
+## delivery XP (ExperienceFormulas.xp_for_duration) when the carrier unloads. 0 when not delivering.
+var delivery_leg_nominal_ticks: int = 0
 ## Human-readable reason set by _deactivate_route() when lifecycle_state → DEACTIVATED.
 var deactivation_reason: String = ""
 ## Item this carrier is configured to pick up from a storage source. &"" for non-storage sources.
 var source_item_id: StringName = &""
+
+# ---- Observed day stats (post-hoc, reset each day) --------------------------
+
+## Items delivered on this route during the last complete day.
+var stats_items_last_day: int = 0
+## Ticks this route's carrier was actively working this route (State != IDLE) last day.
+var stats_active_ticks_last_day: int = 0
+## True after the first day_transition has been snapshotted — UI shows "—" until then.
+var stats_data_available: bool = false
 
 # ---- Path cache (ADR-0013 Story 011) -----------------------------------------
 
@@ -104,7 +115,7 @@ static func create(
 	# include source+destination (a carrier can have at most one route per source→dest pair).
 	# (Was "route_<npc>", which collided when one NPC had multiple routes — breaking the active-
 	# route map and the per-id line/icon lookups in the overlays.)
-	route.id = StringName("route_%s_%s_%s" % [npc, source, destination])
+	route.id = StringName("route_%s_%s_%s_%s" % [npc, source, destination, p_source_item])
 	route.source_building_id = source
 	route.destination_building_id = destination
 	route.npc_id = npc
@@ -116,11 +127,11 @@ static func create(
 	route.cargo = 0
 	route.cargo_resource = null
 	route.remaining_ticks = 0
-	route.wait_ticks = 0
 	route.npc_home_pos = Vector2i.ZERO
 	route.npc_start_pos = Vector2i.ZERO
 	route.cached_path_cost_current_leg = 0.0
 	route.current_leg_total_ticks = 0
+	route.delivery_leg_nominal_ticks = 0
 	route.cached_path = []
 	route.cached_path_cost = 0.0
 	route.path_valid = false
@@ -130,4 +141,7 @@ static func create(
 	route.home_legs_valid = false
 	route.current_leg_path = []
 	route.cached_leg_path_home_to_source = []
+	route.stats_items_last_day = 0
+	route.stats_active_ticks_last_day = 0
+	route.stats_data_available = false
 	return route

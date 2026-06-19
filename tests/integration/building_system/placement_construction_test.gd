@@ -206,7 +206,7 @@ func test_building_placed_signal_emitted() -> void:
 	_registry.initiate_build(BuildingRegScript.BuildingType.COLLECTION_POINT, tile)
 
 	# Assert
-	assert_signal_emitted(signal_monitor, "building_placed")
+	await assert_signal(signal_monitor).is_emitted("building_placed")
 
 
 func test_construction_complete_signal_emitted_after_ticks() -> void:
@@ -221,7 +221,7 @@ func test_construction_complete_signal_emitted_after_ticks() -> void:
 	_registry._on_ticks_advanced(120)
 
 	# Assert
-	assert_signal_emitted(signal_monitor, "building_construction_complete")
+	await assert_signal(signal_monitor).is_emitted("building_construction_complete")
 
 
 # ---- Resource handling ------------------------------------------------------

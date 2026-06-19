@@ -251,7 +251,7 @@ of meadow green grass is visible where the rock meets the surrounding ground.
 
 Kleine Icons, zentriert in der Tile-Fläche. Transparenter Hintergrund.
 Atlas-Ziel: `assets/art/resources/atlas_resources.png`
-Tile-Reihenfolge: `[WOOD][STONE][BERRY][FIBER]`
+Tile-Reihenfolge: `[WOOD][STONE][BERRY][FIBER][PLANK]`
 
 Das Icon füllt ca. 60–65% der Tile-Fläche (etwa 20×20 px im 32×32 Tile).
 Keine Umrandung, kein Schatten außerhalb des Icons.
@@ -353,6 +353,31 @@ bundle. Everything outside the stalks is fully transparent.
 ```
 
 **Zielfarben:** Spitzen `#D4E840` · Stängel-Mitte `#A8C220` · Basis `#6A7A10`
+
+---
+
+### 11. Bretter / Plank Resource — `env_tile_resource_plank.png`
+
+Ein kleiner Stapel bearbeiteter Holzbretter, leicht isometrisch.
+
+**Prompt:**
+```
+A small stack of two or three flat wooden planks perfectly centered in the tile with equal
+empty space on all four sides, viewed from a slightly elevated angle — about 60 to 70
+degrees above the horizon, like a classic top-down RPG perspective. The entire stack is
+fully visible — nothing is cut off. The planks are horizontal, slightly overlapping each
+other with the nearest plank in front. Each plank is a thin flat rectangle — much wider
+than it is tall, with visible thickness on the front face because of the slight viewing
+angle. The planks are pale processed wood — lighter and more uniform than raw bark, with
+a warm yellowish-tan color. The top face of each plank catches the light from the upper-
+left and is the lightest tone. The front-facing side strip shows the plank thickness and
+is in shadow, the darkest tone. Fine straight grain lines run along the length of each
+plank on the top face — three or four parallel lines, each 1 pixel thick in a slightly
+darker mid-tone. Where the planks overlap, a thin 1-pixel dark shadow gap separates them.
+No ground, no binding, no knots. Everything outside the stack is fully transparent.
+```
+
+**Zielfarben:** Highlight `#ECCF88` · Basis `#D4A860` · Schatten `#8A6A30`
 
 ---
 
@@ -620,6 +645,59 @@ Everything outside the building, anvil, and tool marks is fully transparent.
 
 ---
 
+### 17. Schneider / Tailor — `bld_tile_tailor.png`
+
+Kleines Schneider-Werkstattgebäude. Holzplanken-Wände wie beim Wohnhaus, aber mit Stoffballen und einer Wäscheleine mit hängendem Tuch als erkennbarem Betriebshinweis (verarbeitet Fiber → Stoff).
+
+**Prompt:**
+```
+A small wooden tailor's workshop perfectly centered in the tile with equal empty
+space on all four sides, viewed from a slightly elevated angle — about 60 to 70 degrees
+above the horizon, like a classic top-down RPG perspective. The entire building is fully
+visible — no part touches or crosses any edge of the tile. Because of the slight angle,
+you can see both the sloped roof from above and a narrow strip of the front wall, giving
+the building clear visible height and mass.
+
+The workshop has flat wooden plank walls — horizontal planks, each 2 pixels tall with a
+fine dark gap line between them, in warm mid brown. The building footprint is roughly
+square, 18 to 20 pixels wide and 14 to 16 pixels tall on the tile.
+
+The roof is a shallow pitched gable roof running left to right, covered in overlapping
+wooden shingles — short horizontal rows staggered so each row slightly overlaps the one
+below. The ridge sits at the center top. The left slope of the roof catches the overhead
+light from the upper-left and is the lightest warm brown. The right slope is in shadow
+and is the darkest brown. A narrow front wall strip is visible below the roof edge:
+plank-wall texture in mid brown. A small dark rectangular door opening (3×4 pixels)
+is placed slightly left of center on the front face. To the right of the door, a small
+window opening (3×3 pixels) with a single pale blue-gray highlight pixel in its upper-left
+corner hints at lamplight from inside.
+
+To the left side of the workshop, flush against the left wall: two small bolts of folded
+cloth stacked on the ground, seen from slightly above and the front. Each bolt is a
+rounded rectangular roll 4 pixels wide and 2 pixels tall. The top bolt is dyed a muted
+teal-blue, the lower bolt a soft dusty rose — each shows its lightest tone on the top
+face and a darker shadow tone on the front-facing strip. A single 1-pixel highlight line
+runs along the rolled upper edge of each bolt.
+
+In front of the hut, just below the front wall strip: a small horizontal drying line —
+two thin vertical post marks (1 pixel each) with a single horizontal line connecting them
+at the top, 5 to 6 pixels wide total. Draped over the line hangs a single small piece of
+cloth, 3 pixels wide and 2 to 3 pixels tall, in muted off-white linen, lightest at the
+top fold and darker along the hanging lower edge.
+
+Scattered along the base of the front wall between the door and the right edge: 3 to 4
+single-pixel marks — two in pale yellow-green suggesting loose plant fiber, one or two
+in dark gray suggesting a dropped needle or pin. These marks sit at least 1 pixel from
+the tile edge.
+
+Everything outside the building, cloth bolts, and drying line is fully transparent.
+```
+
+**Zielfarben:** Dach-Highlight `#9A7A5A` · Dach-Mitte `#6B5240` · Dach-Schatten `#3E2C1E` · Wand `#7A6048` · Wand-Fuge `#3E2C1E` · Tür `#2A1E14` · Fenster `#1A2A3A` · Fenster-Highlight `#8AB0D0` · Stoffballen-Teal `#4A8A8E` · Stoffballen-Rosé `#C08A8E` · Tuch-Leinen `#D8D0BC` · Faser-Reste `#A8C220`
+**Hintergrund:** Transparent
+
+---
+
 ## NPC / Unit Icons (transparenter Hintergrund)
 
 Kleine Einheiten-Icons für den NPC-Overlay auf der Karte.
@@ -629,7 +707,7 @@ Kein Backdrop-Kreis nötig — wird im Code erzeugt.
 
 ---
 
-### 17. Dorfbewohner / Villager NPC — `npc_icon_villager.png`
+### 18. Dorfbewohner / Villager NPC — `npc_icon_villager.png`
 
 Kleines Dorfbewohner-Silhouettenicon. Erkennbar als Person auf einen Blick.
 
@@ -701,6 +779,7 @@ magick env_tile_path_straight_h.png env_tile_path_straight_v.png \
 ```bash
 magick env_tile_resource_wood.png env_tile_resource_stone.png \
 	   env_tile_resource_berry.png env_tile_resource_fiber.png \
+	   env_tile_resource_plank.png \
 	   +append assets/art/resources/atlas_resources.png
 ```
 

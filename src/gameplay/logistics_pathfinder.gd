@@ -28,8 +28,10 @@ static func find_path(start: Vector2i, goal: Vector2i, grid) -> PathResult:
 		var trivial: Array[Vector2i] = [start]
 		return PathResult.success(trivial, 0.0)
 
-	# open_set entries: [f_score: float, pos: Vector2i]
-	# Maintained in ascending f_score order via sort after each push.
+	# open_set entries: [f_score: float, g_score: float, pos: Vector2i]
+	# Sort: ascending f → descending g (prefer closer-to-goal) → ascending x → ascending y.
+	# The secondary keys ensure deterministic tie-breaking so equal-cost paths always resolve
+	# to the same tiles regardless of traversal direction or insertion order.
 	var open_set: Array = []
 
 	# closed_set: Vector2i → true for already-expanded nodes.
@@ -42,11 +44,11 @@ static func find_path(start: Vector2i, goal: Vector2i, grid) -> PathResult:
 	var came_from: Dictionary = {}
 
 	g_score[start] = 0.0
-	open_set.append([_heuristic(start, goal), start])
+	open_set.append([_heuristic(start, goal), 0.0, start])
 
 	while not open_set.is_empty():
 		var entry: Array = open_set.pop_front()
-		var current: Vector2i = entry[1]
+		var current: Vector2i = entry[2]
 
 		# Goal reached — reconstruct and return the path.
 		if current == goal:
@@ -77,10 +79,15 @@ static func find_path(start: Vector2i, goal: Vector2i, grid) -> PathResult:
 				came_from[neighbor] = current
 				g_score[neighbor] = tentative_g
 				var f: float = tentative_g + _heuristic(neighbor, goal)
-				open_set.append([f, neighbor])
-				# Keep open_set sorted ascending by f_score for O(1) pop_front().
+				open_set.append([f, tentative_g, neighbor])
+				# Keep open_set sorted for O(1) pop_front().
+				# Tie-breaking order: ascending f → descending g → ascending x → ascending y.
 				open_set.sort_custom(func(a: Array, b: Array) -> bool:
-					return a[0] < b[0]
+					if a[0] != b[0]: return a[0] < b[0]
+					if a[1] != b[1]: return a[1] > b[1]
+					var pa: Vector2i = a[2]; var pb: Vector2i = b[2]
+					if pa.x != pb.x: return pa.x < pb.x
+					return pa.y < pb.y
 				)
 
 	return PathResult.failure()

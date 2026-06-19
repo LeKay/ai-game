@@ -102,7 +102,7 @@ func test_ac2_complete_action_frees_slot_and_emits_signal() -> void:
 	pc._on_ticks_advanced(0)  # trigger completion check
 
 	assert_int(pc.get_action_state()).is_equal(PlayerCharacter.ActionSlot.State.FREE)
-	assert_signal_emitted(completed_spy, "action_completed")
+	await assert_signal(completed_spy).is_emitted("action_completed")
 
 
 func test_ac2_output_5_wood_on_normal_chop() -> void:
@@ -145,7 +145,7 @@ func test_ac2_progress_update_emitted_during_partial_advance() -> void:
 
 	pc._on_ticks_advanced(40)  # half of the 80-tick cost
 
-	assert_signal_emitted(spy, "action_progress_update")
+	await assert_signal(spy).is_emitted("action_progress_update")
 	assert_int(pc.get_action_state()).is_equal(PlayerCharacter.ActionSlot.State.WORKING)
 
 
@@ -216,7 +216,7 @@ func test_ac13_food_consumed_signal_emitted() -> void:
 
 	pc.consume_food(&"bread")
 
-	assert_signal_emitted(spy, "food_consumed")
+	await assert_signal(spy).is_emitted("food_consumed")
 
 
 func test_ac13_bread_at_0_energy_restores_25() -> void:
@@ -340,7 +340,10 @@ func test_ac16_chop_tree_succeeds_when_tool_available() -> void:
 	assert_int(result).is_equal(PlayerCharacter.StartResult.SUCCESS)
 
 
-func test_ac16_craft_tool_does_not_require_tool() -> void:
+func test_ac16_pick_berries_does_not_require_tool() -> void:
+	# CRAFT_TOOL was removed as a manual action (crafting runs through
+	# CraftingRegistry); this verifies the requires_tool gate stays scoped
+	# to tool-requiring actions only.
 	var pc := await _make_pc()
 	_set_energy(pc, 100)
 	var mock_inv := MockInventory.new()
@@ -348,7 +351,7 @@ func test_ac16_craft_tool_does_not_require_tool() -> void:
 	add_child(mock_inv)
 	pc._inventory = mock_inv
 
-	var result := pc.try_start_action(PlayerCharacter.ManualActionType.CRAFT_TOOL)
+	var result := pc.try_start_action(PlayerCharacter.ManualActionType.PICK_BERRIES)
 
 	assert_int(result).is_not_equal(PlayerCharacter.StartResult.TOOL_REQUIRED)
 

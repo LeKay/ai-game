@@ -6,16 +6,17 @@ class_name RouteLines extends Node2D
 
 # ---- Constants ---------------------------------------------------------------
 
-const COLOR_ACTIVE:   Color = Color(0.298, 0.686, 0.314)  ## green  #4CAF50
-const COLOR_TRANSIT:  Color = Color(1.0,   0.757, 0.027)  ## yellow #FFC107
-const COLOR_FULL:     Color = Color(0.957, 0.263, 0.212)  ## red    #F44336
-const COLOR_INACTIVE: Color = Color(0.533, 0.533, 0.533)  ## gray   #888888
+const COLOR_ACTIVE:   Color = Color(0.298, 0.686, 0.314)  ## green  #4CAF50 — NPC actively running this route
+const COLOR_QUEUED:   Color = Color(0.259, 0.522, 0.957)  ## blue   #4285F5 — route active but NPC serving another route
+const COLOR_TRANSIT:  Color = Color(1.0,   0.757, 0.027)  ## yellow #FFC107 — NPC idle, waiting for resources at source
+const COLOR_FULL:     Color = Color(0.957, 0.263, 0.212)  ## red    #F44336 — NPC holding cargo, destination storage full
+const COLOR_INACTIVE: Color = Color(0.533, 0.533, 0.533)  ## gray   #888888 — route paused or deactivated
 
-const OPACITY_ACTIVE:   float = 0.3
-const OPACITY_HOVER:    float = 0.6
-const OPACITY_INACTIVE: float = 0.1
+const OPACITY_ACTIVE:   float = 0.75
+const OPACITY_HOVER:    float = 0.92
+const OPACITY_INACTIVE: float = 0.28
 
-const LINE_BASE_WIDTH:  float = 2.0
+const LINE_BASE_WIDTH:  float = 3.0
 ## World-space pixel radius for hover hit detection.
 const HOVER_THRESHOLD:  float = 12.0
 ## Pixel radius of the circular carrier icon backdrop.
@@ -26,22 +27,6 @@ const FLOW_DOT_COUNT: int   = 4
 const FLOW_DOT_SPEED: float = 40.0
 const FLOW_DOT_RADIUS: int  = 2
 
-## Resource PNG paths — indexed by resource StringName.
-const _RES_PNG: Dictionary = {
-	&"wood":  "res://assets/art/tiles/env_tile_resource_wood.png",
-	&"stone": "res://assets/art/tiles/env_tile_resource_stone.png",
-	&"berry": "res://assets/art/tiles/env_tile_resource_berry.png",
-	&"fiber": "res://assets/art/tiles/env_tile_resource_fiber.png",
-	&"tool":  "res://assets/art/tiles/env_tile_resource_tool.png",
-}
-## Fallback colors when no PNG is available.
-const _RES_COLOR: Dictionary = {
-	&"wood":  Color(0.55, 0.28, 0.08),
-	&"stone": Color(0.62, 0.62, 0.62),
-	&"berry": Color(0.90, 0.12, 0.22),
-	&"fiber": Color(0.78, 0.88, 0.12),
-	&"tool":  Color(0.60, 0.45, 0.20),
-}
 
 # ---- Dependencies ------------------------------------------------------------
 
@@ -55,6 +40,10 @@ var _line_map: Dictionary = {}
 var _state_cache: Dictionary = {}
 ## route_id → last observed active flag (dirty-flag)
 var _active_cache: Dictionary = {}
+## route_id → last observed "is this route the carrier's currently executing route" (dirty-flag)
+var _carrier_active_cache: Dictionary = {}
+## route_id → last observed carrier_state of the NPC's active route (dirty-flag for sibling routes)
+var _carrier_active_state_cache: Dictionary = {}
 
 ## route_id → Node2D carrier icon node
 var _icon_map: Dictionary = {}
@@ -74,6 +63,13 @@ var _dot_texture: ImageTexture = null
 
 var _hovered_id: StringName = &""
 
+# ---- Visibility filter -------------------------------------------------------
+
+## When false, routes are hidden unless a building or NPC filter is active.
+var _global_show: bool = false
+var _filter_building_id: StringName = &""
+var _filter_npc_id: StringName = &""
+
 var _tooltip_layer: CanvasLayer = null
 var _tooltip_panel: PanelContainer = null
 var _tooltip_label: Label = null
@@ -83,7 +79,7 @@ var _tooltip_label: Label = null
 func _ready() -> void:
 	y_sort_enabled = true
 	z_index = 3
-	_dot_texture = _make_circle_texture(FLOW_DOT_RADIUS, Color.WHITE)
+	_dot_texture = TextureFactory.circle(FLOW_DOT_RADIUS, Color.WHITE)
 	_build_tooltip()
 	if TickSystem:
 		TickSystem.ticks_advanced.connect(_on_ticks_advanced)
@@ -95,6 +91,50 @@ func _ready() -> void:
 ## Sets the WorldGrid reference used to convert tile coords to world positions.
 func init_dependencies(grid: Node) -> void:
 	_grid = grid
+
+
+# ---- Visibility API ----------------------------------------------------------
+
+## Toggles the global route overlay. When true all routes are shown regardless of filters.
+func set_global_show(v: bool) -> void:
+	_global_show = v
+	_apply_visibility_all()
+
+
+## Highlights routes where building_id is source or destination. Pass &"" to clear.
+func set_building_filter(id: StringName) -> void:
+	_filter_building_id = id
+	_apply_visibility_all()
+
+
+## Highlights routes assigned to npc_id. Pass &"" to clear.
+func set_npc_filter(id: StringName) -> void:
+	_filter_npc_id = id
+	_apply_visibility_all()
+
+
+func _is_route_visible(route: LogisticsRoute) -> bool:
+	if _global_show:
+		return true
+	if _filter_building_id != &"" and (
+			route.source_building_id == _filter_building_id
+			or route.destination_building_id == _filter_building_id):
+		return true
+	if _filter_npc_id != &"" and route.npc_id == _filter_npc_id:
+		return true
+	return false
+
+
+func _apply_visibility_all() -> void:
+	for route: LogisticsRoute in LogisticsSystem.get_active_routes():
+		var show: bool = _is_route_visible(route)
+		var line: Line2D = _line_map.get(route.id)
+		if line != null:
+			line.visible = show
+		# Flow dots follow the line; cargo icons stay visible regardless (like NPC sprites).
+		if not show:
+			for dot: Sprite2D in _dot_map.get(route.id, []):
+				dot.visible = false
 
 
 # ---- Tick-driven sync --------------------------------------------------------
@@ -121,6 +161,8 @@ func _sync_routes() -> void:
 			_line_map.erase(rid)
 			_state_cache.erase(rid)
 			_active_cache.erase(rid)
+			_carrier_active_cache.erase(rid)
+			_carrier_active_state_cache.erase(rid)
 			if _icon_map.has(rid):
 				_icon_map[rid].queue_free()
 				_icon_map.erase(rid)
@@ -157,14 +199,27 @@ func _sync_routes() -> void:
 
 		var cached_state: int = _state_cache.get(route.id, -1)
 		var cached_active: bool = _active_cache.get(route.id, not route.active)
-		if cached_state != route.carrier_state or cached_active != route.active:
+		var active_route: LogisticsRoute = LogisticsSystem.get_active_route_for_npc(route.npc_id)
+		var is_carrier_active: bool = active_route != null and active_route.id == route.id
+		var cached_carrier_active: bool = _carrier_active_cache.get(route.id, not is_carrier_active)
+		# Track the carrier's active route state so sibling routes redraw when carrier goes
+		# IDLE↔working — that transition changes blue (queued) to yellow (no resources) or back.
+		var carrier_active_state: int = active_route.carrier_state if active_route != null else -1
+		var cached_carrier_active_state: int = _carrier_active_state_cache.get(route.id, -2)
+		if cached_state != route.carrier_state or cached_active != route.active \
+				or cached_carrier_active != is_carrier_active \
+				or cached_carrier_active_state != carrier_active_state:
 			_redraw_line(route)
 			_state_cache[route.id] = route.carrier_state
 			_active_cache[route.id] = route.active
+			_carrier_active_cache[route.id] = is_carrier_active
+			_carrier_active_state_cache[route.id] = carrier_active_state
 
 		_dot_direction[route.id] = 1.0
 
 		_update_carrier_icon(route)
+
+	_apply_visibility_all()
 
 
 ## Redraws geometry and appearance for one route's Line2D. Called only when dirty.
@@ -185,27 +240,41 @@ func _redraw_line(route: LogisticsRoute) -> void:
 	for pt: Vector2 in trimmed:
 		line.add_point(pt)
 
-	var is_active: bool = route.active
-	line.default_color = COLOR_INACTIVE if not is_active else _state_color(route.carrier_state)
-	line.modulate = Color(1, 1, 1, OPACITY_INACTIVE if not is_active else OPACITY_ACTIVE)
+	line.default_color = _route_color(route)
+	line.modulate = Color(1, 1, 1, OPACITY_INACTIVE if not route.active else OPACITY_ACTIVE)
 	line.width = LINE_BASE_WIDTH
 
 
-## Returns the display color for a given carrier FSM state.
-## Green = carrier actively working (traveling, loading, idle between cycles).
-## Yellow = carrier blocked waiting for resources at source or destination.
-func _state_color(state: int) -> Color:
-	match state:
-		LogisticsRoute.CarrierState.WAITING_SOURCE, \
-		LogisticsRoute.CarrierState.WAITING_DESTINATION, \
-		LogisticsRoute.CarrierState.RETURN_HOME:
-			return COLOR_TRANSIT
-		_:
-			return COLOR_ACTIVE
+## Returns the display color for a route based on carrier status.
+## Green  = NPC actively running this route (traveling, loading, depositing).
+## Blue   = route active but NPC is currently serving another route (queued in round-robin).
+## Yellow = NPC idle on this route — waiting for resources to appear at source.
+## Red    = NPC holding cargo but destination storage is full (WAITING_DESTINATION).
+## Gray   = route is paused or deactivated.
+func _route_color(route: LogisticsRoute) -> Color:
+	if not route.active:
+		return COLOR_INACTIVE
+	if route.carrier_state == LogisticsRoute.CarrierState.WAITING_DESTINATION:
+		return COLOR_FULL
+	var active_route: LogisticsRoute = LogisticsSystem.get_active_route_for_npc(route.npc_id)
+	var is_carrier_active: bool = active_route != null and active_route.id == route.id
+	if not is_carrier_active:
+		# Blue only when the carrier is actively running a different route.
+		# If the carrier itself is IDLE (no work on any route), show yellow — same as the keep route.
+		var carrier_idle: bool = active_route == null \
+			or active_route.carrier_state == LogisticsRoute.CarrierState.IDLE
+		return COLOR_TRANSIT if carrier_idle else COLOR_QUEUED
+	if route.carrier_state == LogisticsRoute.CarrierState.IDLE:
+		return COLOR_TRANSIT
+	return COLOR_ACTIVE
 
 # ---- Hover detection ---------------------------------------------------------
 
-func _input(event: InputEvent) -> void:
+## Uses _unhandled_input so that mouse-motion events consumed by UI Controls
+## (e.g. DraggableWindow panels) do not trigger route hover while the window
+## is open. Hover clearing is handled by _validate_hover() in _process so the
+## state is cleaned up even when events stop arriving.
+func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseMotion):
 		return
 
@@ -215,6 +284,8 @@ func _input(event: InputEvent) -> void:
 	for rid: StringName in _line_map.keys():
 		var line: Line2D = _line_map[rid]
 		if line.get_point_count() < 2:
+			continue
+		if not line.visible:
 			continue
 		var hit := false
 		for j in range(line.get_point_count() - 1):
@@ -242,6 +313,29 @@ func _input(event: InputEvent) -> void:
 		_show_tooltip(_hovered_id)
 	else:
 		_hide_tooltip()
+
+
+## Clears the active hover when the mouse has moved away from the hovered route
+## — including cases where _unhandled_input stops firing because a UI panel is
+## consuming the event.
+func _validate_hover() -> void:
+	if _hovered_id == &"":
+		return
+	var line: Line2D = _line_map.get(_hovered_id)
+	if line == null or not line.visible:
+		_apply_hover(_hovered_id, false)
+		_hovered_id = &""
+		_hide_tooltip()
+		return
+	var world_pos: Vector2 = get_global_mouse_position()
+	for j in range(line.get_point_count() - 1):
+		var a: Vector2 = line.get_point_position(j)
+		var b: Vector2 = line.get_point_position(j + 1)
+		if _dist_to_segment(world_pos, a, b) <= HOVER_THRESHOLD:
+			return
+	_apply_hover(_hovered_id, false)
+	_hovered_id = &""
+	_hide_tooltip()
 
 
 ## Sets or clears the hover highlight on a route line.
@@ -332,6 +426,7 @@ func _dist_to_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
 ## Smoothly moves each visible carrier icon toward its tick-set target position.
 ## Also advances the flow dot animation on each active route line.
 func _process(delta: float) -> void:
+	_validate_hover()
 	for rid: StringName in _icon_map.keys():
 		var icon: Node2D = _icon_map[rid]
 		if not icon.visible:
@@ -357,14 +452,14 @@ func _animate_flow_dots(route_id: StringName, delta: float) -> void:
 	var path: Array[Vector2] = []
 	for i in range(line.get_point_count()):
 		path.append(line.get_point_position(i))
-	var path_len: float = _path_length(path)
+	var path_len: float = PathGeometry.length(path)
 	if path_len < 1.0:
 		for dot: Sprite2D in dots:
 			dot.visible = false
 		return
 
 	var opacity: float = line.modulate.a
-	if opacity < 0.05:
+	if opacity < 0.05 or line.default_color != COLOR_ACTIVE or not line.visible:
 		for dot: Sprite2D in dots:
 			dot.visible = false
 		return
@@ -384,13 +479,14 @@ func _animate_flow_dots(route_id: StringName, delta: float) -> void:
 	for i in range(FLOW_DOT_COUNT):
 		var dot: Sprite2D = dots[i]
 		var t: float = fmod(phase + float(i) * spacing, path_len)
-		dot.position = _point_along_path(path, t)
+		dot.position = PathGeometry.point_along(path, t)
 		dot.modulate = dot_color
 		dot.visible = true
 
 
 ## Updates or hides the carrier icon for one route.
-## Icon is only shown during TRAVEL_TO_DESTINATION while the carrier holds cargo.
+## Icon is shown during TRAVEL_TO_DESTINATION while the carrier holds cargo,
+## independent of whether the route line itself is currently visible.
 func _update_carrier_icon(route: LogisticsRoute) -> void:
 	var icon: Node2D = _icon_map.get(route.id)
 
@@ -485,7 +581,7 @@ func _calc_carrier_world_pos(route: LogisticsRoute, world_path: Array[Vector2],
 	var leg_total: int = route.current_leg_total_ticks if route.current_leg_total_ticks > 0 else fallback_ticks
 	var progress: float = 1.0 if leg_total <= 0 else \
 		clampf(1.0 - float(route.remaining_ticks) / float(leg_total), 0.0, 1.0)
-	return _point_along_path(world_path, progress * _path_length(world_path))
+	return PathGeometry.point_along(world_path, progress * PathGeometry.length(world_path))
 
 
 ## Builds the Node2D icon node (backdrop circle + resource sprite).
@@ -494,7 +590,7 @@ func _make_carrier_icon(resource_id: StringName) -> Node2D:
 	container.z_index = 5
 
 	var backdrop := Sprite2D.new()
-	backdrop.texture = _make_circle_texture(ICON_RADIUS, Color(0.0, 0.0, 0.0, 0.50))
+	backdrop.texture = TextureFactory.circle(ICON_RADIUS, Color(0.0, 0.0, 0.0, 0.50))
 	container.add_child(backdrop)
 
 	var icon_spr := Sprite2D.new()
@@ -520,29 +616,11 @@ func _make_carrier_icon(resource_id: StringName) -> Node2D:
 	return container
 
 
-## Loads the PNG for a resource, falling back to a colored circle.
+## Loads the route-icon texture for a resource: world art → UI icon → circle fallback.
 func _load_resource_texture(resource_id: StringName) -> Texture2D:
-	var path: String = _RES_PNG.get(resource_id, "")
-	if path != "" and ResourceLoader.exists(path):
-		var tex := load(path) as Texture2D
-		if tex != null:
-			return tex
-	var color: Color = _RES_COLOR.get(resource_id, Color(0.8, 0.8, 0.8))
-	return _make_circle_texture(ICON_RADIUS, color)
+	return ResourceRegistry.get_icon_texture(resource_id, ICON_RADIUS)
 
 
-## Returns an ImageTexture of a filled circle with the given radius and color.
-func _make_circle_texture(radius: int, color: Color) -> ImageTexture:
-	var size: int = radius * 2
-	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
-	img.fill(Color.TRANSPARENT)
-	for px: int in range(size):
-		for py: int in range(size):
-			var dx: int = px - radius
-			var dy: int = py - radius
-			if dx * dx + dy * dy <= radius * radius:
-				img.set_pixel(px, py, color)
-	return ImageTexture.create_from_image(img)
 
 # ---- Path helpers ------------------------------------------------------------
 
@@ -573,27 +651,6 @@ func _route_world_path(route: LogisticsRoute, src_tile: Vector2i, dst_tile: Vect
 
 ## Builds the L-shaped (horizontal-first) world-space path between two positions.
 func _build_route_path(src_pos: Vector2, dst_pos: Vector2) -> Array[Vector2]:
-	var path: Array[Vector2] = []
-	path.append(src_pos)
-	var corner := Vector2(dst_pos.x, src_pos.y)
-	if corner != src_pos and corner != dst_pos:
-		path.append(corner)
-	path.append(dst_pos)
-	return path
+	return PathDotOverlay.l_path(src_pos, dst_pos)
 
 
-func _path_length(path: Array[Vector2]) -> float:
-	var total: float = 0.0
-	for i in range(path.size() - 1):
-		total += path[i].distance_to(path[i + 1])
-	return total
-
-
-func _point_along_path(path: Array[Vector2], t: float) -> Vector2:
-	var remaining: float = t
-	for i in range(path.size() - 1):
-		var seg_len: float = path[i].distance_to(path[i + 1])
-		if remaining <= seg_len or i == path.size() - 2:
-			return path[i].lerp(path[i + 1], clampf(remaining / seg_len, 0.0, 1.0))
-		remaining -= seg_len
-	return path[path.size() - 1]

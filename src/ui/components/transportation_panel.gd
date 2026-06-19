@@ -27,7 +27,7 @@ signal route_toggled(route_id: StringName, pause: bool)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-const COLOR_BG           := Color(0.176, 0.176, 0.176, 0.97)  ## #2D2D2D panel bg
+const COLOR_BG           := UiPalette.PANEL_BG  ## #2D2D2D panel bg
 const COLOR_PANEL_BG     := Color(0.227, 0.227, 0.227, 1.0)   ## #3A3A3A inner bg
 const COLOR_TEXT         := Color(0.941, 0.929, 0.902)         ## #F0EDE6
 const COLOR_TEXT_DIM     := Color(0.816, 0.816, 0.816)         ## #D0D0D0
@@ -36,7 +36,7 @@ const COLOR_BTN_NORMAL   := Color(0.353, 0.353, 0.353)         ## #5A5A5A
 const COLOR_BTN_HOVER    := Color(0.290, 0.494, 0.659)         ## #4A7EA8
 const COLOR_BTN_TEXT     := Color(0.659, 0.643, 0.612)         ## #A8A49C
 const COLOR_BTN_DESTRUCT := Color(0.706, 0.173, 0.173)         ## #B32C2C
-const COLOR_SEP          := Color(0.35, 0.35, 0.35, 1.0)
+const COLOR_SEP          := UiPalette.SEPARATOR
 const COLOR_ROW_HOVER    := Color(0.25, 0.25, 0.25, 1.0)
 const COLOR_ROW_SEL      := Color(0.29, 0.49, 0.66, 0.3)
 
@@ -90,13 +90,13 @@ var _delete_btn:  Button
 ## From building tile.
 var _from_tile:       PanelContainer
 var _from_tile_style: StyleBoxFlat
-var _from_tile_icon:  Label
+var _from_tile_icon:  Control
 var _from_tile_name:  Label
 
 ## Item slot tile.
 var _item_slot_tile:  PanelContainer
 var _item_slot_style: StyleBoxFlat
-var _item_slot_icon:  Label
+var _item_slot_icon:  Control
 var _item_slot_qty:   Label
 var _item_popup:      Control
 var _item_popup_grid: ItemGrid
@@ -104,14 +104,15 @@ var _item_popup_grid: ItemGrid
 ## To building tile.
 var _to_tile:       PanelContainer
 var _to_tile_style: StyleBoxFlat
-var _to_tile_icon:  Label
+var _to_tile_icon:  Control
 var _to_tile_name:  Label
 
 ## NPC tile.
-var _npc_tile:       PanelContainer
-var _npc_tile_style: StyleBoxFlat
-var _npc_tile_icon:  Label
-var _npc_tile_name:  Label
+var _npc_tile:             PanelContainer
+var _npc_tile_style:       StyleBoxFlat
+var _npc_tile_icon:        Control
+var _npc_tile_name:        Label
+var _npc_tile_level_badge: PanelContainer
 var _npc_popup:      Control
 var _npc_popup_list: VBoxContainer
 
@@ -136,6 +137,8 @@ var _selected_npc_id:  StringName = &""
 var _selected_item_id: StringName = &""
 var _changes_made:     bool = false
 var _tween:            Tween = null
+var _hint_label:       Label = null
+var _hint_tween:       Tween = null
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -206,10 +209,24 @@ func open_for_building(building_id: StringName, role: String = "from") -> void:
 ## `step` is "from" or "to".
 func resume_map_select(step: String, building_id: StringName) -> void:
 	if step == "from":
+		if building_id != &"" and not _can_be_source(building_id):
+			_selected_from_id = &""
+			_show_view_detail()
+			_animate_in()
+			_show_validation_hint("This building doesn't produce or store items.")
+			_refresh_detail()
+			return
 		_selected_from_id = building_id
 		_selected_npc_id = &""
 		_selected_item_id = &""
 	elif step == "to":
+		if building_id != &"" and not _can_accept_item(building_id, _selected_item_id):
+			_selected_to_id = &""
+			_show_view_detail()
+			_animate_in()
+			_show_validation_hint("This building can't receive that item.")
+			_refresh_detail()
+			return
 		_selected_to_id = building_id
 	_refresh_detail()
 	_show_view_detail()
@@ -351,6 +368,12 @@ func _on_delete_row_pressed(route_id: StringName) -> void:
 
 # ── Detail view refresh ───────────────────────────────────────────────────────
 
+## Opens the panel directly in edit mode for an existing route.
+func open_for_route(route: LogisticsRoute) -> void:
+	_open_detail_for_route(route)
+	_animate_in()
+
+
 func _open_detail_for_route(route: LogisticsRoute) -> void:
 	_editing_route = route
 	_selected_from_id = route.source_building_id
@@ -376,15 +399,25 @@ func _refresh_detail() -> void:
 			if output_ids.size() == 1:
 				_selected_item_id = output_ids[0]
 
+	# Clear pre-filled destination if the (possibly just auto-filled) item is incompatible.
+	if _selected_to_id != &"" and not _can_accept_item(_selected_to_id, _selected_item_id):
+		_selected_to_id = &""
+
 	# Update all four tiles.
 	_update_building_tile(_from_tile, _from_tile_style, _from_tile_icon, _from_tile_name, _selected_from_id)
 	_refresh_item_slot()
 	_update_building_tile(_to_tile, _to_tile_style, _to_tile_icon, _to_tile_name, _selected_to_id)
+	_refresh_to_tile_locked_state()
 	if _selected_npc_id != &"":
 		_update_selector_tile_filled(_npc_tile_style, _npc_tile_icon, _npc_tile_name,
-				"👤", NPCSystem.get_npc_display_name(_selected_npc_id))
+				"🧑", NPCSystem.get_npc_display_name(_selected_npc_id))
+		var sel_npc: Object = NPCSystem.get_npc_instance(_selected_npc_id)
+		var sel_lvl: int = sel_npc.level if sel_npc != null else 1
+		(_npc_tile_level_badge.get_child(0) as Label).text = "Lv %d" % sel_lvl
+		_npc_tile_level_badge.visible = true
 	else:
 		_update_selector_tile_empty(_npc_tile_style, _npc_tile_icon, _npc_tile_name)
+		_npc_tile_level_badge.visible = false
 
 	# Route summary — only when both buildings are set.
 	var both_set := _selected_from_id != &"" and _selected_to_id != &""
@@ -402,31 +435,38 @@ func _refresh_detail() -> void:
 
 
 func _update_building_tile(
-		_tile: PanelContainer, style: StyleBoxFlat, icon_lbl: Label, name_lbl: Label,
+		_tile: PanelContainer, style: StyleBoxFlat, icon_slot: Control, name_lbl: Label,
 		building_id: StringName) -> void:
 	if building_id == &"":
-		_update_selector_tile_empty(style, icon_lbl, name_lbl)
+		_update_selector_tile_empty(style, icon_slot, name_lbl)
 	else:
-		_update_selector_tile_filled(style, icon_lbl, name_lbl,
-				_building_icon(building_id), _get_building_name(str(building_id)))
+		var instance := BuildingRegistry.get_building_instance(str(building_id))
+		var tex: Texture2D = BuildingRegistry.get_building_texture(
+				instance.type if instance != null else -1)
+		style.bg_color = COLOR_TILE_FILLED
+		style.border_color = COLOR_TILE_BORDER_FILLED
+		if tex != null:
+			_set_icon_texture(icon_slot, tex)
+		else:
+			_set_icon_text(icon_slot, _building_icon(instance.type if instance != null else -1))
+		name_lbl.text = _get_building_name(str(building_id))
+		name_lbl.visible = true
 
 
-func _update_selector_tile_empty(style: StyleBoxFlat, icon_lbl: Label, name_lbl: Label) -> void:
+func _update_selector_tile_empty(style: StyleBoxFlat, icon_slot: Control, name_lbl: Label) -> void:
 	style.bg_color = COLOR_TILE_EMPTY
 	style.border_color = COLOR_TILE_BORDER
-	icon_lbl.text = "+"
-	icon_lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+	_set_icon_text(icon_slot, "+")
 	name_lbl.text = ""
 	name_lbl.visible = false
 
 
 func _update_selector_tile_filled(
-		style: StyleBoxFlat, icon_lbl: Label, name_lbl: Label,
-		icon: String, display_name: String) -> void:
+		style: StyleBoxFlat, icon_slot: Control, name_lbl: Label,
+		icon_text: String, display_name: String) -> void:
 	style.bg_color = COLOR_TILE_FILLED
 	style.border_color = COLOR_TILE_BORDER_FILLED
-	icon_lbl.text = icon
-	icon_lbl.add_theme_color_override("font_color", COLOR_TEXT)
+	_set_icon_text(icon_slot, icon_text)
 	name_lbl.text = display_name
 	name_lbl.visible = true
 
@@ -475,7 +515,9 @@ func _refresh_npc_picker() -> void:
 	for npc_id: StringName in candidates:
 		var btn := Button.new()
 		var n: int = int(route_count.get(npc_id, 0))
-		var label: String = NPCSystem.get_npc_display_name(npc_id)
+		var picker_npc: Object = NPCSystem.get_npc_instance(npc_id)
+		var picker_lvl: int = picker_npc.level if picker_npc != null else 1
+		var label: String = "Lv %d  %s" % [picker_lvl, NPCSystem.get_npc_display_name(npc_id)]
 		if n > 0:
 			label += "  (%d route%s)" % [n, "" if n == 1 else "s"]
 		btn.text = label
@@ -489,11 +531,9 @@ func _refresh_npc_picker() -> void:
 
 func _refresh_item_slot() -> void:
 	if _selected_from_id == &"":
-		# From not yet selected — item tile shows inactive dash.
 		_item_slot_style.bg_color = COLOR_TILE_EMPTY
 		_item_slot_style.border_color = COLOR_TILE_BORDER
-		_item_slot_icon.text = "—"
-		_item_slot_icon.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+		_set_icon_text(_item_slot_icon, "—")
 		_item_slot_qty.visible = false
 		return
 
@@ -501,15 +541,14 @@ func _refresh_item_slot() -> void:
 	if _selected_item_id == &"":
 		_item_slot_style.bg_color = COLOR_TILE_EMPTY
 		_item_slot_style.border_color = COLOR_TILE_BORDER
-		_item_slot_icon.text = "*" if is_multi_output else "+"
-		_item_slot_icon.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+		_set_icon_text(_item_slot_icon, "*" if is_multi_output else "+")
 		_item_slot_qty.visible = false
 		return
 
 	_item_slot_style.bg_color = COLOR_TILE_FILLED
 	_item_slot_style.border_color = COLOR_TILE_BORDER_FILLED
-	_item_slot_icon.text = _resource_icon(_selected_item_id)
-	_item_slot_icon.add_theme_color_override("font_color", COLOR_TEXT)
+	_set_icon_texture(_item_slot_icon,
+			ResourceRegistry.get_icon_texture(_selected_item_id, 18))
 	if is_multi_output:
 		_item_slot_qty.visible = false
 	else:
@@ -531,6 +570,8 @@ func _open_item_popup() -> void:
 		items.append({&"resource_id": &"*", &"quantity": -1})
 		for res_id: StringName in _get_production_output_ids(_selected_from_id):
 			items.append({&"resource_id": res_id, &"quantity": -1})
+	elif _is_storage_from():
+		items = _get_all_storage_possible_items(_selected_from_id)
 	else:
 		items = _get_storage_items(_selected_from_id)
 	if items.is_empty():
@@ -545,6 +586,9 @@ func _close_item_popup() -> void:
 
 func _on_item_popup_item_clicked(resource_id: StringName) -> void:
 	_selected_item_id = &"" if resource_id == &"*" else resource_id
+	# Reset destination if it can no longer accept the newly chosen item.
+	if _selected_to_id != &"" and not _can_accept_item(_selected_to_id, _selected_item_id):
+		_selected_to_id = &""
 	_close_item_popup()
 	_refresh_detail()
 
@@ -565,6 +609,9 @@ func _on_from_pressed() -> void:
 
 
 func _on_to_pressed() -> void:
+	if not _is_item_ready():
+		_show_validation_hint("Select an item first.")
+		return
 	hide_for_map_select()
 	map_select_requested.emit("to")
 
@@ -639,6 +686,75 @@ func _open_delete_dialog(route_id: StringName) -> void:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+## Returns true when the building is built and can participate in routes.
+## CONSTRUCTING and DEMOLISHED buildings are excluded; BLOCKED buildings are
+## allowed so the player can pre-configure routes before inputs arrive.
+func _is_building_operable(instance: BuildingRegistry.BuildingInstance) -> bool:
+	return instance.state != BuildingRegistry.Status.CONSTRUCTING \
+		and instance.state != BuildingRegistry.Status.DEMOLISHED
+
+
+## Returns true when building can act as a route source (stores or produces items).
+func _can_be_source(building_id: StringName) -> bool:
+	if building_id == &"":
+		return false
+	var instance := BuildingRegistry.get_building_instance(str(building_id))
+	if instance == null or not _is_building_operable(instance):
+		return false
+	return BuildingRegistry.STORAGE_CAPACITY.has(instance.type) \
+		or BuildingRegistry.is_production_building(instance.type)
+
+
+## Returns true when building can accept item_id as a transport destination.
+## Storage buildings accept any item including wildcard. Production buildings only
+## their declared inputs; wildcard (item_id == &"") only fits storage destinations.
+func _can_accept_item(building_id: StringName, item_id: StringName) -> bool:
+	if building_id == &"":
+		return false
+	var instance := BuildingRegistry.get_building_instance(str(building_id))
+	if instance == null or not _is_building_operable(instance):
+		return false
+	if BuildingRegistry.STORAGE_CAPACITY.has(instance.type):
+		return true
+	if item_id == &"":
+		return false  # wildcard "all items" only makes sense to storage
+	var accepted: Array[StringName] = BuildingRegistry.get_active_input_resource_ids(str(building_id))
+	return item_id in accepted
+
+
+## Mirrors the confirm-button item_ready check: production buildings treat an empty
+## item_id as the valid "all items" wildcard; storage requires an explicit selection.
+func _is_item_ready() -> bool:
+	if _selected_from_id == &"":
+		return false
+	return not _is_storage_from() or _selected_item_id != &""
+
+
+## Shows a transient validation message below the tile captions for ~2 s.
+func _show_validation_hint(msg: String) -> void:
+	if _hint_label == null:
+		return
+	_hint_label.text = msg
+	if _hint_tween != null and _hint_tween.is_valid():
+		_hint_tween.kill()
+	_hint_label.modulate.a = 1.0
+	_hint_tween = create_tween()
+	_hint_tween.tween_interval(1.8)
+	_hint_tween.tween_property(_hint_label, "modulate:a", 0.0, 0.4)
+
+
+## Updates To tile visual to reflect locked state (item not ready yet).
+func _refresh_to_tile_locked_state() -> void:
+	if not _is_item_ready() and _selected_to_id == &"":
+		_to_tile_style.bg_color = COLOR_TILE_EMPTY.darkened(0.12)
+		_to_tile_style.border_color = COLOR_TILE_BORDER.darkened(0.15)
+		_set_icon_text(_to_tile_icon, "🔒")
+		_to_tile_name.visible = false
+		_to_tile.mouse_default_cursor_shape = Control.CURSOR_ARROW
+	else:
+		_to_tile.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+
+
 func _get_building_name(building_id: String) -> String:
 	return BuildingRegistry.get_building_display_name(building_id)
 
@@ -666,20 +782,15 @@ func _is_multi_output_from() -> bool:
 	return _get_production_output_ids(_selected_from_id).size() > 1
 
 
-## Returns all resource IDs this production building can output.
-## GATHERING_HUT uses the dynamic gathering_output; others use the static PRODUCTION_TABLE.
+## Returns all resource IDs this production building can output via its active recipe.
 func _get_production_output_ids(building_id: StringName) -> Array[StringName]:
 	var instance := BuildingRegistry.get_building_instance(str(building_id))
 	if instance == null:
 		return []
+	var recipe: Dictionary = BuildingRegistry.get_active_recipe(instance)
 	var result: Array[StringName] = []
-	if instance.type == BuildingRegistry.BuildingType.GATHERING_HUT:
-		for res_id: StringName in instance.gathering_output.keys():
-			result.append(res_id)
-	else:
-		var table_entry: Dictionary = BuildingRegistry.PRODUCTION_TABLE.get(instance.type, {})
-		for res_id: StringName in table_entry.get("output", {}).keys():
-			result.append(res_id)
+	for res_id: StringName in recipe.get("output", {}).keys():
+		result.append(res_id)
 	return result
 
 
@@ -707,30 +818,67 @@ func _get_storage_resource_ids(building_id: StringName) -> Array[StringName]:
 	return ids
 
 
-func _resource_icon(resource_id: StringName) -> String:
-	match resource_id:
-		&"*":     return "*"
-		&"wood":  return "🪵"
-		&"stone": return "🪨"
-		&"berry": return "🫐"
-		&"fiber": return "🌿"
-		&"tool":  return "🪓"
-		_:        return "📦"
-
-
-func _building_icon(building_id: StringName) -> String:
+## Returns all registry resources with their current stored quantity (0 if not stocked).
+## Used by the item picker for storage buildings so the player can pre-configure routes
+## even when the storage is empty or doesn't yet hold the desired item.
+func _get_all_storage_possible_items(building_id: StringName) -> Array[Dictionary]:
+	var stored: Dictionary = {}
 	var instance := BuildingRegistry.get_building_instance(str(building_id))
-	if instance == null:
-		return "🏠"
-	match instance.type:
-		BuildingRegistry.BuildingType.COLLECTION_POINT:  return "📥"
-		BuildingRegistry.BuildingType.STORAGE_BUILDING:  return "📦"
-		BuildingRegistry.BuildingType.RESIDENTIAL_HOUSE: return "🏠"
-		BuildingRegistry.BuildingType.LUMBER_CAMP:       return "🪵"
-		BuildingRegistry.BuildingType.GATHERING_HUT:     return "🏕"
-		BuildingRegistry.BuildingType.STONE_MASON:       return "🪨"
-		BuildingRegistry.BuildingType.TOOL_WORKSHOP:     return "🔨"
-		_: return "🏠"
+	if instance != null and instance.assigned_container_id != &"":
+		var container := InventorySystem.get_container(instance.assigned_container_id)
+		if container != null:
+			for slot: InventorySlot in container.slots:
+				if not slot.is_empty() and slot.quantity > 0:
+					stored[slot.resource_id] = stored.get(slot.resource_id, 0) + slot.quantity
+	var items: Array[Dictionary] = []
+	for res_id: StringName in ResourceRegistry.get_all_ids():
+		items.append({&"resource_id": res_id, &"quantity": int(stored.get(res_id, 0))})
+	return items
+
+
+func _set_icon_text(slot: Control, text: String) -> void:
+	for c in slot.get_children():
+		if c.name != &"LevelBadge":
+			c.queue_free()
+	var lbl := Label.new()
+	lbl.text                 = text
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	lbl.add_theme_font_size_override("font_size", 22)
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	slot.add_child(lbl)
+
+
+func _set_icon_texture(slot: Control, texture: Texture2D) -> void:
+	for c in slot.get_children():
+		if c.name != &"LevelBadge":
+			c.queue_free()
+	var rect := TextureRect.new()
+	rect.texture       = texture
+	rect.expand_mode   = TextureRect.EXPAND_IGNORE_SIZE
+	rect.stretch_mode  = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter  = Control.MOUSE_FILTER_IGNORE
+	slot.add_child(rect)
+
+
+func _building_icon(building_type: int) -> String:
+	match building_type:
+		BuildingRegistry.BuildingType.GATHERING_HUT:    return "🏕️"
+		BuildingRegistry.BuildingType.COLLECTION_POINT: return "📦"
+		BuildingRegistry.BuildingType.STORAGE_BUILDING: return "🏚️"
+		BuildingRegistry.BuildingType.LUMBER_CAMP:      return "🌲"
+		BuildingRegistry.BuildingType.STONE_MASON:      return "🪨"
+		BuildingRegistry.BuildingType.SAWMILL:          return "🪚"
+		BuildingRegistry.BuildingType.TOOL_WORKSHOP:    return "🔨"
+		BuildingRegistry.BuildingType.WEAVER:           return "🧵"
+		BuildingRegistry.BuildingType.TAILOR:           return "🪡"
+		BuildingRegistry.BuildingType.HUNTING_LODGE:    return "🦌"
+		BuildingRegistry.BuildingType.FARM:             return "🌾"
+		BuildingRegistry.BuildingType.MILL:             return "⚙️"
+		BuildingRegistry.BuildingType.BAKERY:           return "🥖"
+		_:                                              return "🏠"
 
 
 func _carrier_status_key(route: LogisticsRoute) -> String:
@@ -952,6 +1100,12 @@ func _build_detail_view() -> Control:
 	_npc_tile_style = npc_bundle["style"]
 	_npc_tile_icon = npc_bundle["icon"]
 	_npc_tile_name = npc_bundle["name"]
+
+	_npc_tile_level_badge = NpcGrid.make_level_badge(1)
+	_npc_tile_level_badge.name    = &"LevelBadge"
+	_npc_tile_level_badge.visible = false
+	_npc_tile_icon.add_child(_npc_tile_level_badge)
+
 	_npc_tile.gui_input.connect(func(e: InputEvent) -> void:
 		var mb := e as InputEventMouseButton
 		if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
@@ -973,6 +1127,15 @@ func _build_detail_view() -> Control:
 			var sp := Control.new()
 			sp.custom_minimum_size = Vector2(TILE_ARROW_W, 0)
 			cap_row.add_child(sp)
+
+	# Validation hint — shown briefly when user action is blocked.
+	_hint_label = Label.new()
+	_hint_label.name = "HintLabel"
+	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hint_label.add_theme_font_size_override("font_size", 11)
+	_hint_label.add_theme_color_override("font_color", Color(0.95, 0.75, 0.35))
+	_hint_label.modulate.a = 0.0
+	view.add_child(_hint_label)
 
 	# ── Route summary (visible when both buildings are set) ────────────────────
 	_summary_zone = VBoxContainer.new()
@@ -1047,14 +1210,12 @@ func _build_selector_tile_bundle() -> Dictionary:
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_child(vbox)
 
-	var icon_lbl := Label.new()
-	icon_lbl.text = "+"
-	icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	icon_lbl.add_theme_font_size_override("font_size", 22)
-	icon_lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
-	icon_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vbox.add_child(icon_lbl)
+	var icon_slot := Control.new()
+	icon_slot.custom_minimum_size   = Vector2(36, 36)
+	icon_slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	icon_slot.mouse_filter          = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(icon_slot)
+	_set_icon_text(icon_slot, "+")
 
 	var name_lbl := Label.new()
 	name_lbl.text = ""
@@ -1074,7 +1235,7 @@ func _build_selector_tile_bundle() -> Dictionary:
 		style.border_color = COLOR_TILE_BORDER_FILLED if name_lbl.visible else COLOR_TILE_BORDER
 	)
 
-	return {"tile": panel, "style": style, "icon": icon_lbl, "name": name_lbl}
+	return {"tile": panel, "style": style, "icon": icon_slot, "name": name_lbl}
 
 
 func _build_tile_arrow() -> Label:
@@ -1124,21 +1285,12 @@ func _build_item_slot_tile() -> PanelContainer:
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_child(vbox)
 
-	var icon_container := Control.new()
-	icon_container.custom_minimum_size = Vector2(36, 36)
-	icon_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	icon_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vbox.add_child(icon_container)
-
-	_item_slot_icon = Label.new()
-	_item_slot_icon.text = "+"
-	_item_slot_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_item_slot_icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_item_slot_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_item_slot_icon.add_theme_font_size_override("font_size", 22)
-	_item_slot_icon.add_theme_color_override("font_color", COLOR_TEXT_DIM)
-	_item_slot_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon_container.add_child(_item_slot_icon)
+	_item_slot_icon = Control.new()
+	_item_slot_icon.custom_minimum_size   = Vector2(36, 36)
+	_item_slot_icon.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_item_slot_icon.mouse_filter          = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(_item_slot_icon)
+	_set_icon_text(_item_slot_icon, "+")
 
 	_item_slot_qty = Label.new()
 	_item_slot_qty.text = ""
@@ -1306,13 +1458,7 @@ func _build_delete_dialog() -> void:
 # ── Style helpers ─────────────────────────────────────────────────────────────
 
 func _build_separator(parent: Control) -> void:
-	var sep := HSeparator.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = COLOR_SEP
-	style.content_margin_top = 0
-	style.content_margin_bottom = 0
-	sep.add_theme_stylebox_override("separator", style)
-	parent.add_child(sep)
+	parent.add_child(StyleFactory.separator(COLOR_SEP))
 
 
 func _apply_panel_style(panel: PanelContainer) -> void:

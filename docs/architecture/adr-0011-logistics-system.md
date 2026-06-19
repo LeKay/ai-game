@@ -2,11 +2,13 @@
 
 ## Status
 
-Accepted
+Accepted — **Amended 2026-06-13** (see "Amendment 2026-06-13: Shared-Carrier Model"
+at the end of this document; the amendment supersedes the 1-NPC-per-route rule, the
+waiting timeouts, and the flat travel-time constants in the original text)
 
 ## Last Verified
 
-2026-05-19
+2026-06-13
 
 ## Date
 
@@ -497,3 +499,72 @@ This is a new system with no existing code to migrate. The Logistics System will
 - ADR-0009: NPC State Machine — carrier state contract
 - GDD: logistics-system.md — full mechanical specification
 - GDD: npc-system.md — NPC task cycle (suspended during carrier assignment)
+
+---
+
+## Amendment 2026-06-13: Shared-Carrier Model
+
+**Trigger:** Balance finding B3 (`tools/balance/balance-findings.md`) — the original
+"1 input carrier + 1 output carrier per route, 1 NPC per route" architecture required
+~13 NPCs for a 4-building village. Expansion was blocked by carrier bookkeeping
+instead of layout optimization (violating Pillar 3). Implemented 2026-06-12 in
+`src/systems/logistics/logistics_system.gd`.
+
+### Decisions
+
+1. **Shared carriers.** One NPC may be the carrier for several routes but serves ONE
+   at a time. `LogisticsSystem` keeps `_carrier_active_route: npc_id → route_id`; all
+   other routes of that carrier are dormant and skipped by the tick loop.
+   - Route IDs changed from `route_<npc>` to `route_<npc>_<source>_<destination>`
+     (unique per carrier+pair; the old scheme collided for multi-route carriers).
+   - Carrier candidates = idle non-workers PLUS existing carriers
+     (`NPCSystem.get_carrier_candidates()`).
+2. **Switch after each delivery.** When the carrier has no cargo in hand (after a
+   deposit, or at an empty source), it picks the next of its routes **round-robin
+   starting after the current one** that *has work* (source has cargo AND destination
+   has space), and travels there **from its current tile** (no return home between
+   trips).
+3. **Wait in place.** If no route has work, the carrier idles at its current tile
+   (active route → IDLE) and is re-evaluated every tick batch (`_service_carriers`).
+4. **Waiting timeouts removed.** `WAITING_SOURCE` is a legacy state (old saves are
+   routed through the decision point); `WAITING_DESTINATION` holds cargo
+   **indefinitely** until space frees — switching would destroy held cargo.
+   `carrier_waiting_timeout` survives only as a serialized field for save
+   compatibility.
+5. **Travel constants re-anchored + F4 wired.** `TICKS_PER_TILE` = **5.0** (base at
+   100% carrier efficiency; identical constant in LogisticsSystem, NPCSystem,
+   BuildingRegistry). Effective leg ticks = `floor(base / carrier_efficiency)`
+   (`EfficiencyFormulas.calculate_effective_travel_ticks`, applied once per
+   travel-leg transition in `_set_carrier_state`; `current_leg_total_ticks` records
+   the effective duration for overlay animation).
+6. **`CARRIER_CAPACITY` = 2** items/trip (was 1) so one fed carrier keeps pace with
+   one producer at typical distances. Intended to become a per-carrier upgradeable
+   stat.
+7. **Deletion semantics.** Deleting a route releases the NPC home only when it was
+   the carrier's last route; otherwise the carrier keeps serving its remaining
+   routes.
+8. **Persistence.** On `deserialize()`, each carrier's active route is reconstructed
+   as its first non-IDLE route; remaining routes stay dormant.
+9. **Singleton access correction.** The original diagram and interface tables show
+   `Engine.get_singleton("...")` — that pattern is **forbidden** for GDScript
+   Autoloads (returns null silently; see `.claude/rules/godot-singletons.md`). The
+   implementation acquires Autoloads by their global names (`NPCSystem`,
+   `BuildingRegistry`, `InventorySystem`, `TickSystem`, `PathSystem`) in
+   `_ready()`/`_enter_tree()`, with injectable fields for tests. Read the original
+   text's `Engine.get_singleton("X")` as "the X Autoload".
+
+### Consequences
+
+- NPC budget for a 4-building village drops from ~13 to ~5–6 (4 workers + 1–2 shared
+  carriers).
+- Route throughput is now demand-driven; the closed-form per-route throughput
+  formulas (original Formulas 2–4) only bound the single-route case. The route
+  efficiency score remains a lifecycle stub (story 007).
+- UI: overlays must query `get_active_route_for_npc()` so the carrier icon follows
+  the one active route; dormant route lines render dimmed.
+
+### Validation
+
+Refactor is implemented and exercised manually in-game; dedicated unit tests for the
+scheduler (`_carrier_pick_next` round-robin, wait-in-place, hold-cargo) are still
+open — tracked as tech debt with the logistics test suite update.

@@ -347,19 +347,17 @@ func test_deleted_route_is_removed_from_active_routes() -> void:
 # =============================================================================
 
 func test_deactivated_output_route_clears_output_carrier_slot() -> void:
-	# Arrange — OUTPUT route, carrier at WAITING_SOURCE, timeout = 1
+	# Arrange — OUTPUT route (timeouts no longer exist; deactivation is triggered
+	# directly, as path invalidation / NPC removal would do)
 	var result: Dictionary = _logistics.create_route(
 		PRODUCTION_BUILDING, STORAGE_BUILDING, NPC_CARRIER,
 		LogisticsRouteScript.RouteType.OUTPUT)
 	var route: LogisticsRouteScript = result["route"]
-	route.carrier_state = LogisticsRouteScript.CarrierState.WAITING_SOURCE
-	route.npc_home_pos  = Vector2i.ZERO
-	route.wait_ticks    = 0
-	_logistics.carrier_waiting_timeout = 1
+	route.npc_home_pos = Vector2i.ZERO
 	_buildings.output_carrier_calls.clear()
 
-	# Act — advance 1 tick → timeout → _deactivate_route → _on_route_active_changed
-	_logistics._advance_tick(1)
+	# Act — deactivate → _on_route_active_changed
+	_logistics._deactivate_route(route, "test deactivation")
 
 	# Assert — output carrier slot on source (production) building was cleared
 	assert_bool(_buildings.output_carrier_calls.size() > 0).is_true()
@@ -369,19 +367,16 @@ func test_deactivated_output_route_clears_output_carrier_slot() -> void:
 
 
 func test_deactivated_output_route_does_not_immediately_stall_source_building() -> void:
-	# Arrange — OUTPUT route timeout at source
+	# Arrange — OUTPUT route deactivated directly (timeouts removed)
 	var result: Dictionary = _logistics.create_route(
 		PRODUCTION_BUILDING, STORAGE_BUILDING, NPC_CARRIER,
 		LogisticsRouteScript.RouteType.OUTPUT)
 	var route: LogisticsRouteScript = result["route"]
-	route.carrier_state = LogisticsRouteScript.CarrierState.WAITING_SOURCE
-	route.npc_home_pos  = Vector2i.ZERO
-	route.wait_ticks    = 0
-	_logistics.carrier_waiting_timeout = 1
+	route.npc_home_pos = Vector2i.ZERO
 	_buildings.status_calls.clear()
 
 	# Act
-	_logistics._advance_tick(1)
+	_logistics._deactivate_route(route, "test deactivation")
 
 	# Assert — source (production) building NOT set to STALLED immediately
 	# (deferred until next production cycle completes with empty output_carrier_id,
@@ -391,22 +386,19 @@ func test_deactivated_output_route_does_not_immediately_stall_source_building() 
 
 
 func test_deactivated_input_route_sets_destination_building_blocked() -> void:
-	# Arrange — INPUT route, carrier timed out at WAITING_DESTINATION
+	# Arrange — INPUT route deactivated directly (timeouts removed)
 	var result: Dictionary = _logistics.create_route(
 		STORAGE_BUILDING, PRODUCTION_BUILDING, NPC_CARRIER,
 		LogisticsRouteScript.RouteType.INPUT)
 	var route: LogisticsRouteScript = result["route"]
-	route.carrier_state  = LogisticsRouteScript.CarrierState.WAITING_DESTINATION
 	route.npc_home_pos   = Vector2i.ZERO
 	route.cargo          = 1
 	route.cargo_resource = &"wood"
-	route.wait_ticks     = 0
-	_logistics.carrier_waiting_timeout = 1
 	_inventory.set_full(PRODUCTION_BUILDING)
 	_buildings.status_calls.clear()
 
 	# Act
-	_logistics._advance_tick(1)
+	_logistics._deactivate_route(route, "test deactivation")
 
 	# Assert — destination (production) building was set to BLOCKED
 	var last_status: int = _buildings.last_status_for(str(PRODUCTION_BUILDING))

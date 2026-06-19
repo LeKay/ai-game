@@ -95,7 +95,7 @@ func test_resource_relocation_success_emits_relocation_completed_signal() -> voi
 	pc.try_commit_relocation(tgt, grid)
 
 	# Assert
-	assert_signal_emitted(monitor, "relocation_completed")
+	await assert_signal(monitor).is_emitted("relocation_completed")
 
 
 # ---- AC2: Energy cost preview -----------------------------------------------
@@ -211,7 +211,7 @@ func test_resource_relocation_cancel_emits_cancelled_and_resets_state() -> void:
 	pc.cancel_relocation()
 
 	# Assert
-	assert_signal_emitted(monitor, "relocation_cancelled")
+	await assert_signal(monitor).is_emitted("relocation_cancelled")
 	assert_bool(pc.is_relocating()).is_false()
 	assert_int(pc.get_current_energy()).is_equal(20)  # energy unchanged
 

@@ -1,7 +1,9 @@
 # ADR-0012: Efficiency System — Entity Property and Formula Architecture
 
 ## Status
-Accepted
+Accepted — **Amended 2026-06-13** (see "Amendment 2026-06-13: Nutrition Curve, Caps,
+and Wiring" at the end; supersedes the F1 base value, the F2 cap, and the binary
+hunger modifier described below)
 
 ## Date
 2026-06-03
@@ -330,3 +332,132 @@ building.recalculate_efficiency(workers) # called on worker assign/unassign
 - ADR-0010: Hunger System and Debuff Stacking (hunger_state_changed signal drives NPC efficiency update)
 - ADR-0011: Logistics System (carrier travel ticks — F4 replaces direct Manhattan formula)
 - Quick Spec: design/quick-specs/efficiency-system-2026-06-03.md
+
+---
+
+## Amendment 2026-06-13: Nutrition Curve, Caps, and Wiring
+
+Reflects the implementation in `src/systems/efficiency/efficiency_formulas.gd` after
+the balancing pass 2026-06-11/12 (`tools/balance/balance-findings.md`, findings B2/E2).
+
+### Changes to the formulas
+
+1. **F1 base is 0.5, not 1.0.** `BASE_NPC_EFFICIENCY = 0.5`:
+   `npc.efficiency = clamp(0.5 × food_mod × satisfaction_mod × equipment_mod, 0.0, 2.0)`.
+   An NPC with neutral modifiers (all 1.0 — e.g. freshly spawned, never fed) runs at
+   **0.5**, not 1.0. Feeding is what lifts an NPC to full speed.
+2. **Binary hunger modifier → nutrition curve (F5 v3).** The fed/hungry 1.0/0.5
+   modifier was replaced by a curve over TOTAL daily nutrition (amount × food
+   nutrition value from `resources.json`):
+   `efficiency_from_nutrition(n) = 0.25 + min(0.15 × n, 0.75)`
+   (constants `NUTRITION_UNFED_EFFICIENCY`, `NUTRITION_PER_UNIT`,
+   `NUTRITION_MAX_BONUS`). Anchors: 0 → 0.25, 1 → 0.40, 5 → 1.00, >5 → 1.00 (capped).
+   `calculate_food_modifier(n) = efficiency_from_nutrition(n) / 0.5` keeps F1's shape.
+   `nutrition_for_full() = 0.75/0.15 = 5` drives the "Nutrition: x/5" UI display.
+3. **F2 building cap is 1.0.** `BUILDING_EFFICIENCY_MAX = 1.0` — buildings top out at
+   base speed; efficiency only ever slows production below 100%. Headroom above 1.0
+   is reserved for a future decision (raise the cap when upgrades/equipment land).
+4. **F6 adjacency curve added (and softened 2026-06-12):**
+   `calculate_adjacency_efficiency(tiles) = clamp(0.7 + 0.10 × tiles, 0.5, 1.0)` —
+   1 tile → 0.80, 2 → 0.90, 3+ → 1.00. The floor guarantees geometry alone never
+   freezes a building (the original `tiles × 0.25` draft would have quartered
+   production at 1 adjacent tile — see balance finding B2).
+5. **Adjacency × worker combination.** For adjacency buildings (Lumber Camp, Stone
+   Mason, Gathering Hut): `building.efficiency = clamp(F6 × worker.efficiency, 0.0,
+   1.0)` — layout AND feeding both matter for gatherers (previously food had no
+   effect on them). Non-adjacency buildings keep F2.
+
+### Wiring (the formulas now have gameplay effect)
+
+- **F3 → production:** `_try_start_production_cycle` sets the cycle duration via F3,
+  and `_advance_production_cycle` re-derives it from the CURRENT efficiency every
+  tick (live recalc — feeding/terrain changes affect the running cycle immediately).
+- **F4 → travel:** NPC travel (`NPCSystem._compute_travel_path`) and carrier travel
+  legs (`LogisticsSystem._set_carrier_state`) divide base ticks by the NPC's
+  efficiency. Base constant re-anchored: `TICKS_PER_TILE = 5.0` at 100% efficiency
+  (50% ⇒ 10/tile, the previous flat value).
+
+### Still open
+
+- **Config externalization (Story 005):** all curve constants live as `const` in
+  `EfficiencyFormulas`, not yet in `assets/data/efficiency-config.json` as the quick
+  spec demanded. Tracked as tech debt.
+- Satisfaction/equipment modifiers remain 1.0 placeholders.
+
+---
+
+## Amendment 2026-06-18: Level-Scaled Cap, Rescaled Curve, Additive Master's Touch, Building Cap Removed, Additive Building Efficiency (base + tiles + worker), Workshop Optimization Perk Removed, Efficiency Tooltips
+
+Pacing change so levelling *feels* meaningful (it was cosmetic) and feeding stays the
+core lever. Reflects `efficiency_formulas.gd` after this pass.
+
+### Changes to the formulas
+
+1. **Curve rescaled — fed max is 0.50 at level 1.** `NUTRITION_PER_UNIT 0.15 → 0.05`
+   (5%/nutrition) and `NUTRITION_MAX_BONUS 0.75 → 0.25`. The unfed floor
+   (`NUTRITION_UNFED_EFFICIENCY = 0.25`) is unchanged, so the level-1 fed maximum is
+   `0.25 + 0.25 = 0.50`, reached at exactly **5 nutrition** (5 berries). Anchors (lvl 1):
+   0 → 0.25, 1 → 0.30, 5 → 0.50, >5 → 0.50 (capped). `FOOD_EFFICIENCY_PER_UNIT` (dead
+   const) removed.
+2. **The nutrition bonus cap is now level- and perk-scaled (F5 v4).** New
+   `nutrition_bonus_cap(level, extra_cap_bonus) = NUTRITION_MAX_BONUS +
+   LEVEL_EFFICIENCY_PER_LEVEL × (level − 1) + extra_cap_bonus`, with new const
+   `LEVEL_EFFICIENCY_PER_LEVEL = 0.05`. `efficiency_from_nutrition`,
+   `calculate_food_modifier`, and `nutrition_for_full` all take `level` and
+   `extra_cap_bonus` (defaults 1, 0.0). The cap is the *ceiling that food fills* —
+   raising it does NOT raise current efficiency; the player must feed more nutrition
+   (still 5%/nutrition) to realize the higher max. This is the chosen design over a flat
+   additive level bonus.
+3. **Master's Touch (Perk #3) moved from multiplicative to additive cap.** Previously
+   `npc.satisfaction_modifier = 1.0 + EFFECT_NPC_EFF_CAP` (multiplied F1). Now its +0.20
+   is passed as `extra_cap_bonus` into the nutrition cap — same channel as level. So lvl
+   10 + Master's Touch → cap 0.90 → max efficiency **1.15**, reached at **18 nutrition**.
+   `satisfaction_modifier` returns to a neutral 1.0 placeholder for the future
+   Satisfaction System.
+4. **Building efficiency cap removed.** `BUILDING_EFFICIENCY_MAX` changed from `1.0` to
+   `EFFICIENCY_MAX` (2.0). The old 100% brake is gone: a worker above 100% (from levels or
+   Master's Touch) now drives the building above base speed (F3 produces faster than
+   `base_cycle_ticks`). Buildings are bounded only by the global 2.0 ceiling.
+6. **Workshop Optimization perk removed.** Perk #4 (`EFFECT_BUILDING_EFF_CAP`) only existed to
+   raise the building cap above 1.0; with the cap lifted globally it was redundant and was
+   deleted (perk def, effect-key const, and the `building_perk_bonus` cap read in
+   `BuildingRegistry.recalculate_efficiency`). The catalog is now 10 perks.
+7. **Building efficiency switched to an additive model.** F2 is now
+   `clamp(BUILDING_BASE_EFFICIENCY(0.25) + resource_tiles × ADJACENCY_EFFICIENCY_PER_TILE(0.05)
+   + worker_efficiency + upgrade_bonus, 0, BUILDING_EFFICIENCY_MAX)`. The old multiplicative
+   adjacency curve F6 (`calculate_adjacency_efficiency`, constants `ADJACENCY_BASE/FLOOR/CEIL`) and
+   the worker-delta sum (`1.0 + Σ(worker−1.0)`) were removed. Resource tiles count only for
+   buildings with an adjacency requirement; all others contribute 0. `recalculate_efficiency`
+   sums assigned workers' efficiencies (0 if unstaffed). Rationale: a player-readable, transparent
+   formula (base + tiles + worker) — chosen over the prior multiplicative model.
+8. **Efficiency hover tooltips.** The NPC detail panel (`_npc_efficiency_tooltip`) and building
+   detail panel (`_building_efficiency_tooltip`) now show a hover breakdown of how the displayed
+   efficiency composes (NPC: unfed floor + food bonus + multipliers; building: base + tiles +
+   worker). Both efficiency labels set `mouse_filter = STOP` so the tooltip fires.
+5. **Adjacency per-tile bonus halved.** `ADJACENCY_EFFICIENCY_PER_TILE` `0.10 → 0.05`. F6 is
+   now `clamp(0.7 + 0.05 × tiles, 0.5, 1.0)`: 1 tile → 0.75, 2 → 0.80, 4 → 0.90, 6+ → 1.00
+   (was 3 tiles for full). Base/floor/ceil unchanged.
+
+### Wiring
+
+- **`HungerSystem.apply_daily_consumption`** now fetches the NPC's `level`
+  (`NPCSystem.get_npc_instance(id).level`) and Master's Touch bonus
+  (`npc_perk_bonus(id, EFFECT_NPC_EFF_CAP)`) and passes both into
+  `calculate_food_modifier`. The level-/perk-scaled cap is therefore baked into the
+  cached per-NPC `food_modifier`, recomputed each day at consumption.
+- **Ordering:** `_refresh_active_perks` runs before `apply_daily_consumption` (autoload
+  order), so perk bonuses are fresh when the food modifier is computed. A level gained at
+  a day boundary takes effect at the *next* day's consumption (1-day lag, intended — you
+  must eat to fill the new ceiling).
+- **`npc_detail_panel._food_required()`** passes level + perk bonus into
+  `nutrition_for_full` so the "Nutrition x/y" target reflects the NPC's actual ceiling.
+- **`EXPERIENCE` link:** NPC level is no longer cosmetic. ADR-0013/experience-system GDD
+  updated to note level now feeds the efficiency cap.
+
+### Still open (this amendment)
+
+- **Unit tests not updated** (per direction): `npc_efficiency_test.gd` and the F5 cases
+  in `daily_consumption_test.gd` assert the old curve and will fail until reworked.
+  Tracked, intentionally deferred.
+- Building cap is now 2.0 — an NPC above 100% (levels / Master's Touch) speeds production
+  past base directly; no perk is required.

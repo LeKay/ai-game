@@ -1,7 +1,41 @@
 # Active Session State
 
-**Last Updated:** 2026-05-28
-**Task:** inp-03 — Action Rebinding and Persistence (Complete)
+**Last Updated:** 2026-06-19
+**Task:** Progression Tree (Tech Tree) — design capture + gating-prep refactor
+
+## Current Focus: Progression Tree (2026-06-19)
+
+Designing a node-graph tech tree that gates ALL content (manual gather, hand-craft,
+buildings, recipes) behind clickable unlock nodes radiating from a central Hearth.
+Design captured in `design/quick-specs/progression-tree-2026-06-19.md` (lightweight
+spec by user direction; flagged for promotion to a full GDD before implementation).
+
+**Decisions locked:** free-click unlock now (research-currency hook reserved via
+`cost` field) · everything gated incl. manual gathering · radiating branches with
+cross-links · manual-first then building automation. Visual = custom Node2D/Camera2D
++ Line2D (Option B, NOT GraphEdit).
+
+**Gating architecture (documented in spec → "Code Integration / Gating Architecture"):**
+new `ProgressionSystem` Autoload = single source of truth, data-driven from
+`data/progression_tree.json`; capability API (`is_building_unlocked` /
+`is_recipe_unlocked` / `is_gather_unlocked` / `is_building_recipe_unlocked`);
+`node_unlocked` signal → UI re-`populate()`. Two-layer gating (UI hides + command
+layer rejects). Gate points: `inventory_screen._building_list()` / `_crafting_list()`,
+`tile_interaction_panel` (manual gather), `building_detail_panel` (recipe selectors).
+Grids (`BuildingGrid`/`CraftingGrid`) are dumb renderers — no change needed.
+
+**DONE this session — prerequisite refactor (smell fix):**
+`inventory_screen.gd::_building_list()` no longer hardcodes a 13-entry building array.
+Added `BuildingRegistry.BUILDABLE_TYPES` (canonical buildable list, menu order) +
+public `BuildingRegistry.get_type_display_name()`. `BuildingRegistry` is now the
+single source of truth for buildable types + names. ⚠️ Unverified in Godot (no run).
+
+**NEXT:** promote spec → full GDD (`/design-system`); author `data/progression_tree.json`;
+implement `ProgressionSystem` + ADR; wire the gate guards; UX spec for tree visuals.
+
+---
+
+**Prior task:** inp-03 — Action Rebinding and Persistence (Complete)
 
 ## Story Creation Progress
 
@@ -1114,3 +1148,55 @@ Revised review: APPROVED — completeness 8/8, all GDDs aligned, accessibility c
 - Tech debt logged: None
 - Next recommended: Story 003 — Schema Versioning (production/epics/save-load-system/story-003-schema-versioning.md)
 
+
+## Session Extract — Code→Doku-Sync 2026-06-13
+- Auftrag: Doku an implementierten Spielstand angleichen (nach Balancing-Pass 2026-06-11/12); Code-Optimierungen mitnehmen. Balancing-Änderungen vorab committet (f5091d5).
+- GDDs synchronisiert: building-system (Bauzeiten/Zyklen/Tool-Charge 1/30/F3 live/Adjazenz; STALLED→Output-full-idle), hunger-system (NEU geschrieben: Pro-NPC-Nutrition-Modell), logistics-system (NEU geschrieben: Shared Carrier, A*, keine Timeouts, Kapazität 2, 5 t/tile + F4), npc-system, tick-system (1440 t/Tag), resource-system (+nutrition), recipe-database (Impl.-Hinweis), player-character (Craft Tool entfernt), systems-index (Impl.-Status).
+- NEU: design/gdd/efficiency-system.md (volles GDD, ersetzt Quick-Spec — als SUPERSEDED markiert).
+- ADRs: ADR-0011 Amendment (Shared-Carrier-Modell), ADR-0012 Amendment (Nutrition-Kurve, BASE 0.5, Caps, F3/F4-Wiring).
+- Code-Optimierungen: HungerSystem füttert jetzt über ALLE Container (all-or-nothing; vorher Bug: nur erster Container); CRAFT_TOOL-Manual-Action entfernt (Crafting nur via CraftingRegistry); BuildingRegistry tote Stubs entfernt (calculate_carrier_travel_ticks/_production_output/_cycle_duration, TICKS_PER_TILE, get_output_buffer_total); LogisticsRoute.wait_ticks entfernt (tot); stale Kommentare gefixt.
+- Tests angepasst: carrier_waiting_test.gd NEU (Wait-in-Place/Hold-Cargo statt Timeouts); building_status/path_invalidation/carrier_fsm/route_model/action_dispatch/production_cycles aktualisiert. NICHT per Godot-Lauf verifiziert (kein Binary lokal) — Suite-Lauf steht aus.
+- Offene Tech-Debt: Effizienz-Konstanten → JSON-Config (Story 005); Logistik-Test-Stubs anderer Suiten evtl. unvollständig (get_building_instance); Scheduler-Unit-Tests (_carrier_pick_next) fehlen; recipes.json-Registry weiterhin Designziel.
+
+
+## Session Extract — Code-Konsolidierung/Refactoring 2026-06-13
+- Auftrag: Systeme datei-für-datei auf Vereinheitlichung/Extraktion prüfen (Bsp. map_root.gd Konstanten/Helfer → Utility-Klassen). Planungsdatei zuerst, dann Umbau.
+- Plan: docs/architecture/refactor-plan-code-consolidation-2026-06-13.md (5 Phasen, risikoarm→risikoreich).
+- UMGESETZT Phase 1: NEU src/util/texture_factory.gd (TextureFactory.circle/solid_tile/tile_highlight) + src/util/path_geometry.gd (PathGeometry.length/point_along). Duplikate entfernt aus map_root/npc_overlay/route_lines (_make_circle_texture 3×, _path_length/_point_along_path 2×). Tests: tests/unit/util/*.
+- UMGESETZT Phase 2: 7× terrain_layer.local_to_map(to_local()) → grid.world_to_tile() in map_root (verifiziert: MapRoot/TerrainLayer ohne Offset → äquivalent).
+- UMGESETZT Phase 3: data-driven Präsentation. resources.json +glyph (alle 7) +world_icon_path/+fallback_color (5 Terrain-Res). ResourceRegistry +get_glyph/+has_world_icon/+get_world_icon_texture. Entfernt: map_root _RESOURCE_PNG/_RESOURCE_FALLBACK_COLORS/_resource_id_to_index/_load_resource_texture; route_lines _RES_PNG/_RES_COLOR; Grid-Emoji-Maps (item/building/crafting) → get_glyph (fixt food/iron-Inkonsistenz). Tests: tests/unit/resource/glyph_world_icon_test.gd + fixture.
+- UMGESETZT Phase 4: NEU src/ui/ui_palette.gd + src/ui/style_factory.gd. _build_separator (3 Panels) → StyleFactory.separator. Panel-COLOR_BG/SEP + 4 Grid-Palette-Consts → UiPalette. Alle 4 Grids: Panel-Shell → StyleFactory.block (kein StyleBoxFlat.new mehr in Grids). IconBlockGrid-Vollbasisklasse BEWUSST NICHT gebaut (zu viel _ready/populate/center-Varianz → mehr Risiko als Nutzen ohne Godot).
+- UMGESETZT Phase 5 Schritt 1+2: NEU src/scenes/map_root/terrain_renderer.gd (TerrainRenderer: Tileset+sync+atlas+80 Terrain-Pfade) und src/scenes/map_root/building_indicator_layer.gd (BuildingIndicatorLayer: Gebäude-Sprites+Indikatoren, _on_building_* delegieren). map_root.gd: 1929 → 1569 Z. (−19 %).
+- UMGESETZT Phase 5 Schritt 3a: NEU src/scenes/map_root/path_dot_overlay.gd (PathDotOverlay) — beheimatet _PATH_*-Konstanten; dedupliziert L-Pfad-Builder (3× inkl. route_lines → l_path), Punkt-Verteilung (place_dots) und Drag-Pfad-Rendering (render, 2× ~25-Z.-Blöcke). Tests: tests/unit/util/path_dot_overlay_test.gd. map_root 1569 → 1484 Z. (gesamt 1929→1484, −23 %).
+- UMGESETZT Phase 5 Schritt 3b: NEU src/scenes/map_root/resource_badge_factory.gd (ResourceBadgeFactory) — reine Badge-Icon-Konstruktion + Skalierungs-Konstanten; dedupliziert 5 Icon-Builder (Badge-Loop, _make_resource_icon_node, 3 Drag-Start-Handler). map_root 1484 → 1400 Z. (gesamt 1929→1400, −27 %).
+- UMGESETZT Phase 5 Schritt 3c: NEU src/scenes/map_root/transport_overlay.gd (TransportOverlay) — Transport-Indikator/Pfad-Overlay-Node-Bau+Animation+Freigabe (statisch, parent-Param). MapRoot behält Lifecycle+Pause. map_root 1400 → 1332 Z. (gesamt 1929→1332, −31 %). Vom Nutzer in Godot verifiziert: läuft.
+- Nutzer wählte dann doch Option B (inkrementell). BEGONNEN Phase 5 Schritt 3d: NEU src/scenes/map_root/drag_controller.gd (DragController extends Node2D, hält _root: MapRoot via setup(); als Child in _ready). Chunk 1 (leaf): _calc_drag_ticks + _spawn_pickup_float verschoben (beide ohne map_root-Member → prefix-frei); _pay_drag_cost war tot → entfernt. 8 Calls umgeleitet auf _drag_controller. map_root 1332 → 1306 Z.
+- Chunk 2: _snap_back_drag_icon + _reset_drag_icon_visuals → DragController; _cancel_drag_visual tot → entfernt. map_root 1306 → 1281 Z.
+- Chunk 3: _hit_test_resource_icon → DragController (_root.grid/_root._resource_icons); _make_resource_icon_node tot → entfernt. map_root 1281 → 1250 Z. (gesamt 1929→1250, −35 %).
+- Strategie bestätigt: METHODEN ZUERST (je _root.-Prefix für State/Member), STATE ZULETZT (dann _root.-Prefixes weg). Nebeneffekt: 3 tote Methoden gefunden+entfernt (_pay_drag_cost, _cancel_drag_visual, _make_resource_icon_node).
+- Chunk 4 (GROSS, Nutzer will weniger Verifikationszyklen): _update_drag_overlays + _update_storage_drag_overlays + _try_batch_collect + _restore_batch_extras → DragController (alle State/Infra via _root.). map_root 1250 → 1100 Z. (gesamt 1929→1100, −43 %). DragController: 10 Methoden.
+- ERKENNTNIS: vergessener _root.-Prefix = Parse-Fehler beim Godot-Laden (kein stiller Bug) → große Batches machbar.
+- Chunk 5 (GROSS): _on_storage/input/output_drag_started + _finish_output/input/storage_drag + _park_panel_icon_pending → DragController (alle _root.-prefixed; _calc_drag_ticks/_park lokal; Parent-Args=_root für identische Hierarchie; Signal-Connects + Finish-Calls in map_root auf _drag_controller umgeleitet). map_root 1100 → 883 Z. (gesamt 1929→883, −54 %). DragController: 17 Methoden.
+- Chunk 6 (GROSS): _try_deposit_to_building (Lambda-lastig) + _advance_pending_transports → DragController. Callers (_unhandled_input deposit, _on_ticks_advanced_indicators advance) auf _drag_controller umgeleitet. map_root 883 → 734 Z. (gesamt 1929→734, −62 %). DragController: 19 Methoden.
+- WARNUNG: Linter formatiert map_root zwischen Edits um → Zeilennummern verschieben sich, Edit-Tool meldet "modified since read". Lösung: nach sed-Edits per grep neu lokalisieren, ggf. sed statt Edit für Einzeiler.
+- Chunk 7 (GROSS): _setup_drag_overlays + _spawn_resource_badges + _spawn_badge → DragController. Bestehende _root._spawn_badge-Calls im Controller auf lokal umgestellt; 7 map_root-Caller (2 _ready + 5 _spawn_badge) auf _drag_controller umgeleitet (sed, da Linter Edit-State invalidiert). map_root 734 → 620 Z. (gesamt 1929→620, −68 %). DragController: 22 Methoden.
+- Chunk 8 (GROSS): _input + _on_action_queued/started/progress_update/completed + _spawn_action_indicator → DragController. _player.action_*-Connects auf _drag_controller umgeleitet; _input ist Node-Callback (kein Caller). map_root 620 → 502 Z. (gesamt 1929→502, −74 %, schon unter Ziel!). DragController: 28 Methoden.
+- Chunk 9 (GROSS): _unhandled_input (~165 Z., großer Handler + Lambda) + _process-Drag-Anteil → DragController. _process gesplittet (map_root behält nur _update_map_select_highlight). _input/_unhandled_input/_process sind Node-Callbacks → feuern auf Controller-Node, keine Caller-Rewires. map_root 502 → 294 Z. (gesamt 1929→294, −85 %!). DragController: 30 Methoden.
+- BESTÄTIGT: map_root nutzt Drag-State NUR in Var-Deklarationen (kein Code-Zugriff) → finaler State-Move ist sauber.
+- Chunk 10 FINAL (2026-06-14): State-Block (_resource_icons/_drag_*/_pending_transports/_action_indicator/_was_paused/_HOLD_*/_queued_indicators/_active_action_tile) von map_root → DragController; alle _root._<state>-Prefixes im Controller entfernt (sed). Controller state-autark; nutzt _root. nur noch für Infra (grid 52×/_registry 13×/add_child 12×/_player 7×/_hud 5×/terrain_layer 1×/_on_tile_clicked 1×).
+
+## ✅ PHASE 5 ABGESCHLOSSEN (2026-06-14)
+- map_root.gd: 1929 → 250 Z. (−87 %). God-Object zerlegt in src/scenes/map_root/: TerrainRenderer (201), BuildingIndicatorLayer (118), PathDotOverlay (73), ResourceBadgeFactory (64), TransportOverlay (82), DragController (1079). map_root = schlanker Koordinator.
+- DragController inkrementell in 9 Chunks extrahiert, jeder vom Nutzer in Godot verifiziert. 3 tote Methoden gefunden+entfernt (_pay_drag_cost, _cancel_drag_visual, _make_resource_icon_node).
+- OFFEN: Phase 6 Asset-Move (am besten im Editor) + assets/ui-Dangling-Bug.
+
+## DragController-Aufteilung (2026-06-14, nach Phase 5)
+- Split 1: ActionFeedback extrahiert (src/scenes/map_root/action_feedback.gd, 136 Z.) — Spieler-Aktions-Indikatoren (Queued/Active/Progress + Loot), getrieben von _player-Signalen. Bidirektionale Verdrahtung: DragController.is_action_running() ↔ ActionFeedback liest _drag._pending_transports/_was_paused/_resource_icons/_spawn_badge/_spawn_pickup_float. map_root wired _action_feedback.setup(self,_drag) + _drag.set_action(_action_feedback). DragController 1079 → 974 Z.
+- Split 2: ResourceBadgeLayer extrahiert (src/scenes/map_root/resource_badge_layer.gd, 123 Z., Node2D) — _resource_icons-Daten + _spawn_resource_badges/_spawn_badge + animate_float + _hit_test_resource_icon + _spawn_pickup_float. Ein-direktional: DragController + ActionFeedback greifen via _badges. zu (set_badges / setup(...,badges)). DragController 974 → 876 Z. map_root wired _resource_badges vor drag/action.
+- Komponenten in src/scenes/map_root/ jetzt 8: terrain_renderer, building_indicator_layer, path_dot_overlay, resource_badge_factory, transport_overlay, drag_controller (876), action_feedback (138), resource_badge_layer (123).
+- VERBLEIBEND in DragController: Drag-Zustandsmaschine (start/finish/deposit/overlays/batch) + _input/_unhandled_input/_process + Transport-Lifecycle (park/advance/_pending_transports). Nur noch sinnvoller Kandidat: TransportManager — aber verschärft 3-Wege-Pause-Kopplung (drag↔transport↔action), daher eher belassen.
+- NÄCHSTE Chunks (leaf→core, je Runde, Nutzer verifiziert dazwischen): Deposit (_try_deposit_to_building ~30 _root-Refs+2 Lambdas — der schwerste; ggf. erst Drag-State mitnehmen) → Transport-Lifecycle (_pending_transports/_advance/_park_panel_icon_pending) → Drag-Overlays (_setup/_update_drag_overlays) → Drag-Start/Finish → Badges (_resource_icons/_spawn_*) → Input (_input/_unhandled_input/_hit_test)+_process-Drag-Anteil. Endziel map_root <600 Z.
+- Extrahierte map_root-Komponenten bisher (src/scenes/map_root/): TerrainRenderer, BuildingIndicatorLayer, PathDotOverlay, ResourceBadgeFactory, TransportOverlay.
+- UMGESETZT (Plan): Phase 6 Asset-Reorganisation ins Plandok geschrieben. Befund: Assets nur als String-Literale referenziert (6 Dateien), KEINE .tscn/.tres-Bindung; 120 .import-Sidecars müssen mitwandern. Pre-existing Bug: resources.json icon_path → assets/ui/icons/resources/* existieren NICHT.
+- OFFEN: Phase 5 Rest (ResourceBadgeLayer, BuildingIndicatorLayer, TransportOverlay, ~700-Z. DragController) + Phase 6 Asset-Move (am besten im Godot-Editor) + Panel-Farbliteral-Migration. Alle brauchen Godot/Screenshot-Verifikation.
+- WICHTIG unverifiziert (kein lokales Godot-Binary): Suite NICHT gelaufen. Vor Merge `bash addons/gdUnit4/runtest.sh -a res://tests/` ausführen. Bewusster Verhaltens-Nuance: unbekannte Res im Drag-Overlay zeigen jetzt Fallback-Kreis statt (vorher fälschlich) Holz-Icon — Screenshot prüfen.

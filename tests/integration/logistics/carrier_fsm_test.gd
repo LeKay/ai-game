@@ -331,7 +331,6 @@ func test_at_destination_enters_waiting_destination_when_storage_full() -> void:
 
 	# Assert
 	assert_int(route.carrier_state).is_equal(LogisticsRouteScript.CarrierState.WAITING_DESTINATION)
-	assert_int(route.wait_ticks).is_equal(0)
 	assert_int(_inventory.deposit_calls.size()).is_equal(0)
 
 

@@ -73,7 +73,7 @@ func _make_ready_lumber_camp(tile: Vector2i) -> String:
 	instance.input_carrier_ids = [&"mock_carrier"]
 	instance.output_carrier_id = &"mock_carrier"
 	_registry.assign_npc(bid, &"npc_ready")
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"axe"] = 5.0
 	return bid
 
 
@@ -88,7 +88,7 @@ func test_failed_states_no_npc_transitions_to_blocked() -> void:
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	instance.input_carrier_ids = [&"mock_carrier"]
 	instance.output_carrier_id = &"mock_carrier"
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"axe"] = 5.0
 	# assigned_npc_id = &"" (default)
 
 	# Act
@@ -106,7 +106,7 @@ func test_failed_states_no_npc_emits_building_blocked_signal() -> void:
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	instance.input_carrier_ids = [&"mock_carrier"]
 	instance.output_carrier_id = &"mock_carrier"
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"axe"] = 5.0
 	var blocked_reason: String = ""
 	_registry.building_blocked.connect(func(_id: String, r: String) -> void: blocked_reason = r)
 
@@ -129,7 +129,7 @@ func test_failed_states_no_input_carrier_transitions_to_blocked() -> void:
 	# input_carrier_ids = [] (default)
 	instance.output_carrier_id = &"mock_carrier"
 	_registry.assign_npc(bid, &"npc_01")
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"axe"] = 5.0
 
 	# Act
 	_registry._on_ticks_advanced(1)
@@ -145,7 +145,7 @@ func test_failed_states_no_input_carrier_emits_blocked_signal_with_carrier_reaso
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_02")
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"axe"] = 5.0
 	var blocked_reason: String = ""
 	_registry.building_blocked.connect(func(_id: String, r: String) -> void: blocked_reason = r)
 
@@ -162,7 +162,7 @@ func test_failed_states_no_input_carrier_blocked_id_matches_building() -> void:
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_03")
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"axe"] = 5.0
 	var blocked_id: String = ""
 	_registry.building_blocked.connect(func(id: String, _r: String) -> void: blocked_id = id)
 
@@ -184,7 +184,7 @@ func test_failed_states_blocked_recovers_when_npc_assigned() -> void:
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	instance.input_carrier_ids = [&"mock_carrier"]
 	instance.output_carrier_id = &"mock_carrier"
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"axe"] = 5.0
 	_registry._on_ticks_advanced(1)  # → BLOCKED
 	assert_int(instance.state).is_equal(BuildingRegScript.BuildingInstance.State.BLOCKED)
 
@@ -206,7 +206,7 @@ func test_failed_states_blocked_recovery_emits_building_unblocked_signal() -> vo
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	instance.input_carrier_ids = [&"mock_carrier"]
 	instance.output_carrier_id = &"mock_carrier"
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"axe"] = 5.0
 	_registry._on_ticks_advanced(1)  # → BLOCKED
 	_registry.assign_npc(bid, &"npc_05")
 	var unblocked_id: String = ""
@@ -251,7 +251,7 @@ func test_failed_states_blocked_recovers_when_tool_added_to_buffer() -> void:
 	assert_int(instance.state).is_equal(BuildingRegScript.BuildingInstance.State.BLOCKED)
 
 	# Resolve — add tool to buffer directly (simulates carrier delivery)
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"axe"] = 5.0
 
 	# Act
 	_registry._on_ticks_advanced(1)
@@ -273,7 +273,7 @@ func test_failed_states_output_buffer_full_after_cycle_complete() -> void:
 	instance.input_carrier_ids = [&"mock_carrier"]
 	instance.output_carrier_id = &"mock_carrier"
 	_registry.assign_npc(bid, &"npc_08")
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"axe"] = 5.0
 	_registry._on_ticks_advanced(1)    # start cycle
 	assert_bool(instance.cycle_running).is_true()
 
@@ -293,7 +293,7 @@ func test_failed_states_output_full_output_preserved_across_ticks() -> void:
 	instance.input_carrier_ids = [&"mock_carrier"]
 	instance.output_carrier_id = &"mock_carrier"
 	_registry.assign_npc(bid, &"npc_10")
-	instance.input_buffer[&"tool"] = 20.0  # enough for four cycles
+	instance.input_buffer[&"axe"] = 20.0  # enough for four cycles
 	for _i in range(4):
 		_registry._on_ticks_advanced(1)    # start cycle
 		_registry._on_ticks_advanced(100)  # complete cycle
@@ -315,7 +315,7 @@ func test_failed_states_output_full_does_not_start_new_cycle() -> void:
 	instance.input_carrier_ids = [&"mock_carrier"]
 	instance.output_carrier_id = &"mock_carrier"
 	_registry.assign_npc(bid, &"npc_11")
-	instance.input_buffer[&"tool"] = 20.0
+	instance.input_buffer[&"axe"] = 20.0
 	for _i in range(4):
 		_registry._on_ticks_advanced(1)
 		_registry._on_ticks_advanced(100)
@@ -341,7 +341,7 @@ func test_failed_states_collect_output_clears_buffer() -> void:
 	instance.input_carrier_ids = [&"mock_carrier"]
 	instance.output_carrier_id = &"mock_carrier"
 	_registry.assign_npc(bid, &"npc_12")
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"axe"] = 5.0
 	_registry._on_ticks_advanced(1)
 	_registry._on_ticks_advanced(100)
 	assert_int(instance.buffered_output.get(&"wood", 0)).is_equal(5)
@@ -363,7 +363,7 @@ func test_failed_states_after_collect_output_next_cycle_can_start() -> void:
 	instance.input_carrier_ids = [&"mock_carrier"]
 	instance.output_carrier_id = &"mock_carrier"
 	_registry.assign_npc(bid, &"npc_14")
-	instance.input_buffer[&"tool"] = 10.0  # two cycles worth
+	instance.input_buffer[&"axe"] = 10.0  # two cycles worth
 	_registry._on_ticks_advanced(1)
 	_registry._on_ticks_advanced(100)  # cycle 1 done
 	_registry.collect_output(bid)      # buffer cleared
@@ -438,14 +438,14 @@ func test_failed_states_state_changed_signal_emitted_on_blocked() -> void:
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	instance.input_carrier_ids = [&"mock_carrier"]
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"axe"] = 5.0
 	var signal_monitor := monitor_signals(_registry)
 
 	# Act
 	_registry._on_ticks_advanced(1)
 
 	# Assert
-	assert_signal_emitted(signal_monitor, "building_state_changed")
+	await assert_signal(signal_monitor).is_emitted("building_state_changed")
 
 
 func test_failed_states_output_changed_signal_emitted_on_collect_output() -> void:
@@ -456,7 +456,7 @@ func test_failed_states_output_changed_signal_emitted_on_collect_output() -> voi
 	instance.input_carrier_ids = [&"mock_carrier"]
 	instance.output_carrier_id = &"mock_carrier"
 	_registry.assign_npc(bid, &"npc_15")
-	instance.input_buffer[&"tool"] = 5.0
+	instance.input_buffer[&"axe"] = 5.0
 	_registry._on_ticks_advanced(1)
 	_registry._on_ticks_advanced(100)
 	var signal_monitor := monitor_signals(_registry)
@@ -465,4 +465,4 @@ func test_failed_states_output_changed_signal_emitted_on_collect_output() -> voi
 	_registry.collect_output(bid)
 
 	# Assert
-	assert_signal_emitted(signal_monitor, "building_output_changed")
+	await assert_signal(signal_monitor).is_emitted("building_output_changed")

@@ -5,7 +5,7 @@
 ## PlayerCharacter instances without relying on Autoload singletons.
 ##
 ## AC coverage:
-##   AC-06 — Construction completion (CONSTRUCTING → OPERATING at build_time)
+##   AC-06 — Construction completion via complete_construction_manually()
 ##   AC-09 — Production cycle starts when inputs + NPC present
 ##   AC-12 — Carrier travel ticks formula; output always full base_output
 ##   AC-13 — Cycle duration = base_cycle_ticks; buffered_output set; signal emitted
@@ -56,7 +56,7 @@ func _seed(resource_id: StringName, qty: int) -> void:
 
 
 ## Places a Lumber Camp, bypassing resource/energy checks via internal manipulation.
-## The building starts in CONSTRUCTING state (build_time = 200).
+## The building starts in CONSTRUCTING state.
 ## Returns the building_id string ("0", "1", ...).
 func _place_lumber_camp_free(tile: Vector2i) -> String:
 	# Seed full build cost so initiate_build succeeds.
@@ -73,30 +73,28 @@ func _place_lumber_camp_free(tile: Vector2i) -> String:
 # AC-06: Construction completion
 # =============================================================================
 
-func test_production_lumber_camp_construction_completes_at_build_time() -> void:
+func test_production_lumber_camp_manual_construction_transitions_to_operating() -> void:
 	# Arrange
 	var tile := Vector2i(5, 5)
 	var bid: String = _place_lumber_camp_free(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	assert_int(instance.state).is_equal(BuildingRegScript.BuildingInstance.State.CONSTRUCTING)
 
-	# Act — advance exactly build_time ticks (200)
-	_registry._on_ticks_advanced(200)
+	# Act
+	_registry.complete_construction_manually(bid)
 
 	# Assert
 	assert_int(instance.state).is_equal(BuildingRegScript.BuildingInstance.State.OPERATING)
 
 
-func test_production_lumber_camp_construction_not_complete_one_tick_early() -> void:
-	# Arrange
+func test_production_construction_not_auto_advanced_by_ticks() -> void:
+	# Construction is now a manual player action — ticks must not advance it.
 	var tile := Vector2i(6, 5)
 	var bid: String = _place_lumber_camp_free(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 
-	# Act — 199 ticks — should NOT complete
-	_registry._on_ticks_advanced(199)
+	_registry._on_ticks_advanced(99999)
 
-	# Assert
 	assert_int(instance.state).is_equal(BuildingRegScript.BuildingInstance.State.CONSTRUCTING)
 
 
@@ -107,10 +105,10 @@ func test_production_construction_complete_signal_emitted() -> void:
 	var signal_monitor := monitor_signals(_registry)
 
 	# Act
-	_registry._on_ticks_advanced(200)
+	_registry.complete_construction_manually(bid)
 
 	# Assert
-	assert_signal_emitted(signal_monitor, "building_construction_complete")
+	await assert_signal(signal_monitor).is_emitted("building_construction_complete")
 
 
 func test_production_construction_complete_signal_carries_correct_building_id() -> void:
@@ -123,25 +121,29 @@ func test_production_construction_complete_signal_carries_correct_building_id() 
 	)
 
 	# Act
-	_registry._on_ticks_advanced(200)
+	_registry.complete_construction_manually(bid)
 
 	# Assert
 	assert_str(emitted_args[0]).is_equal(bid)
 	assert_int(emitted_args[1]).is_equal(BuildingRegScript.BuildingType.LUMBER_CAMP)
 
 
-func test_production_accumulated_ticks_spans_multiple_advances() -> void:
-	# Arrange
+func test_production_manual_construction_idempotent_when_already_operating() -> void:
+	# complete_construction_manually on an already-operating building must be a no-op.
 	var tile := Vector2i(9, 5)
 	var bid: String = _place_lumber_camp_free(tile)
+	_registry.complete_construction_manually(bid)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
+	assert_int(instance.state).is_equal(BuildingRegScript.BuildingInstance.State.OPERATING)
 
-	# Act — 100 + 100 = 200 total
-	_registry._on_ticks_advanced(100)
-	assert_int(instance.state).is_equal(BuildingRegScript.BuildingInstance.State.CONSTRUCTING)
-	_registry._on_ticks_advanced(100)
+	# Call again — should not emit a second signal or change state
+	var signal_count: int = 0
+	_registry.building_construction_complete.connect(
+		func(_b: String, _t: int) -> void: signal_count += 1
+	)
+	_registry.complete_construction_manually(bid)
 
-	# Assert
+	assert_int(signal_count).is_equal(0)
 	assert_int(instance.state).is_equal(BuildingRegScript.BuildingInstance.State.OPERATING)
 
 
@@ -151,7 +153,7 @@ func test_production_accumulated_ticks_spans_multiple_advances() -> void:
 
 func _make_operating_lumber_camp(tile: Vector2i) -> String:
 	var bid: String = _place_lumber_camp_free(tile)
-	_registry._on_ticks_advanced(200)  # complete construction
+	_registry.complete_construction_manually(bid)
 	return bid
 
 
@@ -171,7 +173,7 @@ func test_production_cycle_starts_when_npc_and_inputs_present() -> void:
 	var bid: String = _make_carrying_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_01")
-	instance.input_buffer[&"tool"] = 1.0
+	instance.input_buffer[&"axe"] = 1.0
 
 	# Act — tick fires, cycle should start
 	_registry._on_ticks_advanced(1)
@@ -187,7 +189,7 @@ func test_production_cycle_does_not_start_without_npc() -> void:
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	# No NPC assigned — assigned_npc_id is &""
-	instance.input_buffer[&"tool"] = 1.0
+	instance.input_buffer[&"axe"] = 1.0
 
 	# Act
 	_registry._on_ticks_advanced(1)
@@ -202,7 +204,7 @@ func test_production_cycle_does_not_start_with_insufficient_tool_charge() -> voi
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_02")
-	instance.input_buffer[&"tool"] = 0.0  # insufficient
+	instance.input_buffer[&"axe"] = 0.0  # insufficient
 
 	# Act
 	_registry._on_ticks_advanced(1)
@@ -211,20 +213,19 @@ func test_production_cycle_does_not_start_with_insufficient_tool_charge() -> voi
 	assert_bool(instance.cycle_running).is_false()
 
 
-func test_production_cycle_does_not_start_without_wood_input() -> void:
-	# Arrange — no wood in buffer
+func test_production_cycle_starts_when_tool_in_buffer() -> void:
+	# Arrange — 1 tool satisfies quantity:1 requirement
 	var tile := Vector2i(8, 10)
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_03")
-	instance.input_buffer[&"tool"] = 1.0
-	# wood not added
+	instance.input_buffer[&"axe"] = 1.0
 
 	# Act
 	_registry._on_ticks_advanced(1)
 
 	# Assert
-	assert_bool(instance.cycle_running).is_false()
+	assert_bool(instance.cycle_running).is_true()
 
 
 func test_production_inputs_deducted_from_buffer_when_cycle_starts() -> void:
@@ -233,52 +234,36 @@ func test_production_inputs_deducted_from_buffer_when_cycle_starts() -> void:
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_04")
-	instance.input_buffer[&"tool"] = 2.0  # more than needed (1.0)
+	instance.input_buffer[&"axe"] = 2.0  # more than needed (1.0)
 
 	# Act
 	_registry._on_ticks_advanced(1)
 
-	assert_float(instance.input_buffer.get(&"tool", 0.0)).is_equal(1.0)
+	assert_float(instance.input_buffer.get(&"axe", 0.0)).is_equal(1.0)
 
 
 # =============================================================================
-# AC-12: Carrier travel time formula; output always full base_output
+# AC-12/AC-13: Transport and cycle formulas moved out of BuildingRegistry.
+# Carrier travel time lives in LogisticsSystem (TICKS_PER_TILE + F4);
+# cycle duration uses EfficiencyFormulas.calculate_effective_cycle_ticks (F3).
+# The legacy stubs (calculate_carrier_travel_ticks / calculate_production_output /
+# calculate_cycle_duration) were removed 2026-06-13.
 # =============================================================================
 
-func test_production_carrier_travel_ticks_formula_example() -> void:
-	# Arrange — AC-12 example: distance 10, ticks_per_tile 3.0 → 30
+func test_production_cycle_duration_uses_f3_at_full_efficiency() -> void:
+	# Arrange — F3: base / efficiency, efficiency 1.0 → base unchanged
 	# Act
-	var result: int = _registry.calculate_carrier_travel_ticks(10)
+	var result: int = EfficiencyFormulas.calculate_effective_cycle_ticks(250, 1.0)
 	# Assert
-	assert_int(result).is_equal(30)
+	assert_int(result).is_equal(250)
 
 
-func test_production_carrier_travel_ticks_zero_distance() -> void:
-	# Arrange — distance 0 → instant pickup
-	var result: int = _registry.calculate_carrier_travel_ticks(0)
-	assert_int(result).is_equal(0)
-
-
-func test_production_carrier_travel_ticks_large_distance() -> void:
-	# Arrange — distance 25 → floor(25 * 3.0) = 75
-	var result: int = _registry.calculate_carrier_travel_ticks(25)
-	assert_int(result).is_equal(75)
-
-
-func test_production_output_always_base_output_regardless_of_distance() -> void:
-	# AC-12: distance does NOT reduce output
-	assert_int(_registry.calculate_production_output(5)).is_equal(5)
-	assert_int(_registry.calculate_production_output(5)).is_equal(5)  # same at any distance
-
-
-# =============================================================================
-# AC-13: Cycle duration = base_cycle_ticks; output in buffer; signal emitted
-# =============================================================================
-
-func test_production_cycle_duration_is_always_base_cycle_ticks() -> void:
-	# AC-13: Formula 5 — no distance modifier
-	assert_int(_registry.calculate_cycle_duration(100)).is_equal(100)
-	assert_int(_registry.calculate_cycle_duration(100)).is_equal(100)
+func test_production_cycle_duration_doubles_at_half_efficiency() -> void:
+	# Arrange — F3: hungry worker (building efficiency 0.5) → 2× base
+	# Act
+	var result: int = EfficiencyFormulas.calculate_effective_cycle_ticks(250, 0.5)
+	# Assert
+	assert_int(result).is_equal(500)
 
 
 func test_production_cycle_completes_after_base_cycle_ticks() -> void:
@@ -287,7 +272,7 @@ func test_production_cycle_completes_after_base_cycle_ticks() -> void:
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_10")
-	instance.input_buffer[&"tool"] = 1.0
+	instance.input_buffer[&"axe"] = 1.0
 	_registry._on_ticks_advanced(1)   # starts cycle (production_cycle_ticks reset to 0)
 	assert_bool(instance.cycle_running).is_true()
 
@@ -305,7 +290,7 @@ func test_production_output_ready_signal_emitted_on_cycle_complete() -> void:
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_11")
-	instance.input_buffer[&"tool"] = 1.0
+	instance.input_buffer[&"axe"] = 1.0
 	_registry._on_ticks_advanced(1)  # start cycle (cycle_ticks reset to 0)
 	var signal_monitor := monitor_signals(_registry)
 
@@ -313,7 +298,7 @@ func test_production_output_ready_signal_emitted_on_cycle_complete() -> void:
 	_registry._on_ticks_advanced(100)
 
 	# Assert
-	assert_signal_emitted(signal_monitor, "production_output_ready")
+	await assert_signal(signal_monitor).is_emitted("production_output_ready")
 
 
 func test_production_collect_output_returns_and_clears_buffer() -> void:
@@ -322,7 +307,7 @@ func test_production_collect_output_returns_and_clears_buffer() -> void:
 	var bid: String = _make_operating_lumber_camp(tile)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_12")
-	instance.input_buffer[&"tool"] = 1.0
+	instance.input_buffer[&"axe"] = 1.0
 	_registry._on_ticks_advanced(1)    # start cycle
 	_registry._on_ticks_advanced(100)  # complete cycle
 	assert_int(instance.buffered_output.get(&"wood", 0)).is_equal(5)
@@ -342,7 +327,7 @@ func test_production_new_cycle_does_not_start_while_output_buffered() -> void:
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	_registry.assign_npc(bid, &"npc_13")
 	instance.input_buffer[&"wood"] = 3.0
-	instance.input_buffer[&"tool"] = 20.0
+	instance.input_buffer[&"axe"] = 20.0
 	_registry._on_ticks_advanced(1)    # start cycle 1
 	_registry._on_ticks_advanced(100)  # complete cycle 1 → output buffered
 	assert_bool(instance.buffered_output.is_empty()).is_false()
@@ -410,8 +395,8 @@ func test_production_residential_house_spawns_first_npc_on_construction_complete
 		func(b_id: String, t: Vector2i, cnt: int) -> void: spawn_args = [b_id, t, cnt]
 	)
 
-	# Act — complete construction
-	_registry._on_ticks_advanced(150)
+	# Act — complete construction manually
+	_registry.complete_construction_manually(bid)
 
 	# Assert — first NPC spawned immediately
 	assert_array(spawn_args).is_not_empty()
@@ -425,7 +410,7 @@ func test_production_residential_house_spawns_second_npc_after_interval() -> voi
 	# Arrange
 	var tile := Vector2i(6, 25)
 	var bid: String = _place_residential_house(tile)
-	_registry._on_ticks_advanced(150)  # complete construction → npc_count = 1
+	_registry.complete_construction_manually(bid)  # complete construction → npc_count = 1
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	assert_int(instance.npc_count).is_equal(1)
 
@@ -447,8 +432,8 @@ func test_production_residential_house_no_third_npc_spawned() -> void:
 	# Arrange
 	var tile := Vector2i(7, 25)
 	var bid: String = _place_residential_house(tile)
-	_registry._on_ticks_advanced(150)   # → npc_count = 1
-	_registry._on_ticks_advanced(1000)  # → npc_count = 2
+	_registry.complete_construction_manually(bid)  # → npc_count = 1
+	_registry._on_ticks_advanced(1000)             # → npc_count = 2
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	assert_int(instance.npc_count).is_equal(2)
 
@@ -466,8 +451,8 @@ func test_production_residential_house_no_third_npc_spawned() -> void:
 	assert_int(instance.npc_spawn_timer).is_equal(0)
 
 
-func test_production_residential_house_not_complete_before_build_time() -> void:
-	# AC-22 edge: no spawn before construction complete
+func test_production_residential_house_no_npc_without_manual_construction() -> void:
+	# AC-22 edge: ticks alone must not spawn NPCs; player must manually complete construction.
 	var tile := Vector2i(8, 25)
 	var bid: String = _place_residential_house(tile)
 	var spawn_count: int = 0
@@ -475,13 +460,14 @@ func test_production_residential_house_not_complete_before_build_time() -> void:
 		func(_b: String, _t: Vector2i, _c: int) -> void: spawn_count += 1
 	)
 
-	# Act — 149 ticks (1 short of 150)
-	_registry._on_ticks_advanced(149)
+	# Act — advance many ticks without calling complete_construction_manually
+	_registry._on_ticks_advanced(99999)
 
-	# Assert — no spawn yet
+	# Assert — no spawn, still CONSTRUCTING
 	assert_int(spawn_count).is_equal(0)
 	var instance: BuildingRegScript.BuildingInstance = _registry.get_building_instance(bid)
 	assert_int(instance.npc_count).is_equal(0)
+	assert_int(instance.state).is_equal(BuildingRegScript.BuildingInstance.State.CONSTRUCTING)
 
 
 # =============================================================================

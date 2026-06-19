@@ -34,6 +34,7 @@ func _ready() -> void:
 	_npc_texture = load("res://assets/art/tiles/npc_icon_villager.png")
 	TickSystem.ticks_advanced.connect(_on_ticks_advanced)
 	NPCSystem.npc_removed.connect(_on_npc_removed)
+	NPCSystem.npc_leveled_up.connect(_on_npc_leveled_up)
 
 
 ## Sets the WorldGrid reference used to convert tile coords to world positions.
@@ -224,6 +225,35 @@ func _lerp_travel(from_tile: Vector2i, to_tile: Vector2i,
 
 # ---- Cleanup -----------------------------------------------------------------
 
+## Spawns a short "Level Up!" float over the NPC when it gains a level (Experience System).
+func _on_npc_leveled_up(npc_id: StringName, new_level: int) -> void:
+	if _grid == null:
+		return
+	var pos: Vector2
+	var icon: Node2D = _icon_map.get(npc_id)
+	if icon != null and icon.visible:
+		pos = icon.position
+	else:
+		pos = _grid.tile_to_world(NPCSystem.get_npc_position(npc_id))
+
+	var lbl := Label.new()
+	lbl.text = "Level Up!  Lv %d" % new_level
+	lbl.z_index = 10
+	lbl.position = pos + Vector2(-32.0, -28.0)
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", Color("#E8C860"))
+	lbl.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.9))
+	lbl.add_theme_constant_override("outline_size", 4)
+	add_child(lbl)
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tween.tween_property(lbl, "position:y", lbl.position.y - 30.0, 1.4)
+	tween.tween_property(lbl, "modulate:a", 0.0, 1.4)
+	tween.chain().tween_callback(lbl.queue_free)
+
+
 func _on_npc_removed(npc_id: StringName) -> void:
 	var icon: Node2D = _icon_map.get(npc_id)
 	if icon != null:
@@ -241,7 +271,7 @@ func _make_npc_icon() -> Node2D:
 	container.z_index = 5
 
 	var backdrop := Sprite2D.new()
-	backdrop.texture = _make_circle_texture(NPC_ICON_RADIUS, Color(0.0, 0.0, 0.0, 0.50))
+	backdrop.texture = TextureFactory.circle(NPC_ICON_RADIUS, Color(0.0, 0.0, 0.0, 0.50))
 	container.add_child(backdrop)
 
 	var spr := Sprite2D.new()
@@ -254,17 +284,3 @@ func _make_npc_icon() -> Node2D:
 
 	return container
 
-
-
-## Returns an ImageTexture of a filled circle with the given radius and color.
-func _make_circle_texture(radius: int, color: Color) -> ImageTexture:
-	var size: int = radius * 2
-	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
-	img.fill(Color.TRANSPARENT)
-	for px: int in range(size):
-		for py: int in range(size):
-			var dx: int = px - radius
-			var dy: int = py - radius
-			if dx * dx + dy * dy <= radius * radius:
-				img.set_pixel(px, py, color)
-	return ImageTexture.create_from_image(img)

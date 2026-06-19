@@ -81,8 +81,8 @@ func test_consume_food_berry_restores_ten_energy() -> void:
 	assert_int(pc._energy_pool.current).is_equal(10)
 
 
-func test_consume_food_bread_restores_twentyfive_energy() -> void:
-	# Arrange
+func test_consume_food_bread_restores_fifty_energy() -> void:
+	# Arrange — bread nutrition 5.0 × ENERGY_PER_NUTRITION 10 = 50
 	var pc := _make_pc()
 	pc._energy_pool.current = 0
 
@@ -91,7 +91,7 @@ func test_consume_food_bread_restores_twentyfive_energy() -> void:
 
 	# Assert
 	assert_bool(ok).is_true()
-	assert_int(pc._energy_pool.current).is_equal(25)
+	assert_int(pc._energy_pool.current).is_equal(50)
 
 
 func test_consume_food_clamps_to_max_energy() -> void:
@@ -103,6 +103,19 @@ func test_consume_food_clamps_to_max_energy() -> void:
 	pc.consume_food(&"bread")
 
 	# Assert
+	assert_int(pc._energy_pool.current).is_equal(100)
+
+
+func test_consume_food_at_full_energy_returns_false_and_does_not_consume() -> void:
+	# Arrange — energy already at max; eating would waste the food
+	var pc := _make_pc()
+	pc._energy_pool.current = 100
+
+	# Act
+	var ok: bool = pc.consume_food(&"bread")
+
+	# Assert — rejected so the caller refunds the item; energy unchanged
+	assert_bool(ok).is_false()
 	assert_int(pc._energy_pool.current).is_equal(100)
 
 

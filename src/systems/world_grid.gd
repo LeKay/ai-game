@@ -11,7 +11,9 @@ const MAX_RESOURCES_PER_TILE: int = 4
 const BUILDING_LAYER: int = 1
 const RESOURCE_LAYER: int = 2
 
-enum TileType { EMPTY, TREE, STONE, BERRY, GRASS, IMPASSABLE }
+## WHEAT and CLAY are appended last so existing TileType integer values are unchanged.
+## They are placed post-generation (wheat fields / revealed clay pits), never by noise.
+enum TileType { EMPTY, TREE, STONE, BERRY, GRASS, IMPASSABLE, WHEAT, CLAY }
 
 enum PlacementResult {
 	SUCCESS,
@@ -43,7 +45,7 @@ class TileView:
 		resources = p_resources
 		building_id = p_building_id
 
-## Emitted when a terrain tile type changes at runtime (e.g. via clear_terrain_tile).
+## Emitted when a terrain tile type changes at runtime (e.g. via clear_terrain_tile or seed growth).
 ## Listeners can use this to update systems that depend on terrain adjacency.
 signal terrain_tile_changed(tile: Vector2i)
 
@@ -52,15 +54,42 @@ signal terrain_tile_changed(tile: Vector2i)
 ## use this to invalidate cached pathfinder routes that cross pos.
 signal terrain_changed(pos: Vector2i, layer: int)
 
+## Emitted when a seed is planted and a tile enters the growing state.
+signal terrain_growing_started(tile: Vector2i, target_type: int)
+
+## Resource definitions for newly grown terrain tiles (parallel to _populate_resources).
+const TERRAIN_RESOURCE_INIT: Dictionary = {
+	TileType.TREE:  {&"id": &"wood",  &"clearable": true,  &"count": 3},
+	TileType.BERRY: {&"id": &"berry", &"clearable": true,  &"count": 3},
+	TileType.GRASS: {&"id": &"fiber", &"clearable": true,  &"count": 3},
+	TileType.WHEAT: {&"id": &"wheat", &"clearable": true,  &"count": 3},
+}
+
+## Growth durations for each plantable terrain type (1 tick ≈ 1 minute).
+const SEED_GROWTH_TICKS: Dictionary = {
+	TileType.TREE:  2880,  ## 2 in-game days
+	TileType.BERRY: 2160,  ## 1.5 in-game days
+	TileType.GRASS: 1440,  ## 1 in-game day
+	TileType.WHEAT: 1440,  ## 1 in-game day
+}
+
 var _terrain: Array[Array]   # [x][y] -> TileType (int)  — write-once after generate()
 var _resources: Array[Array] # [x][y] -> Array[ResourceTileData], empty when no resources
 var _buildings: Array[Array] # [x][y] -> String (building_id) or null
 ## Set true by generate(); TerrainLayer immutability enforced in Story 002.
 var _generation_done: bool = false
+## tile → {target_type: int, ticks_remaining: int} for in-progress seed growth.
+var _growing_tiles: Dictionary = {}
+## Special resources this map supports (subset of FERTILITY_POOL). Set by generate().
+var _fertility: Array[StringName] = []
+## Hidden resource deposits (e.g. clay) keyed by tile → resource_id. Not rendered;
+## located via the player's Search action (find_nearest_hidden / reveal_hidden_clay).
+var _hidden_resources: Dictionary = {}
 
 
 func _ready() -> void:
 	_init_arrays()
+	TickSystem.ticks_advanced.connect(_on_ticks_advanced)
 
 
 func _init_arrays() -> void:
@@ -88,10 +117,31 @@ const _MIN_BERRY: int = 6
 const _MIN_GRASS: int = 6
 const _SMOOTH_SEED_OFFSET: int = 100000
 
+## --- Map fertility (special map resources) ---
+## Pool of special resources a map can support. A new map rolls FERTILITY_COUNT random
+## entries from this pool; the starting map is fixed via generate()'s fertility_override.
+const FERTILITY_POOL: Array[StringName] = [&"clay", &"wheat", &"wild"]
+## How many fertilities a freshly rolled (non-starting) map receives.
+const FERTILITY_COUNT: int = 3
+## The starting map's fixed fertility set (not rolled). Spec: clay, wheat, wild.
+const STARTING_FERTILITY: Array[StringName] = [&"clay", &"wheat", &"wild"]
+## RNG offset so the fertility roll never aligns with the terrain / smoothing seeds.
+const _FERTILITY_SEED_OFFSET: int = 200000
+## Number of hidden clay deposits placed on a clay-fertile map.
+const CLAY_DEPOSIT_COUNT: int = 6
+## Number of wheat-field tiles placed on a wheat-fertile map.
+const WHEAT_FIELD_COUNT: int = 6
+## Max Manhattan radius the Search action reports a clay distance for.
+const CLAY_SEARCH_MAX_RADIUS: int = 58
+const _HIDDEN_SEED_OFFSET: int = 300000
+const _WHEAT_SEED_OFFSET: int = 400000
+
 ## Generates terrain and resource layers via 5-step Perlin noise pipeline.
-## Deterministic: same seed always produces identical terrain and resource layers.
+## Deterministic: same seed always produces identical terrain, resources and fertility.
 ## Locks TerrainLayer on completion — assert fires on any subsequent call.
-func generate(world_seed: int) -> void:
+## fertility_override: pass a fixed fertility set (e.g. STARTING_FERTILITY) to skip the
+## random roll; an empty array rolls FERTILITY_COUNT entries from FERTILITY_POOL.
+func generate(world_seed: int, fertility_override: Array = []) -> void:
 	assert(not _generation_done, "generate() called after terrain was locked")
 
 	var terrain: Array
@@ -110,7 +160,125 @@ func generate(world_seed: int) -> void:
 		push_warning("Map generation forced-fix on attempt 5")
 		_force_fix_minimums()
 
+	_roll_fertility(world_seed, fertility_override)
+	if has_fertility(&"wheat"):
+		_populate_wheat_fields(world_seed)
+	if has_fertility(&"clay"):
+		_populate_hidden_clay(world_seed)
+
 	_generation_done = true
+
+
+## Converts a few EMPTY tiles to WHEAT and seeds them with wheat resources.
+## Deterministic via world_seed. Only called on wheat-fertile maps.
+func _populate_wheat_fields(world_seed: int) -> void:
+	var empties: Array[Vector2i] = _get_empty_tiles_in_terrain()
+	if empties.is_empty():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = world_seed + _WHEAT_SEED_OFFSET
+	_shuffle_tiles(empties, rng)
+	# Wheat fields are terrain only — no resource overlays at generation (matches how
+	# noise-generated tree/grass tiles carry no overlay anchors).
+	for i in range(mini(WHEAT_FIELD_COUNT, empties.size())):
+		_terrain[empties[i].x][empties[i].y] = TileType.WHEAT
+
+
+## Scatters hidden clay deposits across passable tiles. Deterministic via world_seed.
+## Deposits are not rendered — the player finds them with the Search action.
+func _populate_hidden_clay(world_seed: int) -> void:
+	var candidates: Array[Vector2i] = []
+	for x in range(GRID_SIZE):
+		for y in range(GRID_SIZE):
+			if _terrain[x][y] != TileType.IMPASSABLE:
+				candidates.append(Vector2i(x, y))
+	if candidates.is_empty():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = world_seed + _HIDDEN_SEED_OFFSET
+	_shuffle_tiles(candidates, rng)
+	for i in range(mini(CLAY_DEPOSIT_COUNT, candidates.size())):
+		_hidden_resources[candidates[i]] = &"clay"
+
+
+## In-place deterministic Fisher–Yates shuffle of a tile array.
+func _shuffle_tiles(tiles: Array[Vector2i], rng: RandomNumberGenerator) -> void:
+	for i in range(tiles.size() - 1, 0, -1):
+		var j: int = rng.randi_range(0, i)
+		var tmp: Vector2i = tiles[i]
+		tiles[i] = tiles[j]
+		tiles[j] = tmp
+
+
+## Populates _fertility. With a non-empty override the set is fixed (starting map);
+## otherwise FERTILITY_COUNT entries are drawn from FERTILITY_POOL via a deterministic
+## seed-driven Fisher–Yates shuffle (same seed → same fertility).
+func _roll_fertility(world_seed: int, override_set: Array) -> void:
+	_fertility.clear()
+	if not override_set.is_empty():
+		for id: Variant in override_set:
+			_fertility.append(StringName(id))
+		return
+	var pool: Array[StringName] = FERTILITY_POOL.duplicate()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = world_seed + _FERTILITY_SEED_OFFSET
+	for i in range(pool.size() - 1, 0, -1):
+		var j: int = rng.randi_range(0, i)
+		var tmp: StringName = pool[i]
+		pool[i] = pool[j]
+		pool[j] = tmp
+	for k in range(mini(FERTILITY_COUNT, pool.size())):
+		_fertility.append(pool[k])
+
+
+## Returns true if this map supports the given fertility resource (&"clay", &"wheat", &"wild").
+func has_fertility(resource_id: StringName) -> bool:
+	return _fertility.has(resource_id)
+
+
+## Returns a copy of this map's fertility set.
+func get_fertility() -> Array[StringName]:
+	return _fertility.duplicate()
+
+
+# --- Hidden resources (clay) + Search ----------------------------------------
+
+## Returns true if a hidden deposit of resource_id sits exactly on tile.
+func has_hidden_resource(tile: Vector2i, resource_id: StringName) -> bool:
+	return _hidden_resources.get(tile, &"") == resource_id
+
+
+## Returns the nearest hidden tile (by Manhattan distance) holding resource_id within
+## max_radius, or null when none is in range. Hidden deposits are few, so a linear scan suffices.
+func find_nearest_hidden(tile: Vector2i, resource_id: StringName, max_radius: int) -> Variant:
+	var best: Variant = null
+	var best_d: int = max_radius + 1
+	for h_tile: Vector2i in _hidden_resources:
+		if _hidden_resources[h_tile] != resource_id:
+			continue
+		var d: int = manhattan_dist(tile, h_tile)
+		if d < best_d:
+			best_d = d
+			best = h_tile
+	return best
+
+
+## Reveals a hidden clay deposit at tile, converting the terrain to a CLAY pit.
+## Requires the tile to be EMPTY with no resources — any existing resource must be
+## cleared first (spec). Returns true on success, false if blocked or no deposit here.
+func reveal_hidden_clay(tile: Vector2i) -> bool:
+	if not is_in_bounds(tile):
+		return false
+	if _hidden_resources.get(tile, &"") != &"clay":
+		return false
+	if _terrain[tile.x][tile.y] != TileType.EMPTY:
+		return false
+	if not _resources[tile.x][tile.y].is_empty():
+		return false
+	_hidden_resources.erase(tile)
+	_terrain[tile.x][tile.y] = TileType.CLAY
+	terrain_tile_changed.emit(tile)
+	return true
 
 
 ## Step 1: samples elevation and moisture Perlin noise for all 30×30 tiles.
@@ -516,10 +684,68 @@ func is_in_bounds(tile: Vector2i) -> bool:
 func clear_terrain_tile(tile: Vector2i) -> bool:
 	if not is_in_bounds(tile):
 		return false
+	_growing_tiles.erase(tile)
 	_terrain[tile.x][tile.y] = TileType.EMPTY
 	_resources[tile.x][tile.y] = []
 	terrain_tile_changed.emit(tile)
 	return true
+
+
+## Plants a seed on an EMPTY tile, beginning the growth countdown.
+## Returns false if the tile is out of bounds, not EMPTY, or already occupied.
+func plant_seed(tile: Vector2i, target_type: TileType) -> bool:
+	if not is_in_bounds(tile):
+		return false
+	if _terrain[tile.x][tile.y] != TileType.EMPTY:
+		return false
+	if _buildings[tile.x][tile.y] != null:
+		return false
+	if _growing_tiles.has(tile):
+		return false
+	var ticks: int = SEED_GROWTH_TICKS.get(target_type, 1440)
+	_growing_tiles[tile] = {"target_type": int(target_type), "ticks_remaining": ticks}
+	terrain_growing_started.emit(tile, int(target_type))
+	return true
+
+
+## Returns true if the tile currently has a seed growing on it.
+func is_tile_growing(tile: Vector2i) -> bool:
+	return _growing_tiles.has(tile)
+
+
+## Returns a shallow copy of the growing-tiles dictionary (tile → growth data).
+func get_growing_tiles() -> Dictionary:
+	return _growing_tiles.duplicate()
+
+
+## Growth completion fraction (0.0–1.0) for a growing tile, or 0.0 if not growing.
+func get_growth_progress(tile: Vector2i) -> float:
+	if not _growing_tiles.has(tile):
+		return 0.0
+	var data: Dictionary = _growing_tiles[tile]
+	var total: int = SEED_GROWTH_TICKS.get(data.target_type as TileType, 1440)
+	if total <= 0:
+		return 1.0
+	return clampf(1.0 - float(data.ticks_remaining) / float(total), 0.0, 1.0)
+
+
+func _on_ticks_advanced(delta: int) -> void:
+	if _growing_tiles.is_empty():
+		return
+	var to_convert: Array[Vector2i] = []
+	for tile: Vector2i in _growing_tiles:
+		_growing_tiles[tile].ticks_remaining -= delta
+		if _growing_tiles[tile].ticks_remaining <= 0:
+			to_convert.append(tile)
+	for tile: Vector2i in to_convert:
+		var target_type: TileType = _growing_tiles[tile].target_type as TileType
+		_growing_tiles.erase(tile)
+		_terrain[tile.x][tile.y] = target_type
+		if TERRAIN_RESOURCE_INIT.has(target_type):
+			var def: Dictionary = TERRAIN_RESOURCE_INIT[target_type]
+			for _i: int in range(def[&"count"]):
+				add_resource_to_tile(tile, def[&"id"], def[&"clearable"])
+		terrain_tile_changed.emit(tile)
 
 
 ## Clears the resource at tile if one is present. Returns 1 if cleared, 0 if none.
@@ -696,7 +922,26 @@ func serialize() -> Dictionary:
 				for rd: ResourceTileData in tile_res:
 					items.append({"id": str(rd.resource_id), "clearable": rd.clearable})
 				resources_sparse.append({"x": x, "y": y, "items": items})
-	return {"terrain": terrain_flat, "resources": resources_sparse}
+	var growing_arr: Array = []
+	for tile: Vector2i in _growing_tiles:
+		growing_arr.append({
+			"tile_x": tile.x, "tile_y": tile.y,
+			"target_type": _growing_tiles[tile].target_type,
+			"ticks_remaining": _growing_tiles[tile].ticks_remaining,
+		})
+	var fertility_arr: Array[String] = []
+	for f: StringName in _fertility:
+		fertility_arr.append(str(f))
+	var hidden_arr: Array = []
+	for h_tile: Vector2i in _hidden_resources:
+		hidden_arr.append({"x": h_tile.x, "y": h_tile.y, "id": str(_hidden_resources[h_tile])})
+	return {
+		"terrain": terrain_flat,
+		"resources": resources_sparse,
+		"growing_tiles": growing_arr,
+		"fertility": fertility_arr,
+		"hidden": hidden_arr,
+	}
 
 
 ## Restores terrain and resource layers from a serialized Dictionary.
@@ -718,4 +963,22 @@ func deserialize(data: Dictionary) -> void:
 		for item: Dictionary in entry.get("items", []):
 			tile_res.append(ResourceTileData.new(StringName(item.get("id", "")), item.get("clearable", true)))
 		_resources[x][y] = tile_res
+	_growing_tiles.clear()
+	for entry: Dictionary in data.get("growing_tiles", []):
+		var gtile := Vector2i(entry.get("tile_x", 0), entry.get("tile_y", 0))
+		if not is_in_bounds(gtile):
+			continue
+		_growing_tiles[gtile] = {
+			"target_type": entry.get("target_type", 0),
+			"ticks_remaining": entry.get("ticks_remaining", 0),
+		}
+		terrain_growing_started.emit(gtile, entry.get("target_type", 0))
+	_fertility.clear()
+	for f: Variant in data.get("fertility", []):
+		_fertility.append(StringName(f))
+	_hidden_resources.clear()
+	for entry: Dictionary in data.get("hidden", []):
+		var h_tile := Vector2i(entry.get("x", -1), entry.get("y", -1))
+		if is_in_bounds(h_tile):
+			_hidden_resources[h_tile] = StringName(entry.get("id", ""))
 	_generation_done = true

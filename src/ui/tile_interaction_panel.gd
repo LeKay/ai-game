@@ -28,6 +28,16 @@ var _window: DraggableWindow
 
 var _current_action_type: int = -1
 var _current_clear_action_type: int = -1
+var _current_tile: Vector2i = Vector2i(-1, -1)
+
+## Dynamically populated plant section (separator + buttons), shown on EMPTY tiles.
+var _plant_separator: HSeparator = null
+var _plant_container: VBoxContainer = null
+
+## Search section (separator + button + result), shown on harvest/forage tiles.
+var _search_separator: HSeparator = null
+var _search_button: Button = null
+var _search_result_label: Label = null
 
 
 func _ready() -> void:
@@ -36,6 +46,7 @@ func _ready() -> void:
 	_click_guard.gui_input.connect(_on_click_guard_input)
 	_harvest_button.pressed.connect(_on_harvest_pressed)
 	_clear_button.pressed.connect(_on_clear_pressed)
+	_build_plant_section()
 
 
 ## Move the .tscn panel body into a DraggableWindow so it gains the shared
@@ -60,11 +71,12 @@ func _wrap_in_window() -> void:
 	old_panel.queue_free()
 
 
-## Show or update the panel at screen_pos for action_type.
+## Show or update the panel at screen_pos for action_type on tile.
 ## If already visible, updates in place without a duplicate context push (AC7).
-func show_at(screen_pos: Vector2, action_type: int) -> void:
+func show_at(screen_pos: Vector2, action_type: int, tile: Vector2i) -> void:
 	_current_action_type = action_type
 	_current_clear_action_type = _harvest_to_clear_action(action_type)
+	_current_tile = tile
 	_populate(action_type)
 	_position_at(screen_pos)
 	if not visible:
@@ -79,10 +91,12 @@ func close() -> void:
 	visible = false
 	_current_action_type = -1
 	_current_clear_action_type = -1
+	_current_tile = Vector2i(-1, -1)
 
 
 func _populate(action_type: int) -> void:
 	_window.title = _action_type_to_label(action_type)
+	_output_label.visible = true  # reset; _populate_construct may hide it
 	var pc := get_tree().get_first_node_in_group(&"player_character") as PlayerCharacter
 	if pc == null:
 		_harvest_button.disabled = true
@@ -92,6 +106,17 @@ func _populate(action_type: int) -> void:
 		_tick_cost_label.text = ""
 		_output_label.text = ""
 		_set_clear_section_visible(false)
+		_plant_separator.visible = false
+		_plant_container.visible = false
+		_set_search_section_visible(false)
+		return
+
+	if action_type == PlayerCharacter.ManualActionType.CONSTRUCT_BUILDING:
+		_populate_construct(pc)
+		return
+
+	if action_type == PlayerCharacter.ManualActionType.CONSTRUCT_PATH:
+		_populate_construct_path(pc)
 		return
 
 	var preview: Dictionary = pc.get_cost_preview(action_type)
@@ -116,6 +141,50 @@ func _populate(action_type: int) -> void:
 		_harvest_button.text = "Harvest -- %d %s" % [qty, resource_display]
 
 	_populate_clear_section(pc)
+	_populate_plant_section(pc)
+	_populate_search_section(pc)
+
+
+func _populate_construct(pc: PlayerCharacter) -> void:
+	var preview: Dictionary = pc.get_cost_preview(PlayerCharacter.ManualActionType.CONSTRUCT_BUILDING, _current_tile)
+	var blocked: bool = preview.get("blocked", true)
+	_harvest_button.disabled = blocked
+	_block_reason_label.visible = blocked
+	_output_label.visible = false
+	_set_clear_section_visible(false)
+	_plant_separator.visible = false
+	_plant_container.visible = false
+	_set_search_section_visible(false)
+	if blocked:
+		_block_reason_label.text = preview.get("reason", "")
+		_energy_cost_label.text = ""
+		_tick_cost_label.text = ""
+		_harvest_button.text = "Construct"
+	else:
+		_energy_cost_label.text = "⚡%d" % preview.get("energy_cost", 0)
+		_tick_cost_label.text = "⏱️%d" % preview.get("tick_cost", 0)
+		_harvest_button.text = "Construct"
+
+
+func _populate_construct_path(pc: PlayerCharacter) -> void:
+	var preview: Dictionary = pc.get_cost_preview(PlayerCharacter.ManualActionType.CONSTRUCT_PATH, _current_tile)
+	var blocked: bool = preview.get("blocked", true)
+	_harvest_button.disabled = blocked
+	_block_reason_label.visible = blocked
+	_output_label.visible = false
+	_set_clear_section_visible(false)
+	_plant_separator.visible = false
+	_plant_container.visible = false
+	_set_search_section_visible(false)
+	if blocked:
+		_block_reason_label.text = preview.get("reason", "")
+		_energy_cost_label.text = ""
+		_tick_cost_label.text = ""
+		_harvest_button.text = "Build Path"
+	else:
+		_energy_cost_label.text = "⚡%d" % preview.get("energy_cost", 0)
+		_tick_cost_label.text = "⏱️%d" % preview.get("tick_cost", 0)
+		_harvest_button.text = "Build Path"
 
 
 func _position_at(screen_pos: Vector2) -> void:
@@ -141,7 +210,7 @@ func _on_harvest_pressed() -> void:
 		return
 	var pc := get_tree().get_first_node_in_group(&"player_character") as PlayerCharacter
 	if pc != null:
-		pc.try_start_action(_current_action_type)
+		pc.try_start_action(_current_action_type, _current_tile)
 	close()
 
 
@@ -150,7 +219,7 @@ func _on_clear_pressed() -> void:
 		return
 	var pc := get_tree().get_first_node_in_group(&"player_character") as PlayerCharacter
 	if pc != null:
-		pc.try_start_action(_current_clear_action_type)
+		pc.try_start_action(_current_clear_action_type, _current_tile)
 	close()
 
 
@@ -179,6 +248,109 @@ func _populate_clear_section(pc: PlayerCharacter) -> void:
 		_clear_button.text = "Clear Tile -- %d %s" % [qty, resource_display]
 
 
+func _build_plant_section() -> void:
+	_plant_separator = HSeparator.new()
+	_plant_separator.visible = false
+	_vbox.add_child(_plant_separator)
+	_plant_container = VBoxContainer.new()
+	_plant_container.visible = false
+	_vbox.add_child(_plant_container)
+	_search_separator = HSeparator.new()
+	_search_separator.visible = false
+	_vbox.add_child(_search_separator)
+	_search_button = Button.new()
+	_search_button.text = "Search (⚡%d)" % PlayerCharacter.SURVEY_ENERGY
+	_search_button.visible = false
+	_search_button.pressed.connect(_on_search_pressed)
+	_vbox.add_child(_search_button)
+	_search_result_label = Label.new()
+	_search_result_label.visible = false
+	_search_result_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_vbox.add_child(_search_result_label)
+
+
+func _populate_plant_section(pc: PlayerCharacter) -> void:
+	if _current_action_type != PlayerCharacter.ManualActionType.FORAGE:
+		_plant_separator.visible = false
+		_plant_container.visible = false
+		return
+	var world_grid := get_parent().get_node_or_null("WorldGrid") as WorldGrid
+	if world_grid != null and world_grid.is_tile_growing(_current_tile):
+		_plant_separator.visible = false
+		_plant_container.visible = false
+		return
+	for child in _plant_container.get_children():
+		child.queue_free()
+	const SEEDS: Array = [
+		[&"tree_seed",  "Plant Tree Seed"],
+		[&"grass_seed", "Plant Grass Seed"],
+		[&"berry_seed", "Plant Berry Seed"],
+		[&"wheat_seed", "Plant Wheat Seed"],
+	]
+	var any_shown: bool = false
+	for entry: Array in SEEDS:
+		var seed_id: StringName = entry[0]
+		# Wheat only grows on a wheat-fertile map — hide the option elsewhere.
+		if seed_id == &"wheat_seed" and (world_grid == null or not world_grid.has_fertility(&"wheat")):
+			continue
+		var qty: int = InventorySystem.get_global_quantity(seed_id)
+		if qty <= 0:
+			continue
+		var btn := Button.new()
+		btn.text = "%s (%d)" % [entry[1], qty]
+		var captured_seed: StringName = seed_id
+		var captured_tile: Vector2i = _current_tile
+		btn.pressed.connect(func() -> void:
+			pc.try_start_plant_seed(captured_tile, captured_seed)
+			close()
+		)
+		_plant_container.add_child(btn)
+		any_shown = true
+	_plant_separator.visible = any_shown
+	_plant_container.visible = any_shown
+
+
+## Shows the Search section for harvest/forage tiles and refreshes the button enabled state.
+func _populate_search_section(pc: PlayerCharacter) -> void:
+	_search_separator.visible = true
+	_search_button.visible = true
+	_search_button.disabled = pc.get_current_energy() < PlayerCharacter.SURVEY_ENERGY
+	_search_result_label.visible = false
+	_search_result_label.text = ""
+
+
+func _set_search_section_visible(show: bool) -> void:
+	_search_separator.visible = show
+	_search_button.visible = show
+	if not show:
+		_search_result_label.visible = false
+
+
+func _on_search_pressed() -> void:
+	if _current_tile == Vector2i(-1, -1):
+		return
+	var pc := get_tree().get_first_node_in_group(&"player_character") as PlayerCharacter
+	if pc == null:
+		return
+	var result: Dictionary = pc.survey_tile(_current_tile)
+	_search_result_label.visible = true
+	if result.get("blocked", false):
+		_search_result_label.text = result.get("reason", "Cannot search")
+		return
+	var parts: Array[String] = []
+	var clay_dist: int = result.get("clay_distance", -1)
+	if result.get("clay_revealed", false):
+		parts.append("Clay pit exposed here!")
+	elif clay_dist == 0 and result.get("reason", "") != "":
+		parts.append(result.get("reason", ""))
+	elif clay_dist > 0:
+		parts.append("Nearest clay: %d tiles away" % clay_dist)
+	else:
+		parts.append("No clay deposits found")
+	_search_result_label.text = "\n".join(parts)
+	_search_button.disabled = pc.get_current_energy() < PlayerCharacter.SURVEY_ENERGY
+
+
 func _set_clear_section_visible(show: bool) -> void:
 	_clear_separator.visible = show
 	_clear_energy_cost_label.get_parent().visible = show
@@ -190,10 +362,13 @@ func _set_clear_section_visible(show: bool) -> void:
 
 func _harvest_to_clear_action(action_type: int) -> int:
 	match action_type:
-		PlayerCharacter.ManualActionType.CHOP_TREE:     return PlayerCharacter.ManualActionType.CLEAR_TREE
-		PlayerCharacter.ManualActionType.MINE_STONE:    return PlayerCharacter.ManualActionType.CLEAR_STONE
-		PlayerCharacter.ManualActionType.PICK_BERRIES:  return PlayerCharacter.ManualActionType.CLEAR_BERRY
-		PlayerCharacter.ManualActionType.HARVEST_FIBER: return PlayerCharacter.ManualActionType.CLEAR_GRASS
+		PlayerCharacter.ManualActionType.CHOP_TREE:          return PlayerCharacter.ManualActionType.CLEAR_TREE
+		PlayerCharacter.ManualActionType.MINE_STONE:         return PlayerCharacter.ManualActionType.CLEAR_STONE
+		PlayerCharacter.ManualActionType.PICK_BERRIES:       return PlayerCharacter.ManualActionType.CLEAR_BERRY
+		PlayerCharacter.ManualActionType.HARVEST_FIBER:      return PlayerCharacter.ManualActionType.CLEAR_GRASS
+		PlayerCharacter.ManualActionType.HARVEST_WHEAT:      return PlayerCharacter.ManualActionType.CLEAR_WHEAT
+		PlayerCharacter.ManualActionType.CONSTRUCT_BUILDING: return -1
+		PlayerCharacter.ManualActionType.CONSTRUCT_PATH:     return -1
 		_: return -1
 
 
@@ -207,12 +382,15 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _action_type_to_label(action_type: int) -> String:
 	match action_type:
-		PlayerCharacter.ManualActionType.CHOP_TREE:     return "Wood"
-		PlayerCharacter.ManualActionType.MINE_STONE:    return "Stone"
-		PlayerCharacter.ManualActionType.PICK_BERRIES:  return "Berry"
-		PlayerCharacter.ManualActionType.HARVEST_FIBER: return "Fiber"
-		PlayerCharacter.ManualActionType.FORAGE:        return "Forage"
-		_:                                              return "Unknown"
+		PlayerCharacter.ManualActionType.CHOP_TREE:          return "Wood"
+		PlayerCharacter.ManualActionType.MINE_STONE:         return "Stone"
+		PlayerCharacter.ManualActionType.PICK_BERRIES:       return "Berry"
+		PlayerCharacter.ManualActionType.HARVEST_FIBER:      return "Fiber"
+		PlayerCharacter.ManualActionType.HARVEST_WHEAT:      return "Wheat"
+		PlayerCharacter.ManualActionType.FORAGE:             return "Forage"
+		PlayerCharacter.ManualActionType.CONSTRUCT_BUILDING: return "Construct"
+		PlayerCharacter.ManualActionType.CONSTRUCT_PATH:     return "Build Path"
+		_:                                                   return "Unknown"
 
 
 

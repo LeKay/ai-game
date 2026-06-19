@@ -8,15 +8,24 @@ extends Node
 
 # ---- Enums ------------------------------------------------------------------
 
+## Costs and build times live in BUILD_COST / BUILD_TIME below — keep them there
+## (single source of truth), not in these comments.
 enum BuildingType {
-	COLLECTION_POINT,    ## 0 cost, instant, 50 slots — starter gathering depot
-	STORAGE_BUILDING,    ## 8 Wood + 2 Stone, 120 ticks, 150 slots
-	RESIDENTIAL_HOUSE,   ## 10 Wood + 3 Stone, 150 ticks
-	LUMBER_CAMP,         ## 15 Wood + 3 Stone, 200 ticks
-	ROAD,                ## 0 cost, instant, passable infrastructure — movement cost 0.5
-	GATHERING_HUT,       ## 5 Wood + 2 Stone, 80 ticks — harvests Berry/Fiber from adjacent terrain
-	STONE_MASON,         ## 10 Wood + 5 Stone, 200 ticks — produces Stone from adjacent STONE terrain
-	TOOL_WORKSHOP,       ## 10 Wood + 5 Stone, 250 ticks — crafts Tools from Wood + Stone + Fiber
+	COLLECTION_POINT,    ## free, instant, 50 slots — starter gathering depot
+	STORAGE_BUILDING,    ## 150 slots
+	RESIDENTIAL_HOUSE,   ## spawns up to MAX_HOUSE_NPCS
+	LUMBER_CAMP,         ## produces Wood; requires adjacent TREE terrain
+	ROAD,                ## free, instant, passable infrastructure — movement cost 0.5
+	GATHERING_HUT,       ## harvests Berry/Fiber from adjacent terrain
+	STONE_MASON,         ## produces Stone; requires adjacent STONE terrain
+	TOOL_WORKSHOP,       ## crafts Axe / Pickaxe / Spindle from Wood + Stone + Fiber
+	WEAVER,              ## processes Fiber → Cloth; no terrain requirement
+	TAILOR,              ## processes Cloth → Clothing; no terrain requirement
+	SAWMILL,             ## processes Wood → Plank; no terrain requirement
+	HUNTING_LODGE,       ## produces Game Meat + Hide; must border a forest containing wild
+	FARM,                ## harvests Wheat; efficiency scales with adjacent WHEAT terrain
+	MILL,                ## processes Wheat → Flour; built-in millstone
+	BAKERY,              ## processes Flour → Bread; built-in oven
 }
 
 ## Building operational status codes — exposed for cross-system API use (e.g. LogisticsSystem).
@@ -73,6 +82,8 @@ class BuildingInstance:
 	var production_cycle_duration: int = 0
 	## True while a production cycle is running.
 	var cycle_running: bool = false
+	## Completed-cycle counter (Perk System #8 Sparsam: every 4th cycle skips input). Transient.
+	var cycle_count: int = 0
 	## Holds completed output waiting for carrier pickup.
 	var buffered_output: Dictionary[StringName, int] = {}
 	## ID of the NPC assigned to this building (empty = no NPC).
@@ -98,26 +109,35 @@ class BuildingInstance:
 	## Computed output for GATHERING_HUT based on adjacent terrain types.
 	## Keys are resource IDs; values are quantities per cycle.
 	var gathering_output: Dictionary[StringName, int] = {}
+	## Index into BuildingRegistry.RECIPES[type] for the currently active recipe.
+	var active_recipe_index: int = 0
+	## True once the player has explicitly picked a recipe for this building.
+	## While false, the detail panel opens straight into the recipe selection view.
+	var recipe_selected: bool = false
+	## Per-resource delivery limits for storage buildings (resource_id → max quantity).
+	## 0 or absent = no limit. Transport routes will not deliver past the limit.
+	var storage_limits: Dictionary[StringName, int] = {}
+	## Per-resource minimum reserve for storage buildings (resource_id → min quantity to keep).
+	## Transport routes will not take items below this threshold. -1 / absent = no minimum.
+	var storage_min_limits: Dictionary[StringName, int] = {}
+	## Upgrade IDs currently installed on this building (e.g. &"crafting_bench").
+	var active_upgrades: Array[StringName] = []
 
-	## Recomputes efficiency.
-	## Buildings with adjacency requirements use F6 (tile_count × 0.25), base 0.0.
-	## All other buildings use F2 (1.0 + worker delta + upgrade_bonus).
+	## Returns true if the named upgrade is currently installed on this building.
+	func has_upgrade(upgrade_id: StringName) -> bool:
+		return active_upgrades.has(upgrade_id)
+
+	## Recomputes efficiency (additive model, 2026-06-18):
+	##   efficiency = base 25% + resource_tiles × 5% + worker efficiency (+ upgrade_bonus),
+	##   clamped to [0, BUILDING_EFFICIENCY_MAX]. Resource tiles only count for buildings with an
+	##   adjacency requirement; all others contribute 0 there. Unstaffed → worker term is 0.
 	func recalculate_efficiency(assigned_workers: Array) -> void:
-		if ADJACENCY_REQUIREMENTS.has(type):
-			# Balancing 2026-06-11: combine layout AND worker food (adjacency × worker eff),
-			# so feeding speeds up gatherers too (previously food had no effect on them).
-			var adj: float = EfficiencyFormulas.calculate_adjacency_efficiency(adjacency_tile_count)
-			var worker_eff: float = 1.0
-			if not assigned_workers.is_empty():
-				worker_eff = assigned_workers[0].efficiency
-			efficiency = clampf(adj * worker_eff,
-					EfficiencyFormulas.EFFICIENCY_MIN, EfficiencyFormulas.BUILDING_EFFICIENCY_MAX)
-			return
-		var worker_efficiencies: Array[float] = []
+		var worker_eff: float = 0.0
 		for worker in assigned_workers:
-			worker_efficiencies.append(worker.efficiency)
+			worker_eff += worker.efficiency
+		var resource_tiles: int = adjacency_tile_count if ADJACENCY_REQUIREMENTS.has(type) else 0
 		efficiency = EfficiencyFormulas.calculate_building_efficiency(
-				worker_efficiencies, upgrade_bonus)
+				resource_tiles, worker_eff, upgrade_bonus)
 
 	func _init(p_id: String, p_type: int, p_tile: Vector2i) -> void:
 		building_id = p_id
@@ -140,20 +160,73 @@ const BUILD_COST: Dictionary = {
 	BuildingType.GATHERING_HUT:     {&"wood": 5, &"stone": 2},
 	BuildingType.STONE_MASON:       {&"wood": 10, &"stone": 5},
 	BuildingType.TOOL_WORKSHOP:     {&"wood": 10, &"stone": 5},
+	BuildingType.WEAVER:            {&"wood": 8,  &"stone": 3},
+	BuildingType.TAILOR:            {&"wood": 10, &"stone": 5},
+	BuildingType.SAWMILL:           {&"wood": 8,  &"stone": 3},
+	BuildingType.HUNTING_LODGE:     {&"wood": 12, &"stone": 3},
+	BuildingType.FARM:              {&"wood": 8, &"stone": 2},
+	BuildingType.MILL:              {&"wood": 10, &"stone": 5},
+	BuildingType.BAKERY:            {&"wood": 10, &"stone": 5},
 }
+
+## Canonical list of player-buildable types, in build-menu display order.
+## Single source of truth for the build menu (see inventory_screen._building_list()).
+## Excludes COLLECTION_POINT (starter depot, auto-placed) and ROAD (placed via the Path tool).
+## The future Progression Tree gates this list with a single is_building_unlocked() guard.
+const BUILDABLE_TYPES: Array[int] = [
+	BuildingType.STORAGE_BUILDING,
+	BuildingType.RESIDENTIAL_HOUSE,
+	BuildingType.LUMBER_CAMP,
+	BuildingType.STONE_MASON,
+	BuildingType.GATHERING_HUT,
+	BuildingType.TOOL_WORKSHOP,
+	BuildingType.WEAVER,
+	BuildingType.TAILOR,
+	BuildingType.SAWMILL,
+	BuildingType.HUNTING_LODGE,
+	BuildingType.FARM,
+	BuildingType.MILL,
+	BuildingType.BAKERY,
+]
 
 ## Build times rescaled for pacing (balancing 2026-06-11): anchor 1 tick ≈ 1 minute,
 ## 1440 ticks/day. Construction now takes hours-to-days (was seconds) so the in-game day
 ## is a real planning unit. Hut ≈ 0.4 day, house/camp/mason ≈ 0.8–1.1 days, workshop ≈ 2 days.
 const BUILD_TIME: Dictionary = {
 	BuildingType.COLLECTION_POINT:  0,
-	BuildingType.STORAGE_BUILDING:  960,
-	BuildingType.RESIDENTIAL_HOUSE: 1200,
-	BuildingType.LUMBER_CAMP:       1600,
+	BuildingType.STORAGE_BUILDING:  480,
+	BuildingType.RESIDENTIAL_HOUSE: 600,
+	BuildingType.LUMBER_CAMP:       800,
 	BuildingType.ROAD:              0,
-	BuildingType.GATHERING_HUT:     640,
-	BuildingType.STONE_MASON:       1600,
-	BuildingType.TOOL_WORKSHOP:     3000,
+	BuildingType.GATHERING_HUT:     320,
+	BuildingType.STONE_MASON:       800,
+	BuildingType.TOOL_WORKSHOP:     1500,
+	BuildingType.WEAVER:            600,
+	BuildingType.TAILOR:            800,
+	BuildingType.SAWMILL:           600,
+	BuildingType.HUNTING_LODGE:     700,
+	BuildingType.FARM:              480,
+	BuildingType.MILL:              800,
+	BuildingType.BAKERY:            900,
+}
+
+## Energy cost the player spends to manually construct a building (ManualActionType.CONSTRUCT_BUILDING).
+const BUILD_ENERGY: Dictionary = {
+	BuildingType.COLLECTION_POINT:  0,
+	BuildingType.STORAGE_BUILDING:  20,
+	BuildingType.RESIDENTIAL_HOUSE: 25,
+	BuildingType.LUMBER_CAMP:       30,
+	BuildingType.ROAD:              0,
+	BuildingType.GATHERING_HUT:     15,
+	BuildingType.STONE_MASON:       30,
+	BuildingType.TOOL_WORKSHOP:     40,
+	BuildingType.WEAVER:            22,
+	BuildingType.TAILOR:            30,
+	BuildingType.SAWMILL:           22,
+	BuildingType.HUNTING_LODGE:     28,
+	BuildingType.FARM:              15,
+	BuildingType.MILL:              20,
+	BuildingType.BAKERY:            22,
 }
 
 ## Movement cost for buildings that NPCs and carriers can traverse.
@@ -167,6 +240,19 @@ const STORAGE_CAPACITY: Dictionary = {
 	BuildingType.STORAGE_BUILDING: 150,
 }
 
+## Upgrade definitions per building type.
+## Each entry: { &"id", &"display_name", &"cost": {res_id: qty}, &"tick_cost": int }
+const BUILDING_UPGRADES: Dictionary = {
+	BuildingType.STORAGE_BUILDING: [
+		{
+			&"id":           &"crafting_bench",
+			&"display_name": "Crafting Bench",
+			&"cost":         {&"wood": 10, &"stone": 5},
+			&"tick_cost":    200,
+		},
+	],
+}
+
 ## Maps BuildingType → texture resource path. Used by placement ghost and building visuals.
 const BUILDING_TEXTURES: Dictionary = {
 	BuildingType.COLLECTION_POINT:  "res://assets/art/tiles/bld_tile_collection_point.png",
@@ -177,13 +263,263 @@ const BUILDING_TEXTURES: Dictionary = {
 	BuildingType.GATHERING_HUT:     "res://assets/art/tiles/bld_tile_gathering_hut.png",
 	BuildingType.STONE_MASON:       "res://assets/art/tiles/bld_tile_steinmetz.png",
 	BuildingType.TOOL_WORKSHOP:     "res://assets/art/tiles/bld_tile_tool_workshop.png",
+	BuildingType.WEAVER:            "res://assets/art/tiles/bld_tile_weaver.png",
+	BuildingType.TAILOR:            "res://assets/art/tiles/bld_tile_tailor.png",
+	BuildingType.SAWMILL:           "res://assets/art/tiles/bld_tile_sawmill.png",
+	BuildingType.HUNTING_LODGE:     "res://assets/art/tiles/bld_tile_hunting_lodge.png",
+	BuildingType.FARM:              "res://assets/art/tiles/bld_tile_farm.png",
+	BuildingType.MILL:              "res://assets/art/tiles/bld_tile_mill.png",
+	BuildingType.BAKERY:            "res://assets/art/tiles/bld_tile_bakery.png",
 }
 
-## Resource IDs accepted as manual input for each production building type.
-const INPUT_RESOURCES: Dictionary = {
-	BuildingType.LUMBER_CAMP:    [&"tool"],
-	BuildingType.STONE_MASON:    [&"tool"],
-	BuildingType.TOOL_WORKSHOP:  [&"wood", &"stone", &"fiber"],
+## Maps BuildingType → the job/profession label of a worker employed there.
+## Non-production types (storage, road, house, collection point) have no worker and are absent;
+## callers fall back to a generic "Worker" for any type not listed here.
+const BUILDING_JOB_NAMES: Dictionary = {
+	BuildingType.LUMBER_CAMP:   "Lumberjack",
+	BuildingType.GATHERING_HUT: "Gatherer",
+	BuildingType.STONE_MASON:   "Mason",
+	BuildingType.TOOL_WORKSHOP: "Toolsmith",
+	BuildingType.WEAVER:        "Weaver",
+	BuildingType.TAILOR:        "Tailor",
+	BuildingType.SAWMILL:       "Sawyer",
+	BuildingType.HUNTING_LODGE: "Hunter",
+	BuildingType.FARM:          "Farmer",
+	BuildingType.MILL:          "Miller",
+	BuildingType.BAKERY:        "Baker",
+}
+
+## Multi-recipe table: BuildingType → Array of recipe dicts (index 0 = default recipe).
+## Use is_production_building() to check membership.
+const RECIPES: Dictionary = {
+	BuildingType.LUMBER_CAMP: [
+		{
+			"id": &"with_tool",
+			"label": "With Tool",
+			"inputs": [{"resource_id": &"axe", "quantity": 1}],
+			"output": {&"wood": 5},
+			"output_capacity": 20,
+			"input_capacity": 5,
+			"base_cycle_ticks": 250,
+			"npc_required": true,
+		},
+		{
+			"id": &"bare_hands",
+			"label": "Bare Hands (slow)",
+			"inputs": [],
+			"output": {&"wood": 2},
+			"output_capacity": 20,
+			"input_capacity": 0,
+			"base_cycle_ticks": 750,
+			"npc_required": true,
+		},
+	],
+	BuildingType.STONE_MASON: [
+		{
+			"id": &"with_tool",
+			"label": "With Tool",
+			"inputs": [{"resource_id": &"pickaxe", "quantity": 1}],
+			"output": {&"stone": 5},
+			"output_capacity": 20,
+			"input_capacity": 5,
+			"base_cycle_ticks": 250,
+			"npc_required": true,
+		},
+		{
+			"id": &"bare_hands",
+			"label": "Bare Hands (slow)",
+			"inputs": [],
+			"output": {&"stone": 2},
+			"output_capacity": 20,
+			"input_capacity": 0,
+			"base_cycle_ticks": 750,
+			"npc_required": true,
+		},
+	],
+	BuildingType.GATHERING_HUT: [
+		{
+			"id": &"gather_berry",
+			"label": "Gather Berries",
+			"inputs": [],
+			"output": {&"berry": 4},
+			"output_capacity": 20,
+			"input_capacity": 0,
+			"base_cycle_ticks": 250,
+			"npc_required": true,
+		},
+		{
+			"id": &"gather_fiber",
+			"label": "Gather Fiber",
+			"inputs": [],
+			"output": {&"fiber": 2},
+			"output_capacity": 20,
+			"input_capacity": 0,
+			"base_cycle_ticks": 250,
+			"npc_required": true,
+		},
+	],
+	BuildingType.TOOL_WORKSHOP: [
+		{
+			"id": &"craft_axe",
+			"label": "Craft Axe",
+			"inputs": [
+				{"resource_id": &"wood",  "quantity": 3},
+				{"resource_id": &"stone", "quantity": 2},
+			],
+			"output": {&"axe": 1},
+			"output_capacity": 10,
+			"input_capacity": 10,
+			"base_cycle_ticks": 375,
+			"npc_required": true,
+		},
+		{
+			"id": &"craft_pickaxe",
+			"label": "Craft Pickaxe",
+			"inputs": [
+				{"resource_id": &"stone", "quantity": 3},
+				{"resource_id": &"wood",  "quantity": 1},
+			],
+			"output": {&"pickaxe": 1},
+			"output_capacity": 10,
+			"input_capacity": 10,
+			"base_cycle_ticks": 375,
+			"npc_required": true,
+		},
+		{
+			"id": &"craft_spindle",
+			"label": "Craft Spindle",
+			"inputs": [
+				{"resource_id": &"wood",  "quantity": 2},
+				{"resource_id": &"fiber", "quantity": 2},
+			],
+			"output": {&"spindle": 1},
+			"output_capacity": 10,
+			"input_capacity": 10,
+			"base_cycle_ticks": 375,
+			"npc_required": true,
+		},
+	],
+	BuildingType.WEAVER: [
+		{
+			"id": &"with_tool",
+			"label": "With Tool",
+			"inputs": [
+				{"resource_id": &"fiber",   "quantity": 3},
+				{"resource_id": &"spindle", "quantity": 1},
+			],
+			"output": {&"cloth": 2},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 250,
+			"npc_required": true,
+		},
+		{
+			"id": &"bare_hands",
+			"label": "Bare Hands (slow)",
+			"inputs": [
+				{"resource_id": &"fiber", "quantity": 3},
+			],
+			"output": {&"cloth": 1},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 750,
+			"npc_required": true,
+		},
+	],
+	BuildingType.TAILOR: [
+		{
+			"id": &"with_tool",
+			"label": "With Tool",
+			"inputs": [
+				{"resource_id": &"cloth",   "quantity": 2},
+				{"resource_id": &"spindle", "quantity": 1},
+			],
+			"output": {&"clothing": 2},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 300,
+			"npc_required": true,
+		},
+		{
+			"id": &"bare_hands",
+			"label": "Bare Hands (slow)",
+			"inputs": [
+				{"resource_id": &"cloth", "quantity": 2},
+			],
+			"output": {&"clothing": 1},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 900,
+			"npc_required": true,
+		},
+	],
+	BuildingType.SAWMILL: [
+		{
+			"id": &"saw_planks",
+			"label": "Saw Planks",
+			"inputs": [
+				{"resource_id": &"wood", "quantity": 2},
+				{"resource_id": &"axe",  "quantity": 1},
+			],
+			"output": {&"plank": 3},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 250,
+			"npc_required": true,
+		},
+	],
+	BuildingType.HUNTING_LODGE: [
+		{
+			"id": &"hunt",
+			"label": "Hunt",
+			"inputs": [],
+			"output": {&"meat": 2, &"hide": 1},
+			"output_capacity": 20,
+			"input_capacity": 0,
+			"base_cycle_ticks": 300,
+			"npc_required": true,
+		},
+	],
+	BuildingType.FARM: [
+		{
+			"id": &"harvest_wheat",
+			"label": "Harvest Wheat",
+			"inputs": [],
+			"output": {&"wheat": 5},
+			"output_capacity": 20,
+			"input_capacity": 0,
+			"base_cycle_ticks": 250,
+			"npc_required": true,
+		},
+	],
+	BuildingType.MILL: [
+		{
+			"id": &"grind",
+			"label": "Grind Flour",
+			"inputs": [
+				{"resource_id": &"wheat", "quantity": 2},
+			],
+			"output": {&"flour": 3},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 250,
+			"npc_required": true,
+		},
+	],
+	BuildingType.BAKERY: [
+		{
+			"id": &"bake",
+			"label": "Bake Bread",
+			"inputs": [
+				{"resource_id": &"flour", "quantity": 2},
+			],
+			"output": {&"bread": 4},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 300,
+			"npc_required": true,
+		},
+	],
 }
 
 ## Terrain types required in at least one cardinal neighbor for a building to be placeable.
@@ -192,20 +528,29 @@ const ADJACENCY_REQUIREMENTS: Dictionary = {
 	BuildingType.LUMBER_CAMP:    [WorldGrid.TileType.TREE],
 	BuildingType.GATHERING_HUT:  [WorldGrid.TileType.BERRY, WorldGrid.TileType.GRASS],
 	BuildingType.STONE_MASON:    [WorldGrid.TileType.STONE],
+	## HUNTING_LODGE also needs a TREE neighbour, but with the extra runtime rule that the
+	## adjacent forest must contain wild — enforced in _check_adjacency via WildSystem.
+	BuildingType.HUNTING_LODGE:  [WorldGrid.TileType.TREE],
+	BuildingType.FARM:           [WorldGrid.TileType.WHEAT],
 }
 
 ## Maps WorldGrid.TileType → resource output produced per cycle by GATHERING_HUT.
 const TERRAIN_HARVEST_OUTPUT: Dictionary = {
 	WorldGrid.TileType.BERRY: {&"berry": 4},
 	WorldGrid.TileType.GRASS: {&"fiber": 2},
+	WorldGrid.TileType.WHEAT: {&"wheat": 5},
+}
+
+## Reverse of TERRAIN_HARVEST_OUTPUT: resource ID → terrain type required to harvest it.
+## Used to compute per-recipe adjacency_tile_count for GATHERING_HUT efficiency.
+const HARVEST_RESOURCE_TO_TERRAIN: Dictionary = {
+	&"berry": WorldGrid.TileType.BERRY,
+	&"fiber": WorldGrid.TileType.GRASS,
+	&"wheat": WorldGrid.TileType.WHEAT,
 }
 
 ## Formula 7 scalar: energy cost per resource unit in build cost.
 const ENERGY_PER_RESOURCE: float = 0.10
-
-## Formula 3 scalar: base ticks per map tile at 100% efficiency (in sync with
-## LogisticsSystem/NPCSystem). Anchored 2026-06-12 so 50% efficiency = 10/tile.
-const TICKS_PER_TILE: float = 5.0
 
 ## NPC spawn interval for Residential House (Formula 8), in ticks.
 const NPC_SPAWN_INTERVAL: int = 1000
@@ -213,54 +558,21 @@ const NPC_SPAWN_INTERVAL: int = 1000
 ## Maximum NPCs a Residential House can house.
 const MAX_HOUSE_NPCS: int = 2
 
-## Production table for production buildings (story-002).
-## Each entry defines input costs, base output, and cycle duration.
-## Inputs use float for tool charge_cost; wood uses quantity (int stored as float for uniformity).
-## Format: { inputs: [{resource_id, quantity | charge_cost}], output: {resource_id: qty}, base_cycle_ticks: int, npc_required: bool }
-## Cycle ticks rescaled for pacing (balancing 2026-06-11): ~5–6 cycles/day for basic
-## producers (was ~14). Tool charge_cost 1/30 → one delivered tool (1.0 buffer charge)
-## powers 30 production cycles, making tools a durable capital good instead of per-cycle fuel.
+## Legacy alias: maps each type to the same keys as its default recipe (index 0).
+## Used only for .has() "is this a production building?" checks in external callers.
+## For recipe data always use get_active_recipe() or RECIPES directly.
 const PRODUCTION_TABLE: Dictionary = {
-	BuildingType.LUMBER_CAMP: {
-		"inputs": [
-			{"resource_id": &"tool", "charge_cost": 1.0 / 30.0},
-		],
-		"output": {&"wood": 5},
-		"output_capacity": 20,
-		"input_capacity": 5,
-		"base_cycle_ticks": 250,
-		"npc_required": true,
-	},
-	BuildingType.STONE_MASON: {
-		"inputs": [
-			{"resource_id": &"tool", "charge_cost": 1.0 / 30.0},
-		],
-		"output": {&"stone": 5},
-		"output_capacity": 20,
-		"input_capacity": 5,
-		"base_cycle_ticks": 250,
-		"npc_required": true,
-	},
-	BuildingType.GATHERING_HUT: {
-		"inputs": [],
-		"output": {},  ## actual output computed dynamically via gathering_output
-		"output_capacity": 20,
-		"input_capacity": 0,
-		"base_cycle_ticks": 250,
-		"npc_required": true,
-	},
-	BuildingType.TOOL_WORKSHOP: {
-		"inputs": [
-			{"resource_id": &"wood",  "quantity": 2},
-			{"resource_id": &"stone", "quantity": 1},
-			{"resource_id": &"fiber", "quantity": 1},
-		],
-		"output": {&"tool": 1},
-		"output_capacity": 10,
-		"input_capacity": 10,
-		"base_cycle_ticks": 375,
-		"npc_required": true,
-	},
+	BuildingType.LUMBER_CAMP:    true,
+	BuildingType.STONE_MASON:    true,
+	BuildingType.GATHERING_HUT:  true,
+	BuildingType.TOOL_WORKSHOP:  true,
+	BuildingType.WEAVER:         true,
+	BuildingType.TAILOR:         true,
+	BuildingType.SAWMILL:        true,
+	BuildingType.HUNTING_LODGE:  true,
+	BuildingType.FARM:           true,
+	BuildingType.MILL:           true,
+	BuildingType.BAKERY:         true,
 }
 
 # ---- Signals ----------------------------------------------------------------
@@ -270,7 +582,9 @@ signal building_construction_complete(building_id: String, type: int)
 signal building_state_changed(building_id: String, new_state: int, reason: String)
 signal building_input_changed(building_id: String)
 ## Emitted when a production cycle completes and output is placed in buffered_output.
-signal production_output_ready(building_id: String, output: Dictionary[StringName, int])
+## `cycle_ticks` is the cycle's nominal (efficiency-independent) base duration, used by the
+## Experience System to grant time-based work XP (ExperienceFormulas.xp_for_duration).
+signal production_output_ready(building_id: String, output: Dictionary[StringName, int], cycle_ticks: int)
 ## Emitted when buffered_output changes (items removed by drag or snap-back).
 signal building_output_changed(building_id: String)
 ## Emitted to request an NPC spawn at the given tile (handled by NPC system stub).
@@ -287,6 +601,16 @@ signal building_demolished(building_id: StringName)
 signal building_items_dropped(tile: Vector2i, items: Dictionary)
 ## Emitted when the player renames a building.
 signal building_renamed(building_id: String, new_name: String)
+## Emitted when set_active_recipe() successfully switches the recipe for a building.
+signal building_recipe_changed(building_id: String, recipe_index: int)
+## Emitted when a per-resource delivery limit is set on a storage building.
+signal building_storage_limit_changed(building_id: String, resource_id: StringName, limit: int)
+## Emitted when a per-resource minimum reserve is set on a storage building.
+signal building_storage_min_limit_changed(building_id: String, resource_id: StringName, limit: int)
+## Emitted when an upgrade has been successfully installed on a building.
+signal upgrade_installed(building_id: String, upgrade_id: StringName)
+## Emitted when an upgrade is removed from a building (e.g. building demolished).
+signal upgrade_removed(building_id: String, upgrade_id: StringName)
 
 # ---- State ------------------------------------------------------------------
 
@@ -391,6 +715,33 @@ func get_building_tile(building_id: String) -> Vector2i:
 	return instance.tile
 
 
+## Returns the BuildingInstance whose tile matches, or null.
+## Requires _grid to be initialised (call init_dependencies first).
+func get_instance_at_tile(tile: Vector2i) -> BuildingInstance:
+	if _grid == null:
+		return null
+	var building_id: String = _grid.get_building(tile)
+	if building_id == "":
+		return null
+	return get_building_instance(building_id)
+
+
+## Instantly transitions a CONSTRUCTING building to OPERATING.
+## Called by PlayerCharacter when the manual CONSTRUCT_BUILDING action completes.
+func complete_construction_manually(building_id: String) -> void:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null or instance.state != BuildingInstance.State.CONSTRUCTING:
+		return
+	instance.accumulated_ticks = instance.build_time
+	instance.state = BuildingInstance.State.OPERATING
+	_update_adjacency_efficiency(instance)
+	building_construction_complete.emit(instance.building_id, instance.type)
+	building_state_changed.emit(instance.building_id, instance.state, "construction_complete")
+	if instance.type == BuildingType.RESIDENTIAL_HOUSE:
+		instance.npc_count = 1
+		instance.npc_spawn_timer = 0
+
+
 ## Returns all BuildingInstances (shallow copy).
 func get_all_buildings() -> Array[BuildingInstance]:
 	return _all_buildings.duplicate()
@@ -418,8 +769,7 @@ func add_to_input(building_id: String, resource_id: StringName, qty: int) -> boo
 	var instance: BuildingInstance = get_building_instance(building_id)
 	if instance == null:
 		return false
-	var allowed: Array[StringName] = []
-	allowed.assign(INPUT_RESOURCES.get(instance.type, []))
+	var allowed: Array[StringName] = get_active_input_resource_ids(building_id)
 	if not resource_id in allowed:
 		return false
 	if _inventory_system == null:
@@ -443,8 +793,7 @@ func add_charge_to_input(building_id: String, resource_id: StringName, charge: f
 	var instance: BuildingInstance = get_building_instance(building_id)
 	if instance == null:
 		return false
-	var allowed: Array[StringName] = []
-	allowed.assign(INPUT_RESOURCES.get(instance.type, []))
+	var allowed: Array[StringName] = get_active_input_resource_ids(building_id)
 	if not resource_id in allowed:
 		return false
 	instance.input_buffer[resource_id] = instance.input_buffer.get(resource_id, 0.0) + charge
@@ -503,8 +852,7 @@ func receive_input_from_world(building_id: String, resource_id: StringName, qty:
 	var instance: BuildingInstance = get_building_instance(building_id)
 	if instance == null:
 		return false
-	var allowed: Array[StringName] = []
-	allowed.assign(INPUT_RESOURCES.get(instance.type, []))
+	var allowed: Array[StringName] = get_active_input_resource_ids(building_id)
 	if not resource_id in allowed:
 		return false
 	instance.input_buffer[resource_id] = instance.input_buffer.get(resource_id, 0.0) + float(qty)
@@ -556,6 +904,101 @@ func get_adjacency_hint_tiles(building_type: int, tile: Vector2i) -> Array[Vecto
 			result.append(neighbor)
 	return result
 
+# ---- Recipe API -------------------------------------------------------------
+
+## Returns true when building_type is a production building (has at least one recipe).
+func is_production_building(building_type: int) -> bool:
+	return RECIPES.has(building_type)
+
+
+## Returns all recipe dicts for building_type; empty array if not a production building.
+func get_recipes(building_type: int) -> Array:
+	return RECIPES.get(building_type, [])
+
+
+## Returns the indices of recipes currently available given terrain / building conditions.
+## For GATHERING_HUT: only recipes whose output resource is present in gathering_output.
+## For all other production buildings: all recipe indices.
+func get_available_recipe_indices(building_id: String) -> Array[int]:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null:
+		return []
+	var recipes: Array = RECIPES.get(instance.type, [])
+	if recipes.is_empty():
+		return []
+	if instance.type != BuildingType.GATHERING_HUT and instance.type != BuildingType.FARM:
+		var all_indices: Array[int] = []
+		for i: int in range(recipes.size()):
+			all_indices.append(i)
+		return all_indices
+	var result: Array[int] = []
+	for i: int in range(recipes.size()):
+		for res_id: StringName in recipes[i].get("output", {}).keys():
+			if instance.gathering_output.has(res_id):
+				result.append(i)
+				break
+	return result
+
+
+## Returns the active recipe dict for instance. Falls back to index 0 on out-of-range.
+func get_active_recipe(instance: BuildingInstance) -> Dictionary:
+	var recipes: Array = RECIPES.get(instance.type, [])
+	if recipes.is_empty():
+		return {}
+	return recipes[clampi(instance.active_recipe_index, 0, recipes.size() - 1)]
+
+
+## Returns the resource IDs accepted as input by the given building's active recipe.
+func get_active_input_resource_ids(building_id: String) -> Array[StringName]:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null:
+		return []
+	var result: Array[StringName] = []
+	for spec: Dictionary in get_active_recipe(instance).get("inputs", []):
+		result.append(spec["resource_id"])
+	return result
+
+
+## Switches the active recipe for a building. Aborts any running cycle immediately.
+## Buffer items no longer needed by the new recipe are dropped at the building's tile.
+## Returns false when building_id is invalid or recipe_index is out of range.
+func set_active_recipe(building_id: String, recipe_index: int) -> bool:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null:
+		return false
+	var recipes: Array = RECIPES.get(instance.type, [])
+	if recipe_index < 0 or recipe_index >= recipes.size():
+		return false
+	# The player has now made an explicit choice — even if it matches the default.
+	instance.recipe_selected = true
+	if instance.active_recipe_index == recipe_index:
+		return true
+	# Abort any running cycle — inputs consumed this cycle are gone.
+	instance.cycle_running = false
+	instance.production_cycle_ticks = 0
+	instance.production_cycle_duration = 0
+	instance.input_pending = false
+	# Determine which resources the new recipe still accepts.
+	var new_input_ids: Array[StringName] = []
+	for spec: Dictionary in recipes[recipe_index].get("inputs", []):
+		new_input_ids.append(spec["resource_id"])
+	# Drop buffer items that don't match the new recipe's inputs.
+	var drop_items: Dictionary = {}
+	for res_id: StringName in instance.input_buffer.keys():
+		if res_id not in new_input_ids:
+			var qty: int = ceili(instance.input_buffer[res_id])
+			if qty > 0:
+				drop_items[res_id] = drop_items.get(res_id, 0) + qty
+			instance.input_buffer.erase(res_id)
+	if not drop_items.is_empty():
+		building_items_dropped.emit(instance.tile, drop_items)
+	instance.active_recipe_index = recipe_index
+	if instance.type == BuildingType.GATHERING_HUT or instance.type == BuildingType.FARM:
+		_update_adjacency_efficiency(instance)
+	building_input_changed.emit(building_id)
+	building_recipe_changed.emit(building_id, recipe_index)
+	return true
+
 # ---- Tick handler -----------------------------------------------------------
 
 func _on_ticks_advanced(delta: int) -> void:
@@ -563,29 +1006,16 @@ func _on_ticks_advanced(delta: int) -> void:
 		if instance.state == BuildingInstance.State.DEMOLISHED:
 			continue
 		if instance.state == BuildingInstance.State.CONSTRUCTING:
-			_advance_construction(instance, delta)
-			continue
+			continue  # construction is now a manual player action
 		if instance.type == BuildingType.RESIDENTIAL_HOUSE and instance.state == BuildingInstance.State.OPERATING:
 			_advance_npc_timer(instance, delta)
 			continue
-		if instance.state == BuildingInstance.State.OPERATING and PRODUCTION_TABLE.has(instance.type):
+		if instance.state == BuildingInstance.State.OPERATING and RECIPES.has(instance.type):
 			_advance_production_cycle(instance, delta)
-		elif instance.state == BuildingInstance.State.BLOCKED and PRODUCTION_TABLE.has(instance.type):
+		elif instance.state == BuildingInstance.State.BLOCKED and RECIPES.has(instance.type):
 			_try_recover_blocked(instance)
 
 
-## Advances construction timer; transitions to OPERATING at build_time threshold.
-func _advance_construction(instance: BuildingInstance, delta: int) -> void:
-	instance.accumulated_ticks += delta
-	if instance.accumulated_ticks < instance.build_time:
-		return
-	instance.state = BuildingInstance.State.OPERATING
-	_update_adjacency_efficiency(instance)
-	building_construction_complete.emit(instance.building_id, instance.type)
-	building_state_changed.emit(instance.building_id, instance.state, "construction_complete")
-	if instance.type == BuildingType.RESIDENTIAL_HOUSE:
-		instance.npc_count = 1
-		instance.npc_spawn_timer = 0
 		building_npc_spawn_requested.emit(instance.building_id, instance.tile, 1)
 
 
@@ -608,7 +1038,7 @@ func _advance_production_cycle(instance: BuildingInstance, delta: int) -> void:
 		match result:
 			_CycleStartResult.BLOCKED_NO_NPC, _CycleStartResult.BLOCKED_NO_INPUT, _CycleStartResult.BLOCKED_NO_CARRIER:
 				instance.state = BuildingInstance.State.BLOCKED
-				var reason: String = _cycle_blocked_reason(result)
+				var reason: String = _cycle_blocked_reason(result, instance)
 				building_blocked.emit(instance.building_id, reason)
 				building_state_changed.emit(instance.building_id, instance.state, reason)
 		return
@@ -616,26 +1046,30 @@ func _advance_production_cycle(instance: BuildingInstance, delta: int) -> void:
 	# F3 (live): recompute the effective duration from the CURRENT building efficiency every tick,
 	# so feeding / placement changes affect the in-progress cycle immediately (not only the next
 	# one). base / efficiency: eff 1.0 → base, eff 0.5 → 2× base, eff 0.25 → 4× base.
-	if PRODUCTION_TABLE.has(instance.type):
+	var _active_recipe: Dictionary = get_active_recipe(instance)
+	if not _active_recipe.is_empty():
 		instance.production_cycle_duration = EfficiencyFormulas.calculate_effective_cycle_ticks(
-				PRODUCTION_TABLE[instance.type].get("base_cycle_ticks", 0), instance.efficiency)
+				_active_recipe.get("base_cycle_ticks", 0), instance.efficiency)
 	if instance.production_cycle_ticks < instance.production_cycle_duration:
 		return
 	# Cycle complete — deposit output to buffer.
-	var cycle_output: Dictionary
-	if instance.type == BuildingType.GATHERING_HUT:
-		cycle_output = instance.gathering_output
-	else:
-		cycle_output = PRODUCTION_TABLE[instance.type]["output"]
+	var cycle_output: Dictionary = _active_recipe.get("output", {})
 	for resource_id: StringName in cycle_output:
 		instance.buffered_output[resource_id] = instance.buffered_output.get(resource_id, 0) + cycle_output[resource_id]
+	# Perk #6 (Ergiebig): +output for this building type while a perked NPC is supplied today.
+	var output_bonus: int = int(_perk_building_bonus(instance.type, PerkRegistry.EFFECT_OUTPUT_BONUS))
+	if output_bonus > 0 and not cycle_output.is_empty():
+		var primary: StringName = cycle_output.keys()[0]
+		instance.buffered_output[primary] = instance.buffered_output.get(primary, 0) + output_bonus
 	instance.cycle_running = false
 	instance.production_cycle_ticks = 0
+	instance.cycle_count += 1  # Perk #8: drives the "every 4th cycle is input-free" cadence.
 	# Inputs delivered mid-cycle set input_pending to delay same-tick consumption.
 	# After a full cycle the delay is no longer needed — clear it so the restart
 	# attempt below can succeed without waiting an extra tick.
 	instance.input_pending = false
-	production_output_ready.emit(instance.building_id, instance.buffered_output)
+	production_output_ready.emit(instance.building_id, instance.buffered_output,
+			int(_active_recipe.get("base_cycle_ticks", 0)))
 	# Attempt next cycle immediately so cycle_running is true again before the
 	# indicator refresh fires — prevents a one-tick yellow flash between cycles.
 	_advance_production_cycle(instance, 0)
@@ -647,6 +1081,11 @@ func _advance_production_cycle(instance: BuildingInstance, delta: int) -> void:
 func _check_adjacency(building_type: int, tile: Vector2i) -> int:
 	if not ADJACENCY_REQUIREMENTS.has(building_type):
 		return PlacementResult.SUCCESS
+	# Hunting Lodge: must border a forest that currently contains wild (not just any tree).
+	if building_type == BuildingType.HUNTING_LODGE:
+		if WildSystem.forest_has_wild_adjacent(tile):
+			return PlacementResult.SUCCESS
+		return PlacementResult.BLOCKED_BY_ADJACENCY
 	var required_types: Array = ADJACENCY_REQUIREMENTS[building_type]
 	for neighbor: Vector2i in _grid.get_neighbors(tile, true):
 		if _grid.get_terrain(neighbor) in required_types:
@@ -660,7 +1099,7 @@ func _check_resource_and_energy(building_type: int) -> int:
 	for resource_id: StringName in cost:
 		if _get_total_resource(resource_id) < cost[resource_id]:
 			return PlacementResult.INSUFFICIENT_RESOURCES
-	var energy_cost: int = _calc_energy_cost(building_type)
+	var energy_cost: int = BUILD_ENERGY.get(building_type, 0)
 	if energy_cost > 0:
 		if _player_character == null:
 			push_warning("BuildingRegistry: PlayerCharacter dependency not set — call init_dependencies() first")
@@ -713,42 +1152,56 @@ func _insert_sorted(instance: BuildingInstance) -> void:
 ## On SUCCESS: deducts inputs from input_buffer, sets cycle_running = true.
 ## Does NOT set building state — caller is responsible for BLOCKED transitions.
 func _try_start_production_cycle(instance: BuildingInstance) -> int:
-	if not PRODUCTION_TABLE.has(instance.type):
+	if not RECIPES.has(instance.type):
 		return _CycleStartResult.OUTPUT_FULL
 	if instance.input_pending:
 		instance.input_pending = false
 		return _CycleStartResult.OUTPUT_FULL  # skip this tick without entering BLOCKED
-	var table_entry: Dictionary = PRODUCTION_TABLE[instance.type]
-	var output_capacity: int = table_entry.get("output_capacity", 0)
+	var table_entry: Dictionary = get_active_recipe(instance)
+	# Perk #10 (Geräumig): an active building-bound perk raises this type's output buffer cap.
+	var output_capacity: int = int(round(float(table_entry.get("output_capacity", 0))
+			* (1.0 + _perk_building_bonus(instance.type, PerkRegistry.EFFECT_OUTPUT_CAPACITY))))
 	var buffered_total: int = 0
 	for qty: int in instance.buffered_output.values():
 		buffered_total += qty
 	if buffered_total >= output_capacity:
 		return _CycleStartResult.OUTPUT_FULL
-	if table_entry.get("npc_required", false) and instance.assigned_npc_id == &"":
+	# Production requires the assigned worker to be physically on-site, not merely assigned.
+	# A freshly-assigned worker is still TRAVEL_TO_BUILDING for several ticks — the building
+	# must not produce until they actually arrive (NPCSystem state WORK_AT_BUILDING).
+	if table_entry.get("npc_required", false) and not _worker_present(instance):
 		return _CycleStartResult.BLOCKED_NO_NPC
-	if instance.type == BuildingType.GATHERING_HUT and instance.gathering_output.is_empty():
-		return _CycleStartResult.BLOCKED_NO_INPUT
-	# Check whether the input buffer already has everything needed.
-	# If it does, no carrier is required — manually loaded inputs are sufficient.
-	var input_sufficient: bool = true
-	for input_spec: Dictionary in table_entry["inputs"]:
-		var resource_id: StringName = input_spec["resource_id"]
-		var needed: float = input_spec.get("charge_cost", float(input_spec.get("quantity", 0)))
-		if instance.input_buffer.get(resource_id, 0.0) < needed:
-			input_sufficient = false
-			break
-	if not input_sufficient:
-		if instance.input_carrier_ids.is_empty():
-			return _CycleStartResult.BLOCKED_NO_CARRIER
-		return _CycleStartResult.BLOCKED_NO_INPUT
-	# Validate all inputs before deducting any.
-	for input_spec: Dictionary in table_entry["inputs"]:
-		var resource_id: StringName = input_spec["resource_id"]
-		var cost: float = input_spec.get("charge_cost", float(input_spec.get("quantity", 0)))
-		instance.input_buffer[resource_id] = instance.input_buffer.get(resource_id, 0.0) - cost
-		if instance.input_buffer[resource_id] <= 0.0:
-			instance.input_buffer.erase(resource_id)
+	if instance.type == BuildingType.GATHERING_HUT or instance.type == BuildingType.FARM:
+		var terrain_match := false
+		for res_id: StringName in table_entry.get("output", {}).keys():
+			if instance.gathering_output.has(res_id):
+				terrain_match = true
+				break
+		if not terrain_match:
+			return _CycleStartResult.BLOCKED_NO_INPUT
+	# Perk #8 (Sparsam): every 4th cycle of this building type runs without consuming input.
+	var skip_input: bool = _building_skips_input(instance) and (instance.cycle_count % 4 == 3)
+	if not skip_input:
+		# Check whether the input buffer already has everything needed.
+		# If it does, no carrier is required — manually loaded inputs are sufficient.
+		var input_sufficient: bool = true
+		for input_spec: Dictionary in table_entry["inputs"]:
+			var resource_id: StringName = input_spec["resource_id"]
+			var needed: float = input_spec.get("charge_cost", float(input_spec.get("quantity", 0)))
+			if instance.input_buffer.get(resource_id, 0.0) < needed:
+				input_sufficient = false
+				break
+		if not input_sufficient:
+			if instance.input_carrier_ids.is_empty():
+				return _CycleStartResult.BLOCKED_NO_CARRIER
+			return _CycleStartResult.BLOCKED_NO_INPUT
+		# Validate all inputs before deducting any.
+		for input_spec: Dictionary in table_entry["inputs"]:
+			var resource_id: StringName = input_spec["resource_id"]
+			var cost: float = input_spec.get("charge_cost", float(input_spec.get("quantity", 0)))
+			instance.input_buffer[resource_id] = instance.input_buffer.get(resource_id, 0.0) - cost
+			if instance.input_buffer[resource_id] <= 0.0:
+				instance.input_buffer.erase(resource_id)
 	# F3 wired (balancing 2026-06-11): effective cycle = base / building_efficiency.
 	# Hungry/poorly-placed buildings now actually run slower; well-fed/placed run faster.
 	instance.production_cycle_duration = EfficiencyFormulas.calculate_effective_cycle_ticks(
@@ -769,9 +1222,13 @@ func _try_recover_blocked(instance: BuildingInstance) -> void:
 
 
 ## Maps a _CycleStartResult code to a human-readable BLOCKED reason string.
-func _cycle_blocked_reason(result: int) -> String:
+## For BLOCKED_NO_NPC, distinguishes an unassigned building from one whose worker is en route.
+func _cycle_blocked_reason(result: int, instance: BuildingInstance = null) -> String:
 	match result:
-		_CycleStartResult.BLOCKED_NO_NPC:     return "No NPC assigned"
+		_CycleStartResult.BLOCKED_NO_NPC:
+			if instance != null and instance.assigned_npc_id != &"":
+				return "Worker not on-site"
+			return "No NPC assigned"
 		_CycleStartResult.BLOCKED_NO_CARRIER: return "No carrier assigned (inputs)"
 		_CycleStartResult.BLOCKED_NO_INPUT:   return "Missing required input"
 	return "Unknown"
@@ -785,18 +1242,6 @@ func has_output_buffer(building_id: String) -> bool:
 	if instance == null:
 		return false
 	return not instance.buffered_output.is_empty()
-
-
-## Returns the total number of items across all resource types in the building's output buffer.
-## Used by the carrier FSM to calculate pickup quantity via min(total, carrier_capacity).
-func get_output_buffer_total(building_id: String) -> int:
-	var instance: BuildingInstance = get_building_instance(building_id)
-	if instance == null:
-		return 0
-	var total: int = 0
-	for qty: int in instance.buffered_output.values():
-		total += qty
-	return total
 
 
 ## Returns the first resource id in the output buffer, or &"" if empty.
@@ -815,9 +1260,9 @@ func is_input_full(building_id: String, resource_id: StringName) -> bool:
 	var instance: BuildingInstance = get_building_instance(building_id)
 	if instance == null:
 		return false
-	if not PRODUCTION_TABLE.has(instance.type):
+	if not RECIPES.has(instance.type):
 		return false
-	var input_capacity: int = PRODUCTION_TABLE[instance.type].get("input_capacity", 0)
+	var input_capacity: int = get_active_recipe(instance).get("input_capacity", 0)
 	if input_capacity <= 0:
 		return false
 	return instance.input_buffer.get(resource_id, 0.0) >= float(input_capacity)
@@ -844,24 +1289,6 @@ func collect_output(building_id: String) -> Dictionary:
 	building_output_changed.emit(building_id)
 	return output
 
-# ---- Transport formulas (Story 002) -----------------------------------------
-
-## Formula 3: Carrier travel time = floor(distance × TICKS_PER_TILE). (AC-12)
-## distance should be the Manhattan distance between building tile and storage tile.
-func calculate_carrier_travel_ticks(distance: int) -> int:
-	return int(floor(float(distance) * TICKS_PER_TILE))
-
-
-## Formula 4: Production output — always base_output, no distance modifier. (AC-12)
-func calculate_production_output(base_output: int) -> int:
-	return base_output
-
-
-## Formula 5: Production cycle duration — always base_cycle_ticks, no distance modifier. (AC-13)
-func calculate_cycle_duration(base_cycle_ticks: int) -> int:
-	return base_cycle_ticks
-
-
 ## Returns the NPCInstance array for the worker assigned to instance, or [] if none.
 ## Lazily acquires NPCSystem via Engine (load order: Buildings → NPCs, so no _enter_tree lookup).
 ## Injectable via _npc_system for unit tests.
@@ -879,6 +1306,37 @@ func _get_assigned_workers(instance: BuildingInstance) -> Array:
 	if npc == null:
 		return []
 	return [npc]
+
+
+## Returns true when this building's assigned worker is physically on-site and able to work.
+## "On-site" = NPCSystem reports the worker in TaskState.WORK_AT_BUILDING (reached after travel).
+## Falls back to true when the NPC is not tracked by NPCSystem (unit-test fixtures inject raw
+## assigned_npc_id values with no backing NPCInstance) so legacy "assigned ⇒ working" tests hold.
+func _worker_present(instance: BuildingInstance) -> bool:
+	if instance.assigned_npc_id == &"":
+		return false
+	var npc_sys: Object = _npc_system if _npc_system != null else NPCSystem
+	if npc_sys == null:
+		return true
+	var npc: Object = npc_sys.get_npc_instance(instance.assigned_npc_id)
+	if npc == null:
+		return true  # untracked fixture id — preserve legacy behaviour
+	return npc.state == NPCSystem.TaskState.WORK_AT_BUILDING
+
+
+## Sum of active building-bound perk magnitudes for `building_type` with `effect` (Perk System).
+## Reads NPCSystem's per-day active-perk state; 0.0 when unavailable.
+func _perk_building_bonus(building_type: int, effect: StringName) -> float:
+	var npc_sys: Object = _npc_system if _npc_system != null else NPCSystem
+	if npc_sys == null:
+		return 0.0
+	return npc_sys.building_perk_bonus(building_type, effect)
+
+
+## True if a building of this type has an active Sparsam (input-skip) perk (Perk System #8).
+func _building_skips_input(instance: BuildingInstance) -> bool:
+	var npc_sys: Object = _npc_system if _npc_system != null else NPCSystem
+	return npc_sys != null and npc_sys.building_has_active_perk(instance.type, PerkRegistry.EFFECT_INPUT_SKIP)
 
 
 ## Formula 7: placement energy cost = floor(sum(qty * ENERGY_PER_RESOURCE)).
@@ -920,12 +1378,34 @@ func _consume_resource_any(resource_id: StringName, quantity: int) -> void:
 		remaining -= to_consume
 
 
-## Updates adjacency_tile_count for instance and recalculates efficiency (F6).
+## Updates adjacency_tile_count for instance and recalculates efficiency (additive F2: +5%/tile).
 ## No-op when the building type has no adjacency requirements or _grid is not set.
 func _update_adjacency_efficiency(instance: BuildingInstance) -> void:
 	if not ADJACENCY_REQUIREMENTS.has(instance.type):
 		return
 	if _grid == null:
+		return
+	# Hunting Lodge efficiency scales with the number of wild groups in the adjacent forest(s),
+	# fed through the additive model as the "resource tiles" term (ADR-0015).
+	if instance.type == BuildingType.HUNTING_LODGE:
+		instance.adjacency_tile_count = WildSystem.count_groups_adjacent(instance.tile)
+		instance.recalculate_efficiency(_get_assigned_workers(instance))
+		return
+	if instance.type == BuildingType.GATHERING_HUT or instance.type == BuildingType.FARM:
+		# Count only tiles relevant to the active recipe's output so efficiency
+		# reflects the currently harvested terrain type, not all harvestable tiles.
+		var active_recipe: Dictionary = get_active_recipe(instance)
+		var recipe_terrains: Array = []
+		for res_id: StringName in active_recipe.get("output", {}).keys():
+			if HARVEST_RESOURCE_TO_TERRAIN.has(res_id):
+				recipe_terrains.append(HARVEST_RESOURCE_TO_TERRAIN[res_id])
+		var count: int = 0
+		for neighbor: Vector2i in _grid.get_neighbors(instance.tile, true):
+			if _grid.get_terrain(neighbor) in recipe_terrains:
+				count += 1
+		instance.adjacency_tile_count = count
+		instance.recalculate_efficiency(_get_assigned_workers(instance))
+		_update_gathering_output(instance)
 		return
 	var required_types: Array = ADJACENCY_REQUIREMENTS[instance.type]
 	var count: int = 0
@@ -934,8 +1414,6 @@ func _update_adjacency_efficiency(instance: BuildingInstance) -> void:
 			count += 1
 	instance.adjacency_tile_count = count
 	instance.recalculate_efficiency(_get_assigned_workers(instance))
-	if instance.type == BuildingType.GATHERING_HUT:
-		_update_gathering_output(instance)
 
 
 ## Recomputes gathering_output for a GATHERING_HUT based on which harvestable terrain
@@ -966,6 +1444,19 @@ func _on_terrain_tile_changed(changed_tile: Vector2i) -> void:
 			if neighbor == changed_tile:
 				_update_adjacency_efficiency(instance)
 				break
+
+
+## Recomputes efficiency for all Hunting Lodges from the current wild-group counts.
+## Connected to WildSystem.wild_changed (groups spawned / moved / pruned each day).
+func refresh_wild_efficiency() -> void:
+	for instance: BuildingInstance in _all_buildings:
+		if instance.type != BuildingType.HUNTING_LODGE:
+			continue
+		if instance.state == BuildingInstance.State.DEMOLISHED:
+			continue
+		instance.adjacency_tile_count = WildSystem.count_groups_adjacent(instance.tile)
+		instance.recalculate_efficiency(_get_assigned_workers(instance))
+		building_state_changed.emit(instance.building_id, instance.state, "wild_efficiency")
 
 
 ## Handles InventorySystem.container_removed: clears the orphaned container reference on any
@@ -1000,6 +1491,13 @@ func _building_type_name(building_type: int) -> String:
 		BuildingType.GATHERING_HUT:     return "Gathering Hut"
 		BuildingType.STONE_MASON:       return "Stone Mason"
 		BuildingType.TOOL_WORKSHOP:     return "Tool Workshop"
+		BuildingType.WEAVER:            return "Weaver"
+		BuildingType.TAILOR:            return "Tailor"
+		BuildingType.SAWMILL:           return "Sawmill"
+		BuildingType.HUNTING_LODGE:     return "Hunting Lodge"
+		BuildingType.FARM:              return "Farm"
+		BuildingType.MILL:              return "Mill"
+		BuildingType.BAKERY:            return "Bakery"
 	return "Unknown"
 
 # ---- Stub methods (future stories) -----------------------------------------
@@ -1041,6 +1539,55 @@ func rename_building(building_id: String, new_name: String) -> void:
 	building_renamed.emit(building_id, instance.custom_name)
 
 
+## Sets a per-resource delivery limit on a storage building.
+## limit < 0 removes the limit (transport routes may deliver freely).
+## limit = 0 blocks all deliveries. limit > 0 caps deliveries at that quantity.
+## No-op if the building does not exist or is not a storage building.
+func set_storage_limit(building_id: String, resource_id: StringName, limit: int) -> void:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null:
+		return
+	if not STORAGE_CAPACITY.has(instance.type):
+		return
+	if limit < 0:
+		instance.storage_limits.erase(resource_id)
+	else:
+		instance.storage_limits[resource_id] = limit
+	building_storage_limit_changed.emit(building_id, resource_id, limit)
+
+
+## Returns the delivery limit for a resource in a storage building (-1 = no limit).
+func get_storage_limit(building_id: String, resource_id: StringName) -> int:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null:
+		return -1
+	return instance.storage_limits.get(resource_id, -1)
+
+
+## Sets a per-resource minimum reserve on a storage building.
+## limit < 0 removes the minimum (transport may take freely).
+## limit >= 0 ensures at least that many items stay in storage.
+func set_storage_min_limit(building_id: String, resource_id: StringName, limit: int) -> void:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null:
+		return
+	if not STORAGE_CAPACITY.has(instance.type):
+		return
+	if limit < 0:
+		instance.storage_min_limits.erase(resource_id)
+	else:
+		instance.storage_min_limits[resource_id] = limit
+	building_storage_min_limit_changed.emit(building_id, resource_id, limit)
+
+
+## Returns the minimum reserve for a resource in a storage building (-1 = no minimum).
+func get_storage_min_limit(building_id: String, resource_id: StringName) -> int:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null:
+		return -1
+	return instance.storage_min_limits.get(resource_id, -1)
+
+
 ## Returns the display name for a building: custom_name if set, otherwise the type name.
 func get_building_display_name(building_id: String) -> String:
 	var instance: BuildingInstance = get_building_instance(building_id)
@@ -1049,6 +1596,20 @@ func get_building_display_name(building_id: String) -> String:
 	if instance.custom_name != "":
 		return instance.custom_name
 	return _building_type_name(instance.type)
+
+
+## Returns the display name for a BuildingType enum value (e.g. for build menus / UI).
+## Single source of truth for type names; works without a placed instance.
+func get_type_display_name(building_type: int) -> String:
+	return _building_type_name(building_type)
+
+
+## Returns the Texture2D for a building type from BUILDING_TEXTURES, or null if missing.
+func get_building_texture(building_type: int) -> Texture2D:
+	var path: String = BUILDING_TEXTURES.get(building_type, "")
+	if path == "":
+		return null
+	return load(path) as Texture2D
 
 
 ## Demolish a building. Returns true if found and removed.
@@ -1091,6 +1652,9 @@ func demolish_building(building_id: StringName) -> bool:
 		instance.visual_node.queue_free()
 		instance.visual_node = null
 
+	for upg: StringName in instance.active_upgrades:
+		upgrade_removed.emit(str(building_id), upg)
+
 	_all_buildings.erase(instance)
 
 	# Remove the storage container after erasing from _all_buildings so that
@@ -1111,6 +1675,11 @@ func assign_npc(building_id: String, npc_id: StringName) -> void:
 	var instance: BuildingInstance = get_building_instance(building_id)
 	if instance != null:
 		instance.assigned_npc_id = npc_id
+		# Worker removed mid-cycle (released / reassigned / demolished): abort the running
+		# cycle so it cannot finish unmanned. Inputs already consumed this cycle are forfeit.
+		if npc_id == &"" and instance.cycle_running:
+			instance.cycle_running = false
+			instance.production_cycle_ticks = 0
 		instance.recalculate_efficiency(_get_assigned_workers(instance))
 
 
@@ -1139,6 +1708,52 @@ func assign_output_carrier(building_id: String, carrier_id: StringName) -> void:
 	if instance != null:
 		instance.output_carrier_id = carrier_id
 		building_state_changed.emit(building_id, instance.state, "output_carrier_assigned")
+
+
+## Returns the upgrade definitions available for a building (may be empty).
+func get_available_upgrades(building_id: String) -> Array:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null:
+		return []
+	return BUILDING_UPGRADES.get(instance.type, [])
+
+
+## Returns true if the building has the named upgrade installed.
+func has_upgrade(building_id: String, upgrade_id: StringName) -> bool:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null:
+		return false
+	return instance.has_upgrade(upgrade_id)
+
+
+## Installs an upgrade on a building. Does NOT deduct resources — caller must do that.
+## Returns true on success, false if already installed or building/upgrade not found.
+func install_upgrade(building_id: String, upgrade_id: StringName) -> bool:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null:
+		return false
+	if instance.has_upgrade(upgrade_id):
+		return false
+	var defs: Array = BUILDING_UPGRADES.get(instance.type, [])
+	var found := false
+	for d: Dictionary in defs:
+		if d.get(&"id", &"") == upgrade_id:
+			found = true
+			break
+	if not found:
+		return false
+	instance.active_upgrades.append(upgrade_id)
+	upgrade_installed.emit(building_id, upgrade_id)
+	return true
+
+
+## Returns all building IDs that have the named upgrade installed.
+func get_buildings_with_upgrade(upgrade_id: StringName) -> Array[String]:
+	var result: Array[String] = []
+	for instance: BuildingInstance in _all_buildings:
+		if instance.has_upgrade(upgrade_id):
+			result.append(instance.building_id)
+	return result
 
 
 ## Serialises all placed buildings and the internal ID counter.
@@ -1175,6 +1790,9 @@ func serialize() -> Dictionary:
 			"upgrade_bonus": instance.upgrade_bonus,
 			"efficiency": instance.efficiency,
 			"adjacency_tile_count": instance.adjacency_tile_count,
+			"active_recipe_index": instance.active_recipe_index,
+			"recipe_selected": instance.recipe_selected,
+			"active_upgrades": instance.active_upgrades.map(func(u: StringName) -> String: return str(u)),
 		})
 	return {"build_counter": _build_counter, "buildings": buildings_data}
 
@@ -1223,7 +1841,13 @@ func deserialize(data: Dictionary) -> void:
 		instance.upgrade_bonus = bd.get("upgrade_bonus", 0.0)
 		instance.efficiency = bd.get("efficiency", 1.0)
 		instance.adjacency_tile_count = bd.get("adjacency_tile_count", 0)
+		instance.active_recipe_index = bd.get("active_recipe_index", 0)
+		# Default true so buildings from older saves don't re-prompt for a recipe.
+		instance.recipe_selected = bd.get("recipe_selected", true)
+		for u: String in bd.get("active_upgrades", []):
+			if u != "":
+				instance.active_upgrades.append(StringName(u))
 		_insert_sorted(instance)
-		if instance.type == BuildingType.GATHERING_HUT:
+		if instance.type == BuildingType.GATHERING_HUT or instance.type == BuildingType.FARM:
 			_update_gathering_output(instance)
 		building_placed.emit(building_id, type, tile)

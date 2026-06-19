@@ -12,6 +12,10 @@ const BITMASK_W: int = 8
 
 ## Sentinel passed through BuildingGrid so InventoryScreen can distinguish path clicks.
 const PATH_SENTINEL: int = -100
+## Ticks required for a player to manually build one path tile.
+const PATH_CONSTRUCTION_TICKS: int = 120
+## Energy the player spends to build one path tile.
+const PATH_ENERGY_COST: int = 10
 
 enum PathPlacementResult {
 	SUCCESS,
@@ -20,6 +24,7 @@ enum PathPlacementResult {
 	BLOCKED_BY_BUILDING,
 	BLOCKED_BY_RESOURCE,
 	ALREADY_HAS_PATH,
+	ALREADY_CONSTRUCTING,
 }
 
 ## 4-bit bitmask → texture asset path.
@@ -43,7 +48,9 @@ const PATH_TEXTURES: Dictionary = {
 	15: "res://assets/art/tiles/env_tile_path_nesw.png",  # NESW crossroads
 }
 
-## Emitted when a new path tile is placed.
+## Emitted when construction begins on a path tile (tile is not yet passable).
+signal path_construction_started(tile: Vector2i)
+## Emitted when a path tile finishes construction and becomes passable.
 signal path_placed(tile: Vector2i)
 ## Emitted when an existing path tile's bitmask changes (neighbor added or removed).
 signal path_updated(tile: Vector2i)
@@ -51,8 +58,10 @@ signal path_updated(tile: Vector2i)
 signal path_removed(tile: Vector2i)
 
 var _grid: WorldGrid = null
-## Vector2i → true for every tile that has a path.
+## Vector2i → true for every tile that has a completed path.
 var _paths: Dictionary = {}
+## Vector2i → elapsed ticks for tiles currently under construction.
+var _constructing: Dictionary = {}
 
 
 ## Called from MapRoot._ready() after WorldGrid is available.
@@ -60,9 +69,15 @@ func init_dependencies(grid: WorldGrid) -> void:
 	_grid = grid
 
 
-## Returns true if tile currently has a path.
+## Returns true if tile has a completed (passable) path.
 func has_path(tile: Vector2i) -> bool:
 	return _paths.has(tile)
+
+
+## Returns true if tile has a path under construction (not yet passable).
+func is_constructing(tile: Vector2i) -> bool:
+	return _constructing.has(tile)
+
 
 
 ## Validates placement without mutating state. Safe to call before init_dependencies.
@@ -79,10 +94,34 @@ func validate_placement(tile: Vector2i) -> PathPlacementResult:
 		return PathPlacementResult.BLOCKED_BY_BUILDING
 	if has_path(tile):
 		return PathPlacementResult.ALREADY_HAS_PATH
+	if is_constructing(tile):
+		return PathPlacementResult.ALREADY_CONSTRUCTING
 	return PathPlacementResult.SUCCESS
 
 
-## Places a path tile. Returns true on success.
+## Begins construction of a path tile. Returns true on success.
+## Emits path_construction_started; path_placed fires when construction completes.
+func initiate_path(tile: Vector2i) -> bool:
+	if validate_placement(tile) != PathPlacementResult.SUCCESS:
+		return false
+	_constructing[tile] = 0
+	path_construction_started.emit(tile)
+	return true
+
+
+## Finalizes construction of a path tile started by initiate_path(). Called by PlayerCharacter.
+## Returns true on success.
+func complete_construction(tile: Vector2i) -> bool:
+	if not _constructing.has(tile):
+		return false
+	_constructing.erase(tile)
+	_paths[tile] = true
+	path_placed.emit(tile)
+	_notify_cardinal_neighbors(tile)
+	return true
+
+
+## Places a path tile instantly (used by deserialize / editor tools). Returns true on success.
 ## Emits path_placed for this tile, then path_updated for all 4 cardinal neighbors that have paths.
 func place_path(tile: Vector2i) -> bool:
 	if validate_placement(tile) != PathPlacementResult.SUCCESS:
@@ -132,7 +171,7 @@ func compute_bitmask(tile: Vector2i) -> int:
 func _connects(neighbor: Vector2i) -> bool:
 	if _grid == null or not _grid.is_in_bounds(neighbor):
 		return false
-	return has_path(neighbor) or _grid.get_building(neighbor) != ""
+	return has_path(neighbor) or is_constructing(neighbor) or _grid.get_building(neighbor) != ""
 
 
 func _notify_cardinal_neighbors(tile: Vector2i) -> void:

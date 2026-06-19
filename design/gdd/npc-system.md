@@ -1,13 +1,19 @@
 # NPC System
 
-> **Status**: In Design
+> **Status**: Implemented — synced against `src/gameplay/npc_system.gd` (2026-06-13)
 > **Author**: User + Claude (Sonnet 4.5)
-> **Last Updated**: 2026-05-11
+> **Last Updated**: 2026-06-13
 > **Implements Pillar**: Pillar 1 (Earned Automation), Pillar 2 (Information Transparency)
+> **Sync note**: Reverse-synced after the 2026-06-11/12 balancing pass. Travel now
+> uses tile-weighted A\* paths (ADR-0013) scaled by NPC efficiency (F4); the base
+> travel constant is **5 ticks/tile** at 100% efficiency; NPC base efficiency is
+> **0.5** with the nutrition curve (see `design/gdd/efficiency-system.md`); NPCs
+> render as icons in the NpcOverlay (no longer fully abstract); carriers follow the
+> shared-carrier model (`design/gdd/logistics-system.md`).
 
 ## Overview
 
-The NPC System is the village's workforce — a pool of automated workers that transform the player's manual labor into passive production. NPCs are recruited when a Residential House is built and left unoccupied: the player triggers recruitment, and one NPC moves in (up to 2 per house). Recruited NPCs are assigned to production buildings (Lumber Camps) and execute a deterministic task cycle: travel to assigned building → participate in production → travel to assigned storage → deposit output → return. NPCs have no visible sprite on the map; they are abstract entities whose presence is communicated through building status indicators (green = producing, yellow = blocked, red = stalled). Movement is Manhattan-distance-based (consistent with Grid/Map System) with tick-cost per tile. Each NPC has an identity, an assignment state, and a position tracked in tile coordinates.
+The NPC System is the village's workforce — a pool of automated workers that transform the player's manual labor into passive production. NPCs are recruited when a Residential House is built and left unoccupied: the player triggers recruitment, and one NPC moves in (up to 2 per house). Recruited NPCs are assigned to production buildings (Lumber Camps) and execute a deterministic task cycle: travel to assigned building → participate in production → travel to assigned storage → deposit output → return. NPCs render as small icons in the NpcOverlay and animate along their travel paths; their working state is additionally communicated through building status indicators (green = producing, yellow = blocked). Movement follows tile-weighted A\* paths (roads are faster) with a tick cost per tile that scales with the NPC's food-driven efficiency. Each NPC has an identity, an assignment state, and a position tracked in tile coordinates.
 
 ## Player Fantasy
 
@@ -48,25 +54,25 @@ An assigned NPC executes the following cycle:
 The cycle repeats until the NPC is reassigned, the building is demolished, or the NPC becomes unavailable (see Rule 6).
 
 **Rule 5: Movement and Pathfinding**
-NPC movement uses Manhattan distance (consistent with Grid/Map System). Diagonal movement is not supported — NPCs move along grid axes only. NPCs can pass through any non-walkable tile that a building occupies (buildings are transparent to NPC movement). NPCs cannot pass through other NPCs — if the path is blocked, movement pauses until the blocking NPC moves. At Vertical Slice scope, obstacle detours are not modeled — travel time is purely Manhattan distance. At future scope, pathfinding around impassable tiles (water, cliffs) may replace Manhattan distance.
+NPC movement uses the tile-weighted A\* pathfinder (`LogisticsPathfinder`, ADR-0013) when the world grid is available: paths follow roads (cost 0.5/tile) and avoid expensive resource tiles; buildings are impassable except roads. The resulting path is stored on the NPC (`travel_path`) for overlay animation. When no grid is injected (tests), travel falls back to a straight two-point path with Manhattan-distance timing. NPCs do not block each other.
 
 **Rule 6: NPC Efficiency**
 
-Each NPC carries an `efficiency: float` property (default 1.0, range 0.0–2.0). Efficiency is a speed multiplier: values above 1.0 make the NPC faster, values below 1.0 make them slower. Efficiency is computed as:
+Each NPC carries an `efficiency: float` property (range 0.0–2.0, default = base 0.5). Efficiency is a speed multiplier computed by Efficiency Formula F1:
 
 ```
-npc.efficiency = clamp(1.0 × hunger_modifier × satisfaction_modifier × equipment_modifier, 0.0, 2.0)
+npc.efficiency = clamp(0.5 × food_modifier × satisfaction_modifier × equipment_modifier, 0.0, 2.0)
 ```
 
-At Vertical Slice scope, only `hunger_modifier` is active (1.0 when fed, 0.5 when hungry). `satisfaction_modifier` and `equipment_modifier` default to 1.0 and are introduced by later systems.
+The base is **0.5** — an unfed NPC works at half speed. `food_modifier` comes from the Hunger System's nutrition curve (unfed → efficiency 0.25; 5 nutrition/day → 1.0). `satisfaction_modifier` and `equipment_modifier` default to 1.0 and are introduced by later systems.
 
-Worker-NPCs contribute their efficiency delta to their assigned building:
-`building.efficiency += (npc.efficiency - 1.0)` per assigned worker.
+Worker-NPCs propagate their efficiency to their assigned building (F2, or F6 × worker for adjacency buildings; building cap 1.0) — propagation runs automatically on every food-efficiency change (`_propagate_worker_efficiency_change`).
 
-Carrier-NPCs apply their efficiency directly to travel time:
+All travelling NPCs (workers and carriers) apply their efficiency to travel time (F4):
 `effective_travel_ticks = max(1, floor(base_travel_ticks / npc.efficiency))`
+where `base_travel_ticks = max(1, floor(path_cost × TICKS_PER_TILE))`, `TICKS_PER_TILE = 5`.
 
-See `design/quick-specs/efficiency-system-2026-06-03.md` for full formulas, tuning knobs, and UI interpretation rules.
+See `design/gdd/efficiency-system.md` for full formulas, tuning knobs, and UI interpretation rules.
 
 Future: The Perk System will drive `satisfaction_modifier` through consumption needs (food, clothing, shelter). Population tier requirements will gate perk activation.
 
@@ -106,7 +112,7 @@ If the assigned storage building is demolished, the NPC returns home IDLE. Their
 
 **Grid/Map System**: NPC movement uses Manhattan distance and tile coordinates. The Grid/Map System provides the distance calculation. Buildings are transparent to NPC pathfinding at Vertical Slice scope.
 
-**Tick System**: All NPC timing (travel time, work duration) is tick-based. 1000 ticks = 1 day. Travel speed is measured in ticks per tile.
+**Tick System**: All NPC timing (travel time, work duration) is tick-based. 1440 ticks = 1 day. Travel speed is measured in ticks per tile.
 
 **Player Character System**: Player actions (click to recruit, click to assign) are handled through the player character's interaction system. Assignment is manual — the player decides which NPC goes where. Recruitment costs no energy or ticks.
 
@@ -120,21 +126,21 @@ If the assigned storage building is demolished, the NPC returns home IDLE. Their
 
 ### Formula 1: NPC Travel Time
 
-`travel_ticks = manhattan_distance(from_position, to_position) × ticks_per_tile`
+`base_ticks = max(1, floor(path_cost × TICKS_PER_TILE))`
+`travel_ticks = max(1, floor(base_ticks / npc.efficiency))`   *(Efficiency F4)*
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `from_position` | Vector2i (tile coords) | — | NPC's current position |
-| `to_position` | Vector2i (tile coords) | — | Destination tile |
-| `ticks_per_tile` | float | 3.0 | Ticks required to travel one tile |
+| `path_cost` | float | — | A\* path cost from current position to destination (Σ entered-tile costs; roads 0.5, open ground 1.0). Falls back to Manhattan distance without a grid. |
+| `TICKS_PER_TILE` | int | 5 | Base ticks per cost unit at 100% efficiency (same constant as LogisticsSystem). |
+| `npc.efficiency` | float | 0.25–1.0 | Food-driven NPC efficiency (Rule 6); ≤ 0 guards to 1.0. |
 
 **Notes:**
-- Manhattan distance = `abs(from.x - to.x) + abs(from.y - to.y)`, as defined by the Grid/Map System.
-- At default `ticks_per_tile = 3.0`, a 10-tile travel costs 30 ticks (~1.8% of a day).
-- Minimum `ticks_per_tile = 1.0`. Setting to 0 would make NPCs teleport (infinite production throughput).
-- **Perk interaction**: The Perk System may modify the effective `ticks_per_tile` value for individual NPCs based on active perks. When a perk affecting movement is disabled, the effective `ticks_per_tile` increases (NPC is slower). The exact modifier is defined in the Perk System GDD.
+- Anchored 2026-06-12: a 50%-efficient NPC travels at 10 ticks/tile (the previous flat value); 100% = 5/tile, 25% = 20/tile.
+- A fed NPC's 10-tile trip costs 50 ticks (~3.5% of a 1440-tick day); the same trip unfed costs 100.
+- Roads halve the path cost on covered tiles — feeding and road building are interchangeable travel levers.
 
-**Example:** NPC at (2, 3) travels to building at (5, 3). Manhattan distance = 3. Travel time = 3 × 3.0 = 9 ticks.
+**Example:** NPC at (2, 3) travels to building at (5, 3), no roads, efficiency 1.0. Path cost = 3. Travel time = floor(floor(3 × 5) / 1.0) = 15 ticks.
 
 ---
 
@@ -201,14 +207,15 @@ NPCs cannot voluntarily leave an assignment mid-cycle. An NPC in WORK_AT_BUILDIN
 | Player Character System | Player writes | Player recruitment and assignment actions flow through PC input system. |
 | Perk System (deferred) | NPC reads | Returns `perk_modifier` for each NPC attribute. Deferred to post-VS — all modifiers are 1.0 during VS. |
 | Population Tier System (deferred) | Indirect | Defines tier requirements; Perk System translates these to perk evaluations. Deferred to post-VS. |
-| Hunger System (deferred) | Indirect | Daily food consumption evaluated by Perk System. Deferred to post-VS. |
+| Hunger System | Inbound | Per-NPC daily feeding drives `food_modifier` → `recalculate_efficiency()` → propagation to assigned buildings (see `design/gdd/hunger-system.md`). |
+| Experience System | Both | NPC carries `xp`/`level` and emits `npc_xp_gained`/`npc_leveled_up`. XP is granted to the assigned worker on each `production_output_ready` cycle (and to carriers per delivery); cosmetic only (no gameplay modifier at this scope). See `design/gdd/experience-system.md`. |
 | Production System (future) | TBD | When designed, the Production System may manage automated production chains that assign NPCs automatically. At VS scope, all assignment is manual. |
 
 ## Tuning Knobs
 
 | Knob | Default | Range | Effect | Notes |
 |------|---------|-------|--------|-------|
-| `ticks_per_tile` | 3.0 | 1.0–10.0 | Ticks per tile of NPC travel distance. Higher = NPCs spend more time traveling, less time producing. | Primary distance balance knob. At 10.0, a 20-tile trip costs 200 ticks (20% of a day). |
+| `TICKS_PER_TILE` | 5 | 1–10 | Base ticks per path-cost unit at 100% efficiency. Higher = NPCs spend more time traveling, less time producing. | Primary distance balance knob; must stay identical in NPCSystem, LogisticsSystem, BuildingRegistry. Effective speed also depends on feeding (F4) and roads. |
 | `npc_effectiveness_floor` | 0.10 | 0.05–0.50 | Minimum effective attribute when all perks are disabled. | Deferred to post-VS — not active at Vertical Slice scope. |
 | `npc_capacity_per_house` | 2 | 1–4 | Max NPCs per Residential House. Affects total workforce cap. | Fixed at 2 for VS. Higher values scale total output linearly. |
 | `npc_spawn_delay_ticks` | 1000 | 0–5000 | Ticks before the second NPC slot unlocks in a Residential House. | 0 = both slots available immediately. Higher values stretch the "manual → automated" progression. |
@@ -216,10 +223,10 @@ NPCs cannot voluntarily leave an assignment mid-cycle. An NPC in WORK_AT_BUILDIN
 
 ## Visual/Audio Requirements
 
-Visual/Audio Requirements for the NPC System at Vertical Slice scope:
+Visual/Audio Requirements for the NPC System (current implementation):
 
-- NPCs have no visible sprite on the map (as stated in Overview).
-- Building status indicators communicate NPC state: green = producing (NPC present and working), yellow = idle (no NPC assigned), red = blocked/stalled (NPC present but blocked).
+- NPCs render as icons in the **NpcOverlay**: workers and carriers are shown at their tile position and animate along their `travel_path` while travelling (animation duration matches the F4-scaled travel time). Carriers additionally show their cargo as a small resource icon.
+- Building status indicators communicate NPC state: green = producing (NPC present and working), yellow = idle (no NPC assigned), red = blocked (NPC present but blocked).
 - Residential Houses show a worker count indicator: "0/2", "1/2", "2/2". An empty slot shows a "Recruit" affordance (clickable UI element).
 - Audio: no NPC-specific audio at VS scope. Building status changes may have subtle audio cues (e.g., a soft "click" when an NPC begins working at a building).
 
@@ -241,7 +248,7 @@ Visual/Audio Requirements for the NPC System at Vertical Slice scope:
 | AC-2 | A Residential House supports up to 2 NPCs, with the second slot unlocking after 1000 ticks | Manual: recruit first NPC → wait 1000 ticks → second recruit becomes available |
 | AC-3 | Player can assign an idle NPC to a production building with free slots | Manual: click idle NPC → click building → NPC assigned, building status turns green |
 | AC-4 | Player selects an output storage at assignment time, and the NPC always deposits to that storage | Manual: assign NPC with Storage A → produce output → NPC deposits to Storage A |
-| AC-5 | NPC travel time is proportional to Manhattan distance using Formula 1 | Automated: place building at known distance → measure cycle duration → verify travel time = distance × ticks_per_tile |
+| AC-5 | NPC travel time follows Formula 1: floor(path_cost × 5) divided by NPC efficiency (F4) | Automated: place building at known path cost, set efficiency → verify travel_ticks_total |
 | AC-6 | NPC executes full task cycle: travel → work → travel to storage → deposit → return home | Manual: assign NPC → observe green status (working) → observe status change at each phase |
 | AC-7 | NPC enters WAITING state when storage is full, and resumes cycle when space is available | Manual: fill storage to capacity → assign NPC to produce → observe NPC at storage (WAITING) → empty storage → observe NPC deposits and returns |
 | AC-8 | Building status is green when NPC assigned and producing, yellow when no NPC assigned, red when blocked/stalled | Manual: assign NPC → green; remove NPC → yellow; fill storage → red |

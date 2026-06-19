@@ -15,10 +15,10 @@ const BLOCK_HEIGHT := 84
 const BLOCK_GAP    := 8
 const ICON_SIZE    := 48
 
-const COLOR_BLOCK_BG     := Color("#2a2a2a")
-const COLOR_BLOCK_BORDER := Color("#4a4a4a")
-const COLOR_HOVER_BORDER := Color("#A8A49C")
-const COLOR_QTY_TEXT     := Color("#F0EDE6")
+const COLOR_BLOCK_BG     := UiPalette.BLOCK_BG
+const COLOR_BLOCK_BORDER := UiPalette.BLOCK_BORDER
+const COLOR_HOVER_BORDER := UiPalette.HOVER_BORDER
+const COLOR_QTY_TEXT     := UiPalette.TEXT_PRIMARY
 
 ## Seconds the mouse must be held before a drag is initiated instead of a click.
 const DRAG_HOLD_SECONDS := 0.3
@@ -57,7 +57,6 @@ func _ready() -> void:
 func center_items() -> void:
 	_flow.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 
-
 ## Hides the empty-state label so the grid stays blank when no items are present.
 func hide_empty_label() -> void:
 	_empty_label.visible = false
@@ -80,25 +79,23 @@ func populate(items: Array[Dictionary]) -> void:
 	_empty_label.visible = false
 
 	for item: Dictionary in items:
-		_flow.add_child(_make_block(item[&"resource_id"], item[&"quantity"]))
+		_flow.add_child(_make_block(item[&"resource_id"], item[&"quantity"], item.get(&"subtitle", "")))
 
 	if center:
 		var n := items.size()
 		_flow.custom_minimum_size.x = n * BLOCK_WIDTH + maxi(n - 1, 0) * BLOCK_GAP
 
 
-func _make_block(resource_id: StringName, quantity: int) -> Control:
+func _make_block(resource_id: StringName, quantity: int, subtitle: String = "") -> Control:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(BLOCK_WIDTH, BLOCK_HEIGHT)
 	panel.mouse_filter        = Control.MOUSE_FILTER_STOP
+	if resource_id != &"*":
+		var def := ResourceRegistry.get_definition(resource_id)
+		if def != null:
+			panel.tooltip_text = def.display_name
 
-	var style := StyleBoxFlat.new()
-	style.bg_color            = COLOR_BLOCK_BG
-	style.border_width_left   = 1
-	style.border_width_right  = 1
-	style.border_width_top    = 1
-	style.border_width_bottom = 1
-	style.border_color        = COLOR_BLOCK_BORDER
+	var style := StyleFactory.block(COLOR_BLOCK_BG, COLOR_BLOCK_BORDER, 1, 0)
 	panel.add_theme_stylebox_override("panel", style)
 
 	var vbox := VBoxContainer.new()
@@ -112,14 +109,23 @@ func _make_block(resource_id: StringName, quantity: int) -> Control:
 	icon_container.mouse_filter          = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(icon_container)
 
-	var icon_lbl := Label.new()
-	icon_lbl.text                = _resource_icon(resource_id)
-	icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lbl.vertical_alignment  = VERTICAL_ALIGNMENT_CENTER
-	icon_lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	icon_lbl.add_theme_font_size_override("font_size", 28)
-	icon_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon_container.add_child(icon_lbl)
+	if resource_id == &"*":
+		var wc_lbl := Label.new()
+		wc_lbl.text                 = "*"
+		wc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		wc_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+		wc_lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		wc_lbl.add_theme_font_size_override("font_size", 28)
+		wc_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_container.add_child(wc_lbl)
+	else:
+		var icon_rect := TextureRect.new()
+		icon_rect.texture      = ResourceRegistry.get_icon_texture(resource_id, ICON_SIZE / 2)
+		icon_rect.expand_mode  = TextureRect.EXPAND_IGNORE_SIZE
+		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_container.add_child(icon_rect)
 
 	var qty_lbl := Label.new()
 	qty_lbl.text                  = "×%d" % quantity
@@ -130,6 +136,16 @@ func _make_block(resource_id: StringName, quantity: int) -> Control:
 	qty_lbl.add_theme_color_override("font_color", COLOR_QTY_TEXT)
 	qty_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(qty_lbl)
+
+	if subtitle != "":
+		var sub_lbl := Label.new()
+		sub_lbl.text = subtitle
+		sub_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		sub_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sub_lbl.add_theme_font_size_override("font_size", 10)
+		sub_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+		sub_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vbox.add_child(sub_lbl)
 
 	panel.mouse_entered.connect(func() -> void: style.border_color = COLOR_HOVER_BORDER)
 	panel.mouse_exited.connect(func() -> void:  style.border_color = COLOR_BLOCK_BORDER)
@@ -154,14 +170,3 @@ func _make_block(resource_id: StringName, quantity: int) -> Control:
 	)
 
 	return panel
-
-
-func _resource_icon(resource_id: StringName) -> String:
-	match resource_id:
-		&"*":     return "*"
-		&"wood":  return "🪵"
-		&"stone": return "🪨"
-		&"berry": return "🫐"
-		&"fiber": return "🌿"
-		&"tool":  return "🪓"
-		_:        return "📦"

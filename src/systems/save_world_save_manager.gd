@@ -9,7 +9,7 @@ const SAVE_PATH: String = "user://saves/"
 const MAX_SLOTS: int = 10
 
 ## Systems serialised on save, in order.
-const SAVE_SYSTEMS: Array[String] = ["InventorySystem", "BuildingRegistry", "PathSystem", "NPCSystem", "HungerSystem", "LogisticsSystem", "TickSystem"]
+const SAVE_SYSTEMS: Array[String] = ["InventorySystem", "BuildingRegistry", "PathSystem", "NPCSystem", "HungerSystem", "LogisticsSystem", "WildSystem", "TickSystem"]
 
 ## Systems deserialised on load; InventorySystem must precede BuildingRegistry
 ## (containers must exist before buildings reference them). PathSystem follows
@@ -17,7 +17,12 @@ const SAVE_SYSTEMS: Array[String] = ["InventorySystem", "BuildingRegistry", "Pat
 ## NPCSystem follows PathSystem so NPC home bases reference already-placed buildings.
 ## HungerSystem follows NPCSystem so food assignments can reference existing NPC IDs.
 ## LogisticsSystem follows NPCSystem so routes can reference already-restored NPCs.
-const LOAD_ORDER: Array[String] = ["InventorySystem", "BuildingRegistry", "PathSystem", "NPCSystem", "HungerSystem", "LogisticsSystem", "TickSystem"]
+## WildSystem follows the building/terrain systems; it only needs the (already restored)
+## WorldGrid terrain to recompute forests before restoring serialized wild groups.
+const LOAD_ORDER: Array[String] = ["InventorySystem", "BuildingRegistry", "PathSystem", "NPCSystem", "HungerSystem", "LogisticsSystem", "WildSystem", "TickSystem"]
+
+## Emitted after apply_pending_load() has finished deserialising all systems.
+signal load_completed
 
 var _registered_systems: Array[String] = []
 ## Scene-level WorldGrid node — not an Autoload, registered by MapRoot after it is ready.
@@ -186,6 +191,7 @@ func apply_pending_load() -> void:
 	_process_deserialize_order(data)
 	_has_pending_load = false
 	print("[WorldSaveManager] Applied pending load")
+	load_completed.emit()
 
 
 ## Convenience: load the most recently written save slot.

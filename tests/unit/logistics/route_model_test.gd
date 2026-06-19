@@ -86,12 +86,6 @@ func test_route_create_sets_remaining_ticks_zero() -> void:
 	assert_int(route.remaining_ticks).is_equal(0)
 
 
-func test_route_create_sets_wait_ticks_zero() -> void:
-	var route := LogisticsRouteScript.create(&"storage_A", &"lumber_camp_B", &"npc_7",
-			LogisticsRouteScript.RouteType.OUTPUT)
-	assert_int(route.wait_ticks).is_equal(0)
-
-
 # ---- AC-3: Duplicate OUTPUT slot is blocked ----------------------------------
 
 func test_create_route_blocks_second_output_on_same_source() -> void:

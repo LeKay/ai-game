@@ -5,12 +5,14 @@ extends Node
 ##
 ## Food is manually assigned per NPC via the NPC detail UI. On each day transition
 ## the system tries to consume each NPC's assigned food from the global inventory.
-## NPCs that receive food gain an efficiency boost; those that don't stay at base efficiency.
-## No food assigned or insufficient food → food_modifier = 1.0 (NPC stays at 50% efficiency).
-## 1 food unit consumed → food_modifier = 2.0 (100% efficiency). See EfficiencyFormulas.F5.
+## Efficiency is driven by TOTAL nutrition consumed (amount × food nutrition) through
+## the curve eff = 0.25 + min(0.15 × nutrition, 0.75): unfed → 0.25, 5 nutrition → 1.0
+## (5 berries == 1 bread == full). See EfficiencyFormulas.efficiency_from_nutrition / F5.
 
 ## Per-NPC food assignments: npc_id → { resource_id: StringName, amount: int }.
 var _food_assignments: Dictionary = {}
+## Per-NPC flag: was the assigned food actually consumed at the last day transition (UI active state).
+var _last_consumed: Dictionary = {}
 
 ## Emitted after day-transition consumption for each NPC whose modifier changed.
 ## food_modifier = EfficiencyFormulas.calculate_food_modifier(nutrition_of_one_ration).
@@ -63,10 +65,18 @@ func get_food_amount(npc_id: StringName) -> int:
 func clear_food_assignment(npc_id: StringName) -> void:
 	_food_assignments.erase(npc_id)
 
+## True if the NPC's assigned food was successfully consumed at the last day transition (UI state).
+func was_food_consumed(npc_id: StringName) -> bool:
+	return _last_consumed.get(npc_id, false)
+
+## True if at least one day transition has run for this NPC (i.e. _last_consumed has an entry).
+func has_consumption_record(npc_id: StringName) -> bool:
+	return _last_consumed.has(npc_id)
+
 ## Runs the daily consumption logic. Called by _on_day_transition; also callable directly for testing.
-## For each NPC: tries to consume their assigned food from inventory.
-## On success: emits npc_food_efficiency_changed with modifier = 1.0 + units_consumed.
-## On failure or no assignment: emits modifier = 1.0 (NPC stays at base 50% efficiency).
+## For each NPC: tries to consume their assigned food from inventory (across all containers).
+## On success: emits npc_food_efficiency_changed with the modifier for the consumed total nutrition.
+## On failure or no assignment: emits the modifier for nutrition 0 (NPC drops to 25% efficiency).
 func apply_daily_consumption() -> void:
 	if _inventory == null or _npc == null:
 		push_warning("HungerSystem: dependencies not ready — skipping consumption")
@@ -83,26 +93,65 @@ func apply_daily_consumption() -> void:
 		var food_id: StringName = entry.get(&"resource_id", &"")
 		var amount: int = entry.get(&"amount", 1)
 
-		if food_id == &"":
-			npc_food_efficiency_changed.emit(npc_id, EfficiencyFormulas.calculate_food_modifier(0.0))
-			continue
-
-		var container_id: StringName = _inventory.find_container_with(food_id)
-		if container_id == &"":
-			npc_food_efficiency_changed.emit(npc_id, EfficiencyFormulas.calculate_food_modifier(0.0))
-			continue
-
-		if _inventory.try_consume(container_id, food_id, amount) != InventoryContainer.ConsumeResult.SUCCESS:
-			# Unfed → nutrition 0 → modifier for 0.25 efficiency (very inefficient, never frozen).
-			npc_food_efficiency_changed.emit(npc_id, EfficiencyFormulas.calculate_food_modifier(0.0))
-		else:
+		# TOTAL nutrition consumed = amount × food nutrition (5 berries == 1 bread == 100%).
+		var consumed_nutrition: float = 0.0
+		var did_consume: bool = false
+		if food_id != &"" and _try_consume_across_containers(food_id, amount):
+			did_consume = true
 			consumed[food_id] = consumed.get(food_id, 0) + amount
-			# Efficiency is driven by TOTAL nutrition consumed = amount × food nutrition.
-			# So 5 berries (5×1) == 1 bread (1×5) == 100%; bread just needs fewer items.
-			var total_nutrition: float = _get_food_nutrition(food_id) * float(amount)
-			npc_food_efficiency_changed.emit(npc_id, EfficiencyFormulas.calculate_food_modifier(total_nutrition))
+			consumed_nutrition = _get_food_nutrition(food_id) * float(amount)
+		_last_consumed[npc_id] = did_consume
+
+		# Perk effects (#1 Genügsam: less nutrition needed; #9 Zäh: higher unfed floor;
+		# #3 Meisterhand: raises the efficiency ceiling additively, like a level-up).
+		var perk_nutrition: float = 0.0
+		var floor_eff: float = 0.0
+		var eff_cap_bonus: float = 0.0
+		if _npc.has_method("npc_perk_bonus"):
+			perk_nutrition = _npc.npc_perk_bonus(npc_id, PerkRegistry.EFFECT_NUTRITION_REDUCE)
+			floor_eff = _npc.npc_perk_bonus(npc_id, PerkRegistry.EFFECT_UNFED_FLOOR)
+			eff_cap_bonus = _npc.npc_perk_bonus(npc_id, PerkRegistry.EFFECT_NPC_EFF_CAP)
+
+		# Level raises the reachable max efficiency by 5%/level; the extra ceiling must be filled
+		# with more nutrition (Master's Touch adds to that same cap). 0 if level unknown.
+		var level: int = 1
+		var inst: Object = _npc.get_npc_instance(npc_id)
+		if inst != null:
+			level = int(inst.level)
+
+		var modifier: float = EfficiencyFormulas.calculate_food_modifier(
+				consumed_nutrition + perk_nutrition, level, eff_cap_bonus)
+		if floor_eff > 0.0:
+			modifier = maxf(modifier, floor_eff / EfficiencyFormulas.BASE_NPC_EFFICIENCY)
+		npc_food_efficiency_changed.emit(npc_id, modifier)
 
 	food_consumed_daily.emit(consumed)
+
+
+## Consumes amount units of food_id across all storage containers in deterministic
+## container-id order. All-or-nothing: returns false and consumes NOTHING when the
+## total stock across containers is below amount. (Previously fed only from the first
+## container holding the food — an NPC could starve while another container was full.)
+func _try_consume_across_containers(food_id: StringName, amount: int) -> bool:
+	var containers: Array = _inventory.get_all_containers()
+	containers.sort_custom(func(a: Object, b: Object) -> bool:
+		return str(a.container_id) < str(b.container_id))
+	var total: int = 0
+	for container: Object in containers:
+		total += _inventory.get_resource_quantity(container.container_id, food_id)
+	if total < amount:
+		return false
+	var remaining: int = amount
+	for container: Object in containers:
+		if remaining <= 0:
+			break
+		var available: int = _inventory.get_resource_quantity(container.container_id, food_id)
+		if available <= 0:
+			continue
+		var to_consume: int = mini(available, remaining)
+		_inventory.try_consume(container.container_id, food_id, to_consume)
+		remaining -= to_consume
+	return true
 
 func _on_day_transition(_days_elapsed: int) -> void:
 	apply_daily_consumption()

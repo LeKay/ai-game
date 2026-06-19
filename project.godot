@@ -31,6 +31,7 @@ NPCSystem="*res://src/gameplay/npc_system.gd"
 HungerSystem="*res://src/gameplay/hunger_system.gd"
 DayLedger="*res://src/ui/day_ledger.gd"
 LogisticsSystem="*res://src/systems/logistics/logistics_system.gd"
+WildSystem="*res://src/systems/wild_system.gd"
 
 [display]
 

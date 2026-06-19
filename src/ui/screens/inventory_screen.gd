@@ -51,6 +51,8 @@ var _building_grid:  BuildingGrid
 var _crafting_grid:  CraftingGrid
 var _npc_grid:        NpcGrid
 var _npc_detail_panel: NpcDetailPanel
+var _crafting_gate_label: Label
+var _crafting_bench_dropdown: OptionButton
 
 var _open_tween:       Tween = null
 var _pulse_tween:      Tween = null
@@ -70,6 +72,16 @@ func _exit_tree() -> void:
 		InventorySystem.storage_changed.disconnect(_on_inventory_changed)
 	if InventorySystem.container_capacity_changed.is_connected(_on_capacity_changed):
 		InventorySystem.container_capacity_changed.disconnect(_on_capacity_changed)
+	if CraftingRegistry.crafting_started.is_connected(_on_crafting_started):
+		CraftingRegistry.crafting_started.disconnect(_on_crafting_started)
+	if CraftingRegistry.crafting_progress.is_connected(_on_crafting_progress):
+		CraftingRegistry.crafting_progress.disconnect(_on_crafting_progress)
+	if CraftingRegistry.recipe_crafted.is_connected(_on_crafting_completed):
+		CraftingRegistry.recipe_crafted.disconnect(_on_crafting_completed)
+	if BuildingRegistry.upgrade_installed.is_connected(_on_upgrade_changed_iv):
+		BuildingRegistry.upgrade_installed.disconnect(_on_upgrade_changed_iv)
+	if BuildingRegistry.upgrade_removed.is_connected(_on_upgrade_changed_iv):
+		BuildingRegistry.upgrade_removed.disconnect(_on_upgrade_changed_iv)
 	var npc_sys: Node = NPCSystem
 	if npc_sys != null:
 		if npc_sys.npc_recruited.is_connected(_on_npc_recruited_iv):
@@ -82,6 +94,12 @@ func _exit_tree() -> void:
 			npc_sys.npc_assigned.disconnect(_on_npc_sn_sn_iv)
 		if npc_sys.npc_returned_home.is_connected(_on_npc_sn_iv):
 			npc_sys.npc_returned_home.disconnect(_on_npc_sn_iv)
+		if npc_sys.npc_renamed.is_connected(_on_npc_sn_sn_iv):
+			npc_sys.npc_renamed.disconnect(_on_npc_sn_sn_iv)
+		if npc_sys.npc_xp_gained.is_connected(_on_npc_xp_gained_iv):
+			npc_sys.npc_xp_gained.disconnect(_on_npc_xp_gained_iv)
+		if npc_sys.npc_leveled_up.is_connected(_on_npc_leveled_up_iv):
+			npc_sys.npc_leveled_up.disconnect(_on_npc_leveled_up_iv)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -261,6 +279,22 @@ func _build_zone3(parent: VBoxContainer) -> void:
 	_item_grid.name = "ItemGrid"
 	_zone3_vbox.add_child(_item_grid)
 
+	_crafting_gate_label = Label.new()
+	_crafting_gate_label.name                = "CraftingGateLabel"
+	_crafting_gate_label.text                = "Create a crafting bench in a storage building to start crafting."
+	_crafting_gate_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_crafting_gate_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_crafting_gate_label.add_theme_font_size_override("font_size", 14)
+	_crafting_gate_label.autowrap_mode       = TextServer.AUTOWRAP_WORD_SMART
+	_crafting_gate_label.visible             = false
+	_zone3_vbox.add_child(_crafting_gate_label)
+
+	_crafting_bench_dropdown = OptionButton.new()
+	_crafting_bench_dropdown.name    = "CraftingBenchDropdown"
+	_crafting_bench_dropdown.visible = false
+	_crafting_bench_dropdown.item_selected.connect(_on_crafting_bench_selected)
+	_zone3_vbox.add_child(_crafting_bench_dropdown)
+
 	_crafting_grid = CraftingGrid.new()
 	_crafting_grid.name    = "CraftingGrid"
 	_crafting_grid.visible = false
@@ -303,6 +337,11 @@ func _connect_signals() -> void:
 	_npc_detail_panel.food_assigned.connect(_on_npc_food_assigned)
 	_npc_detail_panel.food_cleared.connect(_on_npc_food_cleared)
 	_npc_detail_panel.food_amount_changed.connect(_on_npc_food_amount_changed)
+	CraftingRegistry.crafting_started.connect(_on_crafting_started)
+	CraftingRegistry.crafting_progress.connect(_on_crafting_progress)
+	CraftingRegistry.recipe_crafted.connect(_on_crafting_completed)
+	BuildingRegistry.upgrade_installed.connect(_on_upgrade_changed_iv)
+	BuildingRegistry.upgrade_removed.connect(_on_upgrade_changed_iv)
 	var npc_sys: Node = NPCSystem
 	if npc_sys != null:
 		npc_sys.npc_recruited.connect(_on_npc_recruited_iv)
@@ -310,6 +349,9 @@ func _connect_signals() -> void:
 		npc_sys.npc_released.connect(_on_npc_sn_iv)
 		npc_sys.npc_assigned.connect(_on_npc_sn_sn_iv)
 		npc_sys.npc_returned_home.connect(_on_npc_sn_iv)
+		npc_sys.npc_renamed.connect(_on_npc_sn_sn_iv)
+		npc_sys.npc_xp_gained.connect(_on_npc_xp_gained_iv)
+		npc_sys.npc_leveled_up.connect(_on_npc_leveled_up_iv)
 
 
 func _on_inventory_changed(_container_id: StringName) -> void:
@@ -335,7 +377,8 @@ func _open() -> void:
 	_was_paused_before_open = TickSystem.is_paused()
 	_is_open            = true
 	_panel_root.visible = true
-	TickSystem.set_pause(true)
+	if not CraftingRegistry.is_crafting():
+		TickSystem.set_pause(true)
 	_refresh()
 	_animate_in()
 	inventory_opened.emit()
@@ -344,7 +387,8 @@ func _open() -> void:
 func _close() -> void:
 	_is_open = false
 	_stop_pulse()
-	TickSystem.set_pause(_was_paused_before_open)
+	if not CraftingRegistry.is_crafting():
+		TickSystem.set_pause(_was_paused_before_open)
 	_animate_out()
 	inventory_closed.emit()
 
@@ -378,7 +422,8 @@ func _refresh() -> void:
 	if _active_tab == 0:
 		_item_grid.populate(_to_item_list(summary[&"resources"]))
 	elif _active_tab == 1:
-		_crafting_grid.populate(_crafting_list())
+		if CraftingRegistry.has_crafting_bench():
+			_crafting_grid.populate(_crafting_list(), CraftingRegistry.get_active_recipe_id(), CraftingRegistry.get_crafting_progress())
 	elif _active_tab == 2:
 		_building_grid.populate(_building_list())
 	elif _active_tab == 3:
@@ -474,21 +519,28 @@ func _apply_tab_styles() -> void:
 
 func _refresh_zone3() -> void:
 	for child in _zone3_vbox.get_children():
-		if child != _item_grid and child != _crafting_grid and child != _building_grid and child != _npc_grid:
+		if child != _item_grid and child != _crafting_grid and child != _building_grid and child != _npc_grid and child != _crafting_gate_label and child != _crafting_bench_dropdown:
 			child.queue_free()
 
-	_item_grid.visible     = false
-	_crafting_grid.visible = false
-	_building_grid.visible = false
-	_npc_grid.visible      = false
+	_item_grid.visible              = false
+	_crafting_grid.visible          = false
+	_crafting_gate_label.visible    = false
+	_crafting_bench_dropdown.visible = false
+	_building_grid.visible          = false
+	_npc_grid.visible               = false
 
 	if _active_tab == 0:
 		_item_grid.visible = true
 		var summary := _compute_summary()
 		_item_grid.populate(_to_item_list(summary[&"resources"]))
 	elif _active_tab == 1:
-		_crafting_grid.visible = true
-		_crafting_grid.populate(_crafting_list())
+		if not CraftingRegistry.has_crafting_bench():
+			_crafting_gate_label.visible = true
+		else:
+			_crafting_bench_dropdown.visible = true
+			_crafting_grid.visible = true
+			_refresh_bench_dropdown()
+			_crafting_grid.populate(_crafting_list(), CraftingRegistry.get_active_recipe_id(), CraftingRegistry.get_crafting_progress())
 	elif _active_tab == 2:
 		_building_grid.visible = true
 		_building_grid.populate(_building_list())
@@ -509,7 +561,7 @@ func _refresh_zone3() -> void:
 # ── Food consumption ──────────────────────────────────────────────────────────
 
 func _on_item_clicked(resource_id: StringName) -> void:
-	if not PlayerCharacter.FOOD_ENERGY.has(resource_id):
+	if not PlayerCharacter.is_food(resource_id):
 		return
 	var player: Node = get_tree().get_first_node_in_group(&"player_character")
 	if player == null:
@@ -523,7 +575,7 @@ func _on_item_clicked(resource_id: StringName) -> void:
 	if not player.consume_food(resource_id):
 		InventorySystem.try_deposit(container_id, resource_id, 1)
 		return
-	var energy_amount: int = PlayerCharacter.FOOD_ENERGY.get(resource_id, 0)
+	var energy_amount: int = PlayerCharacter.food_energy_value(resource_id)
 	_spawn_energy_float("+%d ⚡" % energy_amount)
 
 
@@ -575,14 +627,6 @@ func _building_list() -> Array[Dictionary]:
 	var resources: Dictionary = _compute_summary()[&"resources"]
 	var player: Node = get_tree().get_first_node_in_group(&"player_character")
 	var current_energy: int = player.get_current_energy() if player != null else 0
-	var building_entries: Array[Dictionary] = [
-		{&"building_type": BuildingRegistry.BuildingType.STORAGE_BUILDING,  &"display_name": "Storage Building"},
-		{&"building_type": BuildingRegistry.BuildingType.RESIDENTIAL_HOUSE, &"display_name": "Residential House"},
-		{&"building_type": BuildingRegistry.BuildingType.LUMBER_CAMP,       &"display_name": "Lumber Camp"},
-		{&"building_type": BuildingRegistry.BuildingType.STONE_MASON,       &"display_name": "Stone Mason"},
-		{&"building_type": BuildingRegistry.BuildingType.GATHERING_HUT,     &"display_name": "Gathering Hut"},
-		{&"building_type": BuildingRegistry.BuildingType.TOOL_WORKSHOP,     &"display_name": "Tool Workshop"},
-	]
 	var result: Array[Dictionary] = []
 
 	# Demolish entry — no cost, always available.
@@ -607,8 +651,7 @@ func _building_list() -> Array[Dictionary]:
 		&"current_energy": current_energy,
 	})
 
-	for entry: Dictionary in building_entries:
-		var btype: int       = entry[&"building_type"]
+	for btype: int in BuildingRegistry.BUILDABLE_TYPES:
 		var cost: Dictionary = BuildingRegistry.BUILD_COST.get(btype, {})
 		var available: Dictionary = {}
 		var can_afford: bool = true
@@ -625,7 +668,7 @@ func _building_list() -> Array[Dictionary]:
 			can_afford = false
 		result.append({
 			&"building_type":   btype,
-			&"display_name":    entry[&"display_name"],
+			&"display_name":    BuildingRegistry.get_type_display_name(btype),
 			&"cost":            cost,
 			&"available":       available,
 			&"can_afford":      can_afford,
@@ -681,16 +724,70 @@ func _crafting_list() -> Array[Dictionary]:
 
 
 func _on_recipe_selected(recipe_id: StringName) -> void:
+	if not CraftingRegistry.has_crafting_bench():
+		_spawn_craft_float("Need a crafting bench!", Color("#E05050"))
+		return
+	if CraftingRegistry.is_crafting():
+		_spawn_craft_float("Already crafting!", Color("#E05050"))
+		return
 	var result: int = CraftingRegistry.try_craft(recipe_id)
 	if result == CraftingRegistry.CraftResult.NO_STORAGE:
-		_spawn_craft_float("Kein Lager verfügbar!", Color("#E05050"))
+		_spawn_craft_float("No storage available!", Color("#E05050"))
 		return
 	if result != CraftingRegistry.CraftResult.SUCCESS:
 		return
-	var output: Dictionary    = CraftingRegistry.RECIPE_OUTPUT.get(recipe_id, {})
-	var qty: int              = output.get(&"quantity", 1)
-	var display_name: String  = CraftingRegistry.RECIPE_DISPLAY_NAME.get(recipe_id, str(recipe_id))
+	# Unpause ticks so the craft can progress while the inventory is open.
+	TickSystem.set_pause(false)
+
+
+func _on_crafting_started(_recipe_id: StringName, _total_ticks: int) -> void:
+	if _is_open and _active_tab == 1:
+		_crafting_grid.populate(_crafting_list(), CraftingRegistry.get_active_recipe_id(), 0.0)
+
+
+func _on_crafting_progress(_recipe_id: StringName, progress: float) -> void:
+	if _is_open and _active_tab == 1:
+		_crafting_grid.update_progress(progress)
+
+
+func _on_crafting_completed(recipe_id: StringName, qty: int) -> void:
+	if _is_open:
+		if not CraftingRegistry.is_crafting():
+			TickSystem.set_pause(true)
+		if _active_tab == 1:
+			_crafting_grid.populate(_crafting_list())
+	var display_name: String = CraftingRegistry.RECIPE_DISPLAY_NAME.get(recipe_id, str(recipe_id))
 	_spawn_craft_float("+%d %s" % [qty, display_name])
+
+
+func _refresh_bench_dropdown() -> void:
+	_crafting_bench_dropdown.clear()
+	var bench_buildings: Array[String] = CraftingRegistry.get_crafting_bench_buildings()
+	for bid: String in bench_buildings:
+		var label: String = BuildingRegistry.get_building_display_name(bid)
+		_crafting_bench_dropdown.add_item(label)
+		_crafting_bench_dropdown.set_item_metadata(_crafting_bench_dropdown.item_count - 1, bid)
+	# Re-select the previously selected bench if it still exists.
+	var sel: String = CraftingRegistry.selected_crafting_storage
+	if sel != "":
+		for i: int in range(_crafting_bench_dropdown.item_count):
+			if _crafting_bench_dropdown.get_item_metadata(i) == sel:
+				_crafting_bench_dropdown.select(i)
+				return
+	# Default: first item.
+	if _crafting_bench_dropdown.item_count > 0:
+		_crafting_bench_dropdown.select(0)
+		CraftingRegistry.set_selected_storage(_crafting_bench_dropdown.get_item_metadata(0))
+
+
+func _on_crafting_bench_selected(index: int) -> void:
+	var bid: String = _crafting_bench_dropdown.get_item_metadata(index)
+	CraftingRegistry.set_selected_storage(bid)
+
+
+func _on_upgrade_changed_iv(_building_id: String, _upgrade_id: StringName) -> void:
+	if _is_open and _active_tab == 1:
+		_refresh_zone3()
 
 
 # ── NPC tab ───────────────────────────────────────────────────────────────────
@@ -701,12 +798,24 @@ func _npc_list() -> Array[Dictionary]:
 		return []
 	var result: Array[Dictionary] = []
 	for npc_id: StringName in npc_sys.all_npcs:
+		var npc: Object = npc_sys.get_npc_instance(npc_id)
+		var level: int = npc.level if npc != null else 1
+		var total_xp: int = npc.xp if npc != null else 0
 		result.append({
 			&"npc_id": npc_id,
 			&"state": npc_sys.get_npc_state(npc_id),
 			&"display_name": npc_sys.get_npc_display_name(npc_id),
+			&"job": npc_sys.get_npc_job_name(npc_id),
+			&"level": level,
+			&"xp_into_level": ExperienceFormulas.xp_into_level(total_xp, level),
+			&"xp_span": ExperienceFormulas.xp_span_of_level(level),
+			&"warnings": _npc_warnings(npc_id, npc),
 		})
 	return result
+
+
+func _npc_warnings(npc_id: StringName, npc: Object) -> Array:
+	return NpcGrid.build_npc_warnings(npc_id, npc)
 
 
 func _on_npc_recruited_iv(_npc_id: StringName, _home: Vector2i) -> void:
@@ -720,6 +829,16 @@ func _on_npc_sn_iv(_npc_id: StringName) -> void:
 
 
 func _on_npc_sn_sn_iv(_npc_id: StringName, _other: StringName) -> void:
+	if _is_open and _active_tab == 3:
+		_npc_grid.populate(_npc_list())
+
+
+func _on_npc_xp_gained_iv(_npc_id: StringName, _total_xp: int, _into: int, _span: int) -> void:
+	if _is_open and _active_tab == 3:
+		_npc_grid.populate(_npc_list())
+
+
+func _on_npc_leveled_up_iv(_npc_id: StringName, _new_level: int) -> void:
 	if _is_open and _active_tab == 3:
 		_npc_grid.populate(_npc_list())
 

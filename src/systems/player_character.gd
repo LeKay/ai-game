@@ -7,9 +7,13 @@ class_name PlayerCharacter extends Node
 
 signal energy_changed(current: int, max_energy: int)
 signal energy_depletion_changed(is_depleted: bool)
-signal action_started(action_id: int, tick_cost: int)
+signal action_started(action_id: int, tick_cost: int, tile: Vector2i)
 signal action_completed(action_id: int, output: Array)
+## Emitted when a PLANT_SEED action finishes. map_root calls WorldGrid.plant_seed() on receipt.
+signal seed_planted(seed_type: StringName, tile: Vector2i)
 signal action_failed(action_id: int, reason: String)
+signal action_queued(action_id: int, position_in_queue: int, tile: Vector2i)
+signal action_queue_cleared()
 signal action_progress_update(progress: float, effective_tick_cost: int, effective_output: int)
 signal food_consumed(food_type: StringName, energy_restored: int)
 signal architect_mode_triggered()
@@ -22,7 +26,6 @@ signal relocation_cancelled(source: Vector2i)
 enum ManualActionType {
 	FORAGE,
 	PICK_BERRIES,
-	CRAFT_TOOL,
 	CHOP_TREE,
 	MINE_STONE,
 	HARVEST_FIBER,
@@ -30,10 +33,17 @@ enum ManualActionType {
 	CLEAR_STONE,
 	CLEAR_BERRY,
 	CLEAR_GRASS,
+	CONSTRUCT_BUILDING,
+	CONSTRUCT_PATH,
+	INSTALL_UPGRADE,
+	PLANT_SEED,  ## Plants a seed on an EMPTY tile; terrain grows after SEED_GROWTH_TICKS ticks.
+	HARVEST_WHEAT,  ## Harvests a WHEAT field tile → wheat (+ chance of wheat_seed byproduct).
+	CLEAR_WHEAT,    ## Clears a WHEAT field tile for building → wheat (+ wheat_seed byproduct).
 }
 
 enum StartResult {
 	SUCCESS,
+	QUEUED,
 	BLOCKED_SLOT,
 	INSUFFICIENT_ENERGY,
 	ARCHITECT_LOCKED,
@@ -179,11 +189,11 @@ class ArchitectMode:
 	func on_npc_assigned(_npc_id: StringName, _building_id: StringName) -> void:
 		locked = true
 
-	## Returns false for gathering actions when locked; Craft Tool is always allowed.
-	func can_gather(action_type: int) -> bool:
-		if not locked:
-			return true
-		return action_type == PlayerCharacter.ManualActionType.CRAFT_TOOL
+	## Returns false for all manual gathering actions when locked.
+	## (Tool crafting is not a manual action — it runs through CraftingRegistry
+	## and is unaffected by architect mode.)
+	func can_gather(_action_type: int) -> bool:
+		return not locked
 
 
 ## Drag state machine for tile-to-tile resource relocation.
@@ -199,11 +209,17 @@ class RelocationDrag:
 
 # ---- Constants --------------------------------------------------------------
 
-## Food type → energy restoration amount (GDD Rule 6).
-const FOOD_ENERGY: Dictionary = {
-	&"berry": 10,
-	&"bread": 25,
-}
+## Maximum number of actions that can be queued behind the active one.
+const MAX_QUEUE_SIZE: int = 5
+
+## Energy spent per Search action (locating / exposing hidden clay).
+const SURVEY_ENERGY: int = 5
+
+## Energy restored per point of food nutrition when eating (GDD Rule 6).
+## Energy gain = ResourceRegistry nutrition × this factor. Any resource with
+## positive nutrition is edible: berry (1.0) → +10, bread (5.0) → +50,
+## meat (4.0) → +40, wheat (0.5) → +5.
+const ENERGY_PER_NUTRITION: int = 10
 
 ## Forage loot table: [resource_id, cumulative_weight]. Total weight = 100.
 ## Equal 25% distribution across all 4 resource types.
@@ -213,6 +229,18 @@ const FORAGE_TABLE: Array = [
 	[&"berry", 75],
 	[&"fiber", 100],
 ]
+
+## Seed byproduct table: action_type → [chance 0-100, seed_resource_id].
+const SEED_BYPRODUCT_CHANCES: Dictionary = {
+	ManualActionType.CHOP_TREE:     [5,  &"tree_seed"],
+	ManualActionType.PICK_BERRIES:  [5,  &"berry_seed"],
+	ManualActionType.HARVEST_FIBER: [5,  &"grass_seed"],
+	ManualActionType.CLEAR_TREE:    [20, &"tree_seed"],
+	ManualActionType.CLEAR_BERRY:   [20, &"berry_seed"],
+	ManualActionType.CLEAR_GRASS:   [20, &"grass_seed"],
+	ManualActionType.HARVEST_WHEAT: [5,  &"wheat_seed"],
+	ManualActionType.CLEAR_WHEAT:   [20, &"wheat_seed"],
+}
 
 # ---- State ------------------------------------------------------------------
 
@@ -224,7 +252,13 @@ var _rng: RandomNumberGenerator
 
 var _inventory: Node = null   ## injected via init_dependencies()
 var _tick_system: Node = null  ## injected via init_dependencies()
+var _grid: Node = null         ## WorldGrid, injected via init_dependencies() (fertility + Search)
+var _active_seed_type: StringName = &""  ## set when PLANT_SEED action is running
 var _relocation_drag: RelocationDrag
+var _action_queue: Array[Dictionary] = []  ## entries: {type: int, tile: Vector2i}
+var _active_tile: Vector2i = Vector2i(-1, -1)
+var _active_building_id: String = ""  ## set when CONSTRUCT_BUILDING action is running
+var _active_upgrade_id: StringName = &""  ## set when INSTALL_UPGRADE action is running
 
 # ---- Lifecycle --------------------------------------------------------------
 
@@ -241,20 +275,23 @@ func _ready() -> void:
 	_action_configs = {
 		ManualActionType.FORAGE:        ManualActionConfig.new(ManualActionType.FORAGE,       50,  8, 1, &"",      false),
 		ManualActionType.PICK_BERRIES:  ManualActionConfig.new(ManualActionType.PICK_BERRIES,  40,  5, 3, &"berry", false),
-		ManualActionType.CRAFT_TOOL:    ManualActionConfig.new(ManualActionType.CRAFT_TOOL,   100, 15, 1, &"tool",  false),
 		ManualActionType.CHOP_TREE:     ManualActionConfig.new(ManualActionType.CHOP_TREE,     80, 12, 5, &"wood",  true),
 		ManualActionType.MINE_STONE:    ManualActionConfig.new(ManualActionType.MINE_STONE,    60, 10, 3, &"stone", true),
 		ManualActionType.HARVEST_FIBER: ManualActionConfig.new(ManualActionType.HARVEST_FIBER, 45,  6, 2, &"fiber", false),
-		ManualActionType.CLEAR_TREE:    ManualActionConfig.new(ManualActionType.CLEAR_TREE,   400, 40, 20, &"wood",  false),
+		ManualActionType.CLEAR_TREE:    ManualActionConfig.new(ManualActionType.CLEAR_TREE,    400, 40, 20, &"wood",  false),
 		ManualActionType.CLEAR_STONE:   ManualActionConfig.new(ManualActionType.CLEAR_STONE,  400, 40, 20, &"stone", false),
 		ManualActionType.CLEAR_BERRY:   ManualActionConfig.new(ManualActionType.CLEAR_BERRY,  400, 40, 20, &"berry", false),
 		ManualActionType.CLEAR_GRASS:   ManualActionConfig.new(ManualActionType.CLEAR_GRASS,  400, 40, 20, &"fiber", false),
+		ManualActionType.PLANT_SEED:    ManualActionConfig.new(ManualActionType.PLANT_SEED,    30,  8, 0, &"",     false),
+		ManualActionType.HARVEST_WHEAT: ManualActionConfig.new(ManualActionType.HARVEST_WHEAT, 45,  6, 2, &"wheat", false),
+		ManualActionType.CLEAR_WHEAT:   ManualActionConfig.new(ManualActionType.CLEAR_WHEAT,  400, 40, 20, &"wheat", false),
 	}
 
 
 ## Wire up Foundation system dependencies. Called by scene root or WorldSaveManager.
-func init_dependencies(tick: Node, inventory: Node, _grid: Node, _input_ctx: Node) -> void:
+func init_dependencies(tick: Node, inventory: Node, grid: Node, _input_ctx: Node) -> void:
 	_inventory = inventory
+	_grid = grid
 	if _tick_system != null:
 		if _tick_system.ticks_advanced.is_connected(_on_ticks_advanced):
 			_tick_system.ticks_advanced.disconnect(_on_ticks_advanced)
@@ -296,6 +333,21 @@ func consume_energy(amount: int) -> bool:
 
 # ---- Action API (Story 002) -------------------------------------------------
 
+## Returns the number of actions waiting in the queue (not counting the active one).
+func get_queue_size() -> int:
+	return _action_queue.size()
+
+
+## Returns a copy of the queued entries in order. Each entry: {type: int, tile: Vector2i}.
+func get_queued_actions() -> Array[Dictionary]:
+	return _action_queue.duplicate()
+
+
+## Clears all queued actions without affecting the currently running action.
+func clear_queue() -> void:
+	_action_queue.clear()
+
+
 ## Returns the current action slot state.
 func get_action_state() -> ActionSlot.State:
 	return _action_slot.state
@@ -311,16 +363,52 @@ func is_architect_mode() -> bool:
 	return _architect_mode.locked
 
 
+## Returns the building ID the active action targets (CONSTRUCT_BUILDING or INSTALL_UPGRADE).
+func get_active_building_id() -> String:
+	return _active_building_id
+
+
+## Returns the upgrade ID being installed, or &"" if no INSTALL_UPGRADE action is running.
+func get_active_upgrade_id() -> StringName:
+	return _active_upgrade_id
+
+
+## Returns current action progress in [0.0, 1.0], or 0.0 if idle.
+func get_action_progress() -> float:
+	if _action_slot.state != ActionSlot.State.WORKING or _action_slot.total_ticks <= 0:
+		return 0.0
+	return clampf(float(_action_slot.accumulated_ticks) / float(_action_slot.total_ticks), 0.0, 1.0)
+
+
+## Returns action progress [0.0, 1.0] only if the active action targets tile; 0.0 otherwise.
+func get_active_progress_for_tile(tile: Vector2i) -> float:
+	if _active_tile != tile:
+		return 0.0
+	return get_action_progress()
+
+
 ## Attempt to start a manual action. Returns StartResult value.
-## Emits action_started on success; action_failed on any failure.
-func try_start_action(action_type: int) -> int:
+## Emits action_started on success; action_queued when deferred to queue; action_failed on any failure.
+func try_start_action(action_type: int, tile: Vector2i = Vector2i(-1, -1)) -> int:
+	if action_type == ManualActionType.CONSTRUCT_BUILDING:
+		return _try_start_construct(tile)
+	if action_type == ManualActionType.CONSTRUCT_PATH:
+		return _try_start_construct_path(tile)
+	if action_type == ManualActionType.INSTALL_UPGRADE:
+		push_warning("PlayerCharacter: use try_start_upgrade() for INSTALL_UPGRADE")
+		return StartResult.BLOCKED_SLOT
+
 	var config: ManualActionConfig = _action_configs.get(action_type, null)
 	if config == null:
 		return StartResult.BLOCKED_SLOT
 
 	if _action_slot.state != ActionSlot.State.FREE:
-		action_failed.emit(action_type, _start_result_to_reason(StartResult.BLOCKED_SLOT))
-		return StartResult.BLOCKED_SLOT
+		if _action_queue.size() >= MAX_QUEUE_SIZE:
+			action_failed.emit(action_type, _start_result_to_reason(StartResult.BLOCKED_SLOT))
+			return StartResult.BLOCKED_SLOT
+		_action_queue.append({type = action_type, tile = tile})
+		action_queued.emit(action_type, _action_queue.size(), tile)
+		return StartResult.QUEUED
 
 	if _architect_mode.locked and not _architect_mode.can_gather(action_type):
 		action_failed.emit(action_type, _start_result_to_reason(StartResult.ARCHITECT_LOCKED))
@@ -331,7 +419,7 @@ func try_start_action(action_type: int) -> int:
 		return StartResult.TOOL_REQUIRED
 
 	var has_energy := _energy_pool.current >= config.energy_cost
-	var is_food_action := FOOD_ENERGY.has(config.output_resource)
+	var is_food_action := is_food(config.output_resource)
 
 	if not has_energy and not is_food_action:
 		action_failed.emit(action_type, _start_result_to_reason(StartResult.INSUFFICIENT_ENERGY))
@@ -346,6 +434,7 @@ func try_start_action(action_type: int) -> int:
 	_action_slot.config = config
 	_action_slot.accumulated_ticks = 0
 	_action_slot.state = ActionSlot.State.WORKING
+	_active_tile = tile
 
 	if not has_energy:
 		_action_slot.total_ticks = config.tick_cost * 2
@@ -354,14 +443,179 @@ func try_start_action(action_type: int) -> int:
 		_action_slot.total_ticks = config.tick_cost
 		_action_slot.effective_output = config.base_output
 
-	action_started.emit(action_type, _action_slot.total_ticks)
+	action_started.emit(action_type, _action_slot.total_ticks, tile)
+	return StartResult.SUCCESS
+
+
+func _try_start_construct(tile: Vector2i) -> int:
+	if _action_slot.state != ActionSlot.State.FREE:
+		if _action_queue.size() >= MAX_QUEUE_SIZE:
+			action_failed.emit(ManualActionType.CONSTRUCT_BUILDING, _start_result_to_reason(StartResult.BLOCKED_SLOT))
+			return StartResult.BLOCKED_SLOT
+		_action_queue.append({type = ManualActionType.CONSTRUCT_BUILDING, tile = tile})
+		action_queued.emit(ManualActionType.CONSTRUCT_BUILDING, _action_queue.size(), tile)
+		return StartResult.QUEUED
+
+	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_instance_at_tile(tile)
+	if instance == null or instance.state != BuildingRegistry.BuildingInstance.State.CONSTRUCTING:
+		action_failed.emit(ManualActionType.CONSTRUCT_BUILDING, "No construction site here")
+		return StartResult.BLOCKED_SLOT
+
+	var tick_cost: int = BuildingRegistry.BUILD_TIME.get(instance.type, 100)
+	var energy_cost: int = BuildingRegistry.BUILD_ENERGY.get(instance.type, 20)
+	if _energy_pool.current < energy_cost:
+		action_failed.emit(ManualActionType.CONSTRUCT_BUILDING, "Not enough energy")
+		return StartResult.INSUFFICIENT_ENERGY
+
+	_energy_pool.try_spend(energy_cost)
+	_action_slot.action_type = ManualActionType.CONSTRUCT_BUILDING
+	_action_slot.config = null
+	_action_slot.accumulated_ticks = 0
+	_action_slot.state = ActionSlot.State.WORKING
+	_action_slot.total_ticks = tick_cost
+	_action_slot.effective_output = 0
+	_active_tile = tile
+	_active_building_id = instance.building_id
+
+	action_started.emit(ManualActionType.CONSTRUCT_BUILDING, _action_slot.total_ticks, tile)
+	return StartResult.SUCCESS
+
+
+func _try_start_construct_path(tile: Vector2i) -> int:
+	if _action_slot.state != ActionSlot.State.FREE:
+		if _action_queue.size() >= MAX_QUEUE_SIZE:
+			action_failed.emit(ManualActionType.CONSTRUCT_PATH, _start_result_to_reason(StartResult.BLOCKED_SLOT))
+			return StartResult.BLOCKED_SLOT
+		_action_queue.append({type = ManualActionType.CONSTRUCT_PATH, tile = tile})
+		action_queued.emit(ManualActionType.CONSTRUCT_PATH, _action_queue.size(), tile)
+		return StartResult.QUEUED
+
+	if not PathSystem.is_constructing(tile):
+		action_failed.emit(ManualActionType.CONSTRUCT_PATH, "No path construction site here")
+		return StartResult.BLOCKED_SLOT
+
+	if _energy_pool.current < PathSystem.PATH_ENERGY_COST:
+		action_failed.emit(ManualActionType.CONSTRUCT_PATH, "Not enough energy")
+		return StartResult.INSUFFICIENT_ENERGY
+
+	_energy_pool.try_spend(PathSystem.PATH_ENERGY_COST)
+	_action_slot.action_type = ManualActionType.CONSTRUCT_PATH
+	_action_slot.config = null
+	_action_slot.accumulated_ticks = 0
+	_action_slot.state = ActionSlot.State.WORKING
+	_action_slot.total_ticks = PathSystem.PATH_CONSTRUCTION_TICKS
+	_action_slot.effective_output = 0
+	_active_tile = tile
+
+	action_started.emit(ManualActionType.CONSTRUCT_PATH, _action_slot.total_ticks, tile)
+	return StartResult.SUCCESS
+
+
+## Attempts to start installing an upgrade on building_id. Deducts resources and energy
+## immediately; upgrade is finalized when ticks complete. Returns StartResult value.
+func try_start_upgrade(building_id: String, upgrade_id: StringName) -> int:
+	if _action_slot.state != ActionSlot.State.FREE:
+		if _action_queue.size() >= MAX_QUEUE_SIZE:
+			action_failed.emit(ManualActionType.INSTALL_UPGRADE, _start_result_to_reason(StartResult.BLOCKED_SLOT))
+			return StartResult.BLOCKED_SLOT
+		_action_queue.append({type = ManualActionType.INSTALL_UPGRADE,
+			tile = Vector2i(-1, -1), building_id = building_id, upgrade_id = upgrade_id})
+		action_queued.emit(ManualActionType.INSTALL_UPGRADE, _action_queue.size(), Vector2i(-1, -1))
+		return StartResult.QUEUED
+
+	var upgrades: Array = BuildingRegistry.get_available_upgrades(building_id)
+	var upgrade_def: Dictionary = {}
+	for d: Dictionary in upgrades:
+		if d.get(&"id", &"") == upgrade_id:
+			upgrade_def = d
+			break
+	if upgrade_def.is_empty():
+		action_failed.emit(ManualActionType.INSTALL_UPGRADE, "Upgrade not found")
+		return StartResult.BLOCKED_SLOT
+	if BuildingRegistry.has_upgrade(building_id, upgrade_id):
+		action_failed.emit(ManualActionType.INSTALL_UPGRADE, "Upgrade already installed")
+		return StartResult.BLOCKED_SLOT
+
+	var cost: Dictionary = upgrade_def.get(&"cost", {})
+	var tick_cost: int = upgrade_def.get(&"tick_cost", 100)
+
+	# Check and deduct resources from any container.
+	for res_id: StringName in cost:
+		var needed: int = cost[res_id]
+		var total: int = 0
+		for container: InventoryContainer in InventorySystem.get_all_containers():
+			total += InventorySystem.get_resource_quantity(container.container_id, res_id)
+		if total < needed:
+			action_failed.emit(ManualActionType.INSTALL_UPGRADE, "Insufficient resources")
+			return StartResult.INSUFFICIENT_ENERGY  # reuse closest code; extend StartResult if needed
+
+	for res_id: StringName in cost:
+		var remaining: int = cost[res_id]
+		for container: InventoryContainer in InventorySystem.get_all_containers():
+			if remaining <= 0:
+				break
+			var have: int = InventorySystem.get_resource_quantity(container.container_id, res_id)
+			if have <= 0:
+				continue
+			var to_take: int = mini(have, remaining)
+			InventorySystem.try_consume(container.container_id, res_id, to_take)
+			remaining -= to_take
+
+	_action_slot.action_type = ManualActionType.INSTALL_UPGRADE
+	_action_slot.config = null
+	_action_slot.accumulated_ticks = 0
+	_action_slot.state = ActionSlot.State.WORKING
+	_action_slot.total_ticks = tick_cost
+	_action_slot.effective_output = 0
+	_active_building_id = building_id
+	_active_upgrade_id = upgrade_id
+
+	action_started.emit(ManualActionType.INSTALL_UPGRADE, tick_cost, Vector2i(-1, -1))
 	return StartResult.SUCCESS
 
 
 ## Returns a cost preview dictionary for hovering over a harvestable tile.
 ## Keys: blocked (bool), reason (String), energy_cost (int), tick_cost (int),
 ##       output_qty (int), output_resource (StringName), depleted (bool).
-func get_cost_preview(action_type: int) -> Dictionary:
+## For CONSTRUCT_BUILDING, pass the tile so costs can be looked up from BuildingRegistry.
+func get_cost_preview(action_type: int, tile: Vector2i = Vector2i(-1, -1)) -> Dictionary:
+	if action_type == ManualActionType.CONSTRUCT_BUILDING:
+		if tile == Vector2i(-1, -1):
+			return {blocked = true, reason = "No tile selected"}
+		var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_instance_at_tile(tile)
+		if instance == null:
+			return {blocked = true, reason = "No building here"}
+		if instance.state != BuildingRegistry.BuildingInstance.State.CONSTRUCTING:
+			return {blocked = true, reason = "Already built"}
+		var tick_cost: int = BuildingRegistry.BUILD_TIME.get(instance.type, 100)
+		var energy_cost: int = BuildingRegistry.BUILD_ENERGY.get(instance.type, 20)
+		var has_energy := _energy_pool.current >= energy_cost
+		return {
+			blocked = not has_energy,
+			reason = "Not enough energy" if not has_energy else "",
+			energy_cost = energy_cost,
+			tick_cost = tick_cost,
+			output_qty = 0,
+			output_resource = &"",
+			depleted = _energy_pool.current == 0,
+			building_type = instance.type,
+		}
+	if action_type == ManualActionType.CONSTRUCT_PATH:
+		if tile == Vector2i(-1, -1):
+			return {blocked = true, reason = "No tile selected"}
+		if not PathSystem.is_constructing(tile):
+			return {blocked = true, reason = "No path construction site here"}
+		var has_energy := _energy_pool.current >= PathSystem.PATH_ENERGY_COST
+		return {
+			blocked = not has_energy,
+			reason = "Not enough energy" if not has_energy else "",
+			energy_cost = PathSystem.PATH_ENERGY_COST,
+			tick_cost = PathSystem.PATH_CONSTRUCTION_TICKS,
+			output_qty = 0,
+			output_resource = &"",
+			depleted = _energy_pool.current == 0,
+		}
+	## --- all non-CONSTRUCT actions below ---
 	var config: ManualActionConfig = _action_configs.get(action_type, null)
 	if config == null:
 		return {blocked = true, reason = "Unknown action"}
@@ -379,7 +633,7 @@ func get_cost_preview(action_type: int) -> Dictionary:
 
 	var is_depleted := _energy_pool.current == 0
 	var has_energy := _energy_pool.current >= config.energy_cost
-	var is_food_action := FOOD_ENERGY.has(config.output_resource)
+	var is_food_action := is_food(config.output_resource)
 	var is_blocked := not has_energy and not is_food_action
 	var tick_cost: int = config.tick_cost * 2 if not has_energy else config.tick_cost
 	var output_qty: int = maxi(1, ceili(config.base_output * 0.5)) if not has_energy else config.base_output
@@ -395,18 +649,34 @@ func get_cost_preview(action_type: int) -> Dictionary:
 	}
 
 
-## Restore energy by consuming a food item. Returns false if food type is unknown
-## or the action slot is already occupied. Occupies the slot until the next tick.
+## Restore energy by consuming a food item. Returns false if the resource is not
+## edible (no positive nutrition) or if energy is already full (eating would waste
+## the food). Can be called while a manual action is running.
 ## Emits food_consumed on success.
 func consume_food(food_type: StringName) -> bool:
-	if _action_slot.state != ActionSlot.State.FREE:
-		return false
-	var energy_amount: int = FOOD_ENERGY.get(food_type, 0)
+	var energy_amount: int = food_energy_value(food_type)
 	if energy_amount == 0:
+		return false
+	if _energy_pool.current >= _energy_pool.max_energy:
 		return false
 	_energy_pool.restore(energy_amount)
 	food_consumed.emit(food_type, energy_amount)
 	return true
+
+
+## Returns the energy a single unit of food_type restores, derived from its
+## ResourceRegistry nutrition value × ENERGY_PER_NUTRITION. 0 for non-food.
+static func food_energy_value(food_type: StringName) -> int:
+	var def: Object = ResourceRegistry.get_definition(food_type)
+	if def == null or def.nutrition <= 0.0:
+		return 0
+	return int(round(def.nutrition * ENERGY_PER_NUTRITION))
+
+
+## True when resource_id is edible food (has positive nutrition).
+static func is_food(resource_id: StringName) -> bool:
+	var def: Object = ResourceRegistry.get_definition(resource_id)
+	return def != null and def.nutrition > 0.0
 
 # ---- Relocation API (Story 007) --------------------------------------------
 
@@ -507,18 +777,140 @@ func _on_ticks_advanced(n: int) -> void:
 func _complete_current_action() -> void:
 	var completed_type: int = _action_slot.action_type
 	var output := _build_output(_action_slot)
+	var building_id: String = _active_building_id
+	var upgrade_id: StringName = _active_upgrade_id
+	_active_building_id = ""
+	_active_upgrade_id = &""
+	var completed_path_tile: Vector2i = _active_tile
 	_action_slot.free_slot()
+	if completed_type == ManualActionType.CONSTRUCT_BUILDING and building_id != "":
+		BuildingRegistry.complete_construction_manually(building_id)
+	if completed_type == ManualActionType.CONSTRUCT_PATH:
+		PathSystem.complete_construction(completed_path_tile)
+	if completed_type == ManualActionType.INSTALL_UPGRADE and building_id != "" and upgrade_id != &"":
+		BuildingRegistry.install_upgrade(building_id, upgrade_id)
+	if completed_type == ManualActionType.PLANT_SEED:
+		seed_planted.emit(_active_seed_type, completed_path_tile)
+		_active_seed_type = &""
 	if completed_type != -1:
 		action_completed.emit(completed_type, output)
+	if not _action_queue.is_empty():
+		var next: Dictionary = _action_queue.pop_front()
+		var result: int
+		if next.get("type", -1) == ManualActionType.INSTALL_UPGRADE:
+			result = try_start_upgrade(next.get("building_id", ""), next.get("upgrade_id", &""))
+		elif next.get("type", -1) == ManualActionType.PLANT_SEED:
+			result = try_start_plant_seed(next.tile, next.get("seed_type", &""))
+		else:
+			result = try_start_action(next.type, next.tile)
+		if result == StartResult.INSUFFICIENT_ENERGY:
+			_action_queue.clear()
+			action_queue_cleared.emit()
+
+
+## Plants seed_type on tile. Consumes one seed from storage and starts a PLANT_SEED action.
+## Returns a StartResult value. Caller must ensure tile is EMPTY before calling.
+func try_start_plant_seed(tile: Vector2i, seed_type: StringName) -> int:
+	var config: ManualActionConfig = _action_configs.get(ManualActionType.PLANT_SEED, null)
+	if config == null:
+		return StartResult.BLOCKED_SLOT
+	# Fertility gate: wheat seeds only grow on a wheat-fertile map (spec).
+	if seed_type == &"wheat_seed" and _grid != null and not _grid.has_fertility(&"wheat"):
+		action_failed.emit(ManualActionType.PLANT_SEED, "Wheat cannot grow on this land")
+		return StartResult.BLOCKED_SLOT
+	if _action_slot.state != ActionSlot.State.FREE:
+		if _action_queue.size() >= MAX_QUEUE_SIZE:
+			action_failed.emit(ManualActionType.PLANT_SEED, _start_result_to_reason(StartResult.BLOCKED_SLOT))
+			return StartResult.BLOCKED_SLOT
+		_action_queue.append({type = ManualActionType.PLANT_SEED, tile = tile, seed_type = seed_type})
+		action_queued.emit(ManualActionType.PLANT_SEED, _action_queue.size(), tile)
+		return StartResult.QUEUED
+	if _energy_pool.current < config.energy_cost:
+		action_failed.emit(ManualActionType.PLANT_SEED, _start_result_to_reason(StartResult.INSUFFICIENT_ENERGY))
+		return StartResult.INSUFFICIENT_ENERGY
+	if not _has_seed_in_storage(seed_type):
+		action_failed.emit(ManualActionType.PLANT_SEED, "No %s available" % str(seed_type))
+		return StartResult.BLOCKED_SLOT
+	_consume_seed_from_storage(seed_type)
+	_energy_pool.try_spend(config.energy_cost)
+	_active_tile = tile
+	_active_seed_type = seed_type
+	_action_slot.state = ActionSlot.State.WORKING
+	_action_slot.config = config
+	_action_slot.action_type = ManualActionType.PLANT_SEED
+	_action_slot.accumulated_ticks = 0
+	_action_slot.total_ticks = config.tick_cost
+	_action_slot.effective_output = 0
+	action_started.emit(ManualActionType.PLANT_SEED, config.tick_cost, tile)
+	return StartResult.SUCCESS
+
+
+## Searches a tile for hidden clay. Spends SURVEY_ENERGY. Returns a result dict:
+##   blocked (bool), reason (String),
+##   clay_revealed (bool), clay_distance (int: 0 on-tile, >0 nearest, -1 none).
+func survey_tile(tile: Vector2i) -> Dictionary:
+	var result: Dictionary = {
+		blocked = false, reason = "",
+		clay_revealed = false, clay_distance = -1,
+	}
+	if _grid == null:
+		result.blocked = true
+		result.reason = "No map"
+		return result
+	if _energy_pool.current < SURVEY_ENERGY:
+		result.blocked = true
+		result.reason = "Not enough energy"
+		return result
+	_energy_pool.try_spend(SURVEY_ENERGY)
+	if _grid.has_hidden_resource(tile, &"clay"):
+		result.clay_distance = 0
+		if _grid.reveal_hidden_clay(tile):
+			result.clay_revealed = true
+		else:
+			result.reason = "Clear this tile first to expose the clay"
+	else:
+		var nearest: Variant = _grid.find_nearest_hidden(tile, &"clay", WorldGrid.CLAY_SEARCH_MAX_RADIUS)
+		if nearest != null:
+			result.clay_distance = _grid.manhattan_dist(tile, nearest)
+	return result
+
+
+func _has_seed_in_storage(seed_type: StringName) -> bool:
+	return InventorySystem.get_global_quantity(seed_type) > 0
+
+
+func _consume_seed_from_storage(seed_type: StringName) -> void:
+	var container_id: StringName = InventorySystem.find_container_with(seed_type)
+	if container_id != &"":
+		InventorySystem.try_consume(container_id, seed_type, 1)
 
 
 func _build_output(slot: ActionSlot) -> Array:
+	if slot.action_type == ManualActionType.CONSTRUCT_BUILDING:
+		return []
+	if slot.action_type == ManualActionType.CONSTRUCT_PATH:
+		return []
+	if slot.action_type == ManualActionType.PLANT_SEED:
+		return []  # terrain effect handled via seed_planted signal
 	var qty: int = slot.effective_output
 	if slot.config == null:
 		return []
 	if slot.action_type == ManualActionType.FORAGE:
 		return [{resource_id = _roll_forage_loot(), quantity = qty}]
-	return [{resource_id = slot.config.output_resource, quantity = qty}]
+	var items: Array = [{resource_id = slot.config.output_resource, quantity = qty}]
+	var seed: StringName = _roll_seed_byproduct(slot.action_type)
+	if seed != &"":
+		items.append({resource_id = seed, quantity = 1})
+	return items
+
+
+func _roll_seed_byproduct(action_type: int) -> StringName:
+	if not SEED_BYPRODUCT_CHANCES.has(action_type):
+		return &""
+	var entry: Array = SEED_BYPRODUCT_CHANCES[action_type]
+	if _rng.randi_range(1, 100) <= entry[0]:
+		return entry[1]
+	return &""
 
 
 func _roll_forage_loot() -> StringName:
@@ -545,8 +937,30 @@ func _has_usable_tool(action_type: int) -> bool:
 
 func _start_result_to_reason(result: int) -> String:
 	match result:
-		StartResult.BLOCKED_SLOT:         return "Another action is in progress"
+		StartResult.BLOCKED_SLOT:         return "Action queue is full"
+		StartResult.QUEUED:               return ""
 		StartResult.INSUFFICIENT_ENERGY:  return "Not enough energy"
 		StartResult.ARCHITECT_LOCKED:     return "Architect mode — manual gathering locked"
 		StartResult.TOOL_REQUIRED:        return "No tool available — craft one first"
 	return "Unknown"
+
+
+## Returns the display label for a manual action type (used by UI panels).
+func get_action_label(action_type: int) -> String:
+	match action_type:
+		ManualActionType.CONSTRUCT_BUILDING: return "Construct"
+		ManualActionType.CONSTRUCT_PATH:     return "Build Path"
+		ManualActionType.CHOP_TREE:          return "Chop"
+		ManualActionType.MINE_STONE:         return "Mine"
+		ManualActionType.PICK_BERRIES:       return "Harvest"
+		ManualActionType.HARVEST_FIBER:      return "Harvest"
+		ManualActionType.FORAGE:             return "Forage"
+		ManualActionType.CLEAR_TREE:         return "Clear"
+		ManualActionType.CLEAR_STONE:        return "Clear"
+		ManualActionType.CLEAR_BERRY:        return "Clear"
+		ManualActionType.CLEAR_GRASS:        return "Clear"
+		ManualActionType.INSTALL_UPGRADE:    return "Install"
+		ManualActionType.PLANT_SEED:         return "Plant"
+		ManualActionType.HARVEST_WHEAT:      return "Harvest"
+		ManualActionType.CLEAR_WHEAT:        return "Clear"
+	return "Action"

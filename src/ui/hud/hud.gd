@@ -41,6 +41,7 @@ var _building_detail_panel: BuildingDetailPanel
 var _npc_detail_panel:      NpcDetailPanel
 var _transportation_panel:  TransportationPanel
 var _transport_btn:          Button
+var _route_toggle_btn:       Button
 var _save_btn:               Button
 var _map_select_prompt:      Label
 var _map_select_step:        String = ""
@@ -52,6 +53,7 @@ var _toast_tween:            Tween = null
 var _player_character: Node = null
 
 var _day_tick_count: int = 0
+var _route_lines: RouteLines = null
 
 
 # --- Lifecycle ---------------------------------------------------------------
@@ -111,6 +113,7 @@ func _build_ui() -> void:
 	_add_time_display(hbox)
 	_add_energy_bar(hbox)
 	_add_transport_btn(hbox)
+	_add_route_toggle_btn(hbox)
 	_add_save_btn(hbox)
 
 	var right_pad := Control.new()
@@ -274,6 +277,20 @@ func _add_transport_btn(parent: HBoxContainer) -> void:
 	parent.add_child(_transport_btn)
 
 
+## Adds the route overlay toggle button to the HUD top band (next to transport icon).
+func _add_route_toggle_btn(parent: HBoxContainer) -> void:
+	_route_toggle_btn = Button.new()
+	_route_toggle_btn.name = "RouteToggleBtn"
+	_route_toggle_btn.text = "↔"
+	_route_toggle_btn.tooltip_text = "Toggle route overlay"
+	_route_toggle_btn.toggle_mode = true
+	_route_toggle_btn.custom_minimum_size = Vector2(36, 28)
+	_route_toggle_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_route_toggle_btn.focus_mode = Control.FOCUS_NONE
+	_route_toggle_btn.toggled.connect(_on_route_toggle_toggled)
+	parent.add_child(_route_toggle_btn)
+
+
 ## Adds the save icon button to the HUD top band.
 func _add_save_btn(parent: HBoxContainer) -> void:
 	_save_btn = Button.new()
@@ -352,12 +369,16 @@ func _add_stubs() -> void:
 	_building_detail_panel = BuildingDetailPanel.new()
 	_building_detail_panel.name = "BuildingDetailPanel"
 	_building_detail_panel.transport_management_opened.connect(_on_transport_management_opened)
+	_building_detail_panel.transport_route_edit_requested.connect(_on_transport_route_edit_requested)
 	_building_detail_panel.npc_detail_requested.connect(_on_npc_detail_requested)
+	_building_detail_panel.building_selected.connect(_on_building_selected_routes)
+	_building_detail_panel.building_deselected.connect(_on_building_deselected_routes)
 	add_child(_building_detail_panel)
 
 	_npc_detail_panel = NpcDetailPanel.new()
 	_npc_detail_panel.name = "NpcDetailPanel"
 	_npc_detail_panel.panel_x_offset = 0.0
+	_npc_detail_panel.panel_closed.connect(_on_npc_panel_closed_routes)
 	_npc_detail_panel.food_assigned.connect(
 		func(npc_id: StringName, resource_id: StringName) -> void:
 			HungerSystem.assign_food(npc_id, resource_id))
@@ -421,6 +442,7 @@ func _connect_systems() -> void:
 	_transportation_panel.route_deleted.connect(_on_transport_route_deleted)
 	_transportation_panel.map_select_requested.connect(_on_map_select_requested)
 	_transportation_panel.panel_closed.connect(_on_transport_panel_closed)
+	WorldSaveManager.load_completed.connect(_on_save_load_completed)
 
 
 func _refresh_initial_state() -> void:
@@ -469,6 +491,10 @@ func _on_transport_management_opened(building_id: String, role: String) -> void:
 	_transportation_panel.open_for_building(StringName(building_id), role)
 
 
+func _on_transport_route_edit_requested(route: LogisticsRoute) -> void:
+	_transportation_panel.open_for_route(route)
+
+
 func _on_transport_route_created(from_id: StringName, to_id: StringName, npc_id: StringName, item_id: StringName) -> void:
 	# Storage→production: INPUT type (fills input slot on destination).
 	# Production→anywhere: OUTPUT type (fills output slot on source).
@@ -515,6 +541,10 @@ func _on_transport_route_deleted(route_id: StringName) -> void:
 
 func _on_transport_panel_closed(_changes_made: bool) -> void:
 	_exit_map_select_mode()
+
+
+func _on_save_load_completed() -> void:
+	_transportation_panel.refresh()
 
 
 ## Returns true while the player is selecting a building on the map for a route.
@@ -628,6 +658,33 @@ func get_shown_building_id() -> String:
 func _on_npc_detail_requested(npc_id: StringName, npc_state: int) -> void:
 	if _npc_detail_panel != null:
 		_npc_detail_panel.open_for_npc(npc_id, npc_state)
+	if _route_lines != null:
+		_route_lines.set_npc_filter(npc_id)
+
+
+## Called by MapRoot after RouteLines is ready — wires the overlay to this HUD.
+func set_route_lines(rl: RouteLines) -> void:
+	_route_lines = rl
+
+
+func _on_route_toggle_toggled(pressed: bool) -> void:
+	if _route_lines != null:
+		_route_lines.set_global_show(pressed)
+
+
+func _on_building_selected_routes(building_id: String, _tile: Vector2i) -> void:
+	if _route_lines != null:
+		_route_lines.set_building_filter(StringName(building_id))
+
+
+func _on_building_deselected_routes(_building_id: String) -> void:
+	if _route_lines != null:
+		_route_lines.set_building_filter(&"")
+
+
+func _on_npc_panel_closed_routes() -> void:
+	if _route_lines != null:
+		_route_lines.set_npc_filter(&"")
 
 
 func _update_energy_bar(current: int, max_energy: int) -> void:

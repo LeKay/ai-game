@@ -126,7 +126,7 @@ func test_inventory_slot_charge_preserved_through_operations() -> void:
 	inv.create_container(&"storage_9_1", "Storage Area", 50)
 
 	var slot: InventorySlot = inv.get_slot_data(&"storage_9_1", 0)
-	slot.resource_id = &"tool"
+	slot.resource_id = &"axe"
 	slot.quantity = 1
 	slot.current_charge = 75.0
 
@@ -139,7 +139,7 @@ func test_inventory_slot_charge_not_reset_by_capacity_change() -> void:
 	inv.create_container(&"storage_9_2", "Storage Area", 50)
 
 	var slot: InventorySlot = inv.get_slot_data(&"storage_9_2", 0)
-	slot.resource_id = &"tool"
+	slot.resource_id = &"axe"
 	slot.quantity = 1
 	slot.current_charge = 33.5
 

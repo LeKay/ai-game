@@ -19,12 +19,14 @@ signal npc_detail_requested(npc_id: StringName, npc_state: int)
 ## role is "from" (output carrier — this building is the source) or
 ## "to" (input carrier — this building is the destination).
 signal transport_management_opened(building_id: String, role: String)
+## Fired when the player clicks an existing transport route tile to edit it.
+signal transport_route_edit_requested(route: LogisticsRoute)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 const PANEL_WIDTH       := 380
 const PANEL_ANIM_DURATION := 0.20  ## 200ms per UX spec
-const COLOR_BG          := Color(0.176, 0.176, 0.176, 0.97)  ## #2D2D2D
+const COLOR_BG          := UiPalette.PANEL_BG  ## #2D2D2D
 const COLOR_TEXT        := Color(0.941, 0.941, 0.941)         ## #F0F0F0
 const COLOR_TEXT_DIM    := Color(0.816, 0.816, 0.816)         ## #D0D0D0
 const COLOR_WARN        := Color(1.0, 0.757, 0.027)           ## #FFC107
@@ -36,7 +38,7 @@ const COLOR_BTN_NORMAL  := Color(0.353, 0.353, 0.353)         ## #5A5A5A
 const COLOR_BTN_TEXT    := Color(0.659, 0.643, 0.612)         ## #A8A49C
 const COLOR_BTN_HOVER   := Color(0.290, 0.494, 0.659)         ## #4A7EA8
 const COLOR_BTN_DESTRUCT := Color(0.706, 0.173, 0.173)        ## #B32C2C
-const COLOR_SEP         := Color(0.35, 0.35, 0.35, 1.0)
+const COLOR_SEP         := UiPalette.SEPARATOR
 const COLOR_CAP_GREEN   := Color("#4CAF50")
 const COLOR_CAP_AMBER   := Color("#D4A85C")
 const COLOR_CAP_RED     := Color("#E05555")
@@ -71,9 +73,7 @@ var _production_input_col: Control
 var _production_vsep:      Control
 var _input_grid:           ItemGrid
 var _input_drop_zone:      Control
-var _input_rate_label:     Label
 var _output_grid:          ItemGrid
-var _output_rate_label:    Label
 
 ## Placeholder cycle constants until recipe system exists.
 const _CYCLE_TICKS  := 120
@@ -82,10 +82,7 @@ const _OUTPUT_QTY   := 5
 
 var _npc_zone:              Control
 var _npc_worker_col:        Control
-var _npc_worker_tile:       PanelContainer
-var _npc_worker_tile_style: StyleBoxFlat
-var _npc_worker_icon_lbl:   Label
-var _npc_worker_name_lbl:   Label
+var _npc_worker_grid: NpcGrid
 var _assign_npc_btn:        Button
 var _release_npc_btn:       Button
 var _worker_counter_label:  Label
@@ -93,6 +90,11 @@ var _npc_resident_grid:     NpcGrid
 var _recruit_btn:           Button
 var _npc_popup_title_lbl:   Label
 var _npc_popup_grid:        NpcGrid
+
+var _recruit_dialog:        Control
+var _recruit_food_option:   OptionButton
+var _recruit_body_lbl:      Label
+var _recruit_confirm_btn:   Button
 
 var _transport_zone:      Control
 var _carrier_in_col:      Control
@@ -106,8 +108,26 @@ var _storage_zone:              Control
 var _storage_capacity_label:    Label
 var _storage_bar_fill:          ColorRect
 var _storage_item_grid:         ItemGrid
+var _storage_config_btn:        Button
+var _storage_normal_zone:       Control
+var _storage_config_zone:       Control
+var _storage_config_toggle:     HBoxContainer
+var _storage_config_rows:       VBoxContainer
 
 var _npc_popup:          Control
+
+var _upgrade_btn:        Button
+var _upgrade_zone:       Control
+var _recipes_btn:        Button
+var _content_body:       VBoxContainer
+var _recipe_view:        VBoxContainer
+var _player:             PlayerCharacter = null
+
+## Separator nodes between zones — hidden when the preceding zone is hidden.
+var _sep_progress:   HSeparator
+var _sep_storage:    HSeparator
+var _sep_npc:        HSeparator
+var _sep_production: HSeparator
 
 # ── State ─────────────────────────────────────────────────────────────────────
 
@@ -115,6 +135,15 @@ var _current_building_id: String = ""
 var _tween: Tween = null
 var _storage_pulse_tween: Tween = null
 var _is_storage_pulsing: bool = false
+var _storage_config_mode: bool = false
+## "min" = editing minimum reserves, "max" = editing delivery caps.
+var _storage_limit_mode: String = "max"
+var _upgrade_zone_open: bool = false
+var _recipe_view_open: bool = false
+## True while the forced recipe view is showing (building has no recipe picked yet):
+## no recipe is highlighted as active, so every available recipe (including the
+## default) is clickable to select.
+var _force_recipe_pick: bool = false
 
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -122,6 +151,7 @@ var _is_storage_pulsing: bool = false
 func _ready() -> void:
 	_build_ui()
 	_connect_registry()
+	call_deferred("_connect_player")
 	visible = false
 	modulate.a = 0.0
 
@@ -143,6 +173,19 @@ func _exit_tree() -> void:
 		BuildingRegistry.production_output_ready.disconnect(_on_production_output_ready)
 	if BuildingRegistry.building_output_changed.is_connected(_on_output_changed):
 		BuildingRegistry.building_output_changed.disconnect(_on_output_changed)
+	if BuildingRegistry.building_recipe_changed.is_connected(_on_recipe_changed):
+		BuildingRegistry.building_recipe_changed.disconnect(_on_recipe_changed)
+	if BuildingRegistry.building_storage_limit_changed.is_connected(_on_storage_limit_changed):
+		BuildingRegistry.building_storage_limit_changed.disconnect(_on_storage_limit_changed)
+	if BuildingRegistry.building_storage_min_limit_changed.is_connected(_on_storage_min_limit_changed):
+		BuildingRegistry.building_storage_min_limit_changed.disconnect(_on_storage_min_limit_changed)
+	if BuildingRegistry.upgrade_installed.is_connected(_on_upgrade_installed):
+		BuildingRegistry.upgrade_installed.disconnect(_on_upgrade_installed)
+	if _player != null:
+		if _player.action_started.is_connected(_on_player_action_started):
+			_player.action_started.disconnect(_on_player_action_started)
+		if _player.action_completed.is_connected(_on_player_action_completed):
+			_player.action_completed.disconnect(_on_player_action_completed)
 	var npc_sys: Node = NPCSystem
 	if npc_sys != null:
 		if npc_sys.npc_recruited.is_connected(_on_npc_count_changed_recruited):
@@ -163,6 +206,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if key != null and key.pressed and key.keycode == KEY_ESCAPE:
 		if _rename_dialog != null and _rename_dialog.visible:
 			_close_rename_dialog()
+		elif _recruit_dialog != null and _recruit_dialog.visible:
+			_close_recruit_dialog()
 		elif _npc_popup != null and _npc_popup.visible:
 			_close_npc_popup()
 		else:
@@ -173,6 +218,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	var click := event as InputEventMouseButton
 	if click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
 		if _rename_dialog != null and _rename_dialog.visible:
+			return
+		if _recruit_dialog != null and _recruit_dialog.visible:
 			return
 		if _npc_popup != null and _npc_popup.visible:
 			return
@@ -189,8 +236,19 @@ func open_for(building_id: String) -> void:
 		close()
 		return
 	_current_building_id = building_id
-	_refresh()
 	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(building_id)
+	# Until the player has picked a recipe, a production building opens straight
+	# into the recipe selection view (re-shown on every open until a choice is made).
+	var show_recipes := instance != null \
+		and BuildingRegistry.is_production_building(instance.type) \
+		and not instance.recipe_selected
+	_force_recipe_pick = show_recipes
+	_recipe_view_open = show_recipes
+	_content_body.visible = not show_recipes
+	_recipe_view.visible = show_recipes
+	_refresh()
+	if show_recipes:
+		_rebuild_recipe_view(instance)
 	var tile := instance.tile if instance != null else Vector2i.ZERO
 	building_selected.emit(building_id, tile)
 	_animate_in()
@@ -201,6 +259,10 @@ func close() -> void:
 	if _current_building_id != "":
 		building_deselected.emit(_current_building_id)
 	_current_building_id = ""
+	_storage_config_mode = false
+	_storage_limit_mode = "max"
+	_recipe_view_open = false
+	_force_recipe_pick = false
 	_stop_storage_pulse()
 	_animate_out()
 
@@ -221,12 +283,25 @@ func _connect_registry() -> void:
 	BuildingRegistry.building_input_changed.connect(_on_input_changed)
 	BuildingRegistry.production_output_ready.connect(_on_production_output_ready)
 	BuildingRegistry.building_output_changed.connect(_on_output_changed)
+	BuildingRegistry.building_recipe_changed.connect(_on_recipe_changed)
+	BuildingRegistry.building_storage_limit_changed.connect(_on_storage_limit_changed)
+	BuildingRegistry.building_storage_min_limit_changed.connect(_on_storage_min_limit_changed)
+	BuildingRegistry.upgrade_installed.connect(_on_upgrade_installed)
 	var npc_sys: Node = NPCSystem
 	if npc_sys != null:
 		npc_sys.npc_recruited.connect(_on_npc_count_changed_recruited)
 		npc_sys.npc_removed.connect(_on_npc_count_changed_removed)
 		npc_sys.npc_assigned.connect(_on_npc_assignment_changed)
 		npc_sys.npc_released.connect(_on_npc_released_signal)
+		npc_sys.npc_renamed.connect(_on_npc_renamed)
+
+
+func _connect_player() -> void:
+	_player = get_tree().get_first_node_in_group(&"player_character") as PlayerCharacter
+	if _player == null:
+		return
+	_player.action_started.connect(_on_player_action_started)
+	_player.action_completed.connect(_on_player_action_completed)
 
 
 func _on_state_changed(building_id: String, _new_state: int, _reason: String) -> void:
@@ -267,7 +342,7 @@ func _on_input_changed(building_id: String) -> void:
 		_refresh_production_zone(instance)
 
 
-func _on_production_output_ready(building_id: String, _output: Dictionary) -> void:
+func _on_production_output_ready(building_id: String, _output: Dictionary, _cycle_ticks: int) -> void:
 	if building_id != _current_building_id or not visible:
 		return
 	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(building_id)
@@ -292,6 +367,37 @@ func _on_building_renamed(building_id: String, _new_name: String) -> void:
 		_refresh_header(instance)
 
 
+func _on_upgrade_installed(building_id: String, _upgrade_id: StringName) -> void:
+	if building_id != _current_building_id or not visible:
+		return
+	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(building_id)
+	if instance != null:
+		_refresh_header(instance)
+		_refresh_upgrade_zone(instance)
+
+
+func _on_player_action_started(action_id: int, _tick_cost: int, _tile: Vector2i) -> void:
+	if action_id != PlayerCharacter.ManualActionType.INSTALL_UPGRADE:
+		return
+	if not visible or not _upgrade_zone_open:
+		return
+	if _player == null or _player.get_active_building_id() != _current_building_id:
+		return
+	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(_current_building_id)
+	if instance != null:
+		_refresh_upgrade_zone(instance)
+
+
+func _on_player_action_completed(action_id: int, _output: Array) -> void:
+	if action_id != PlayerCharacter.ManualActionType.INSTALL_UPGRADE:
+		return
+	if not visible or not _upgrade_zone_open:
+		return
+	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(_current_building_id)
+	if instance != null:
+		_refresh_upgrade_zone(instance)
+
+
 func _on_npc_count_changed_recruited(_npc_id: StringName, _home: Vector2i) -> void:
 	if not visible or _current_building_id == "":
 		return
@@ -310,6 +416,14 @@ func _on_npc_count_changed_removed(_npc_id: StringName) -> void:
 
 func _on_npc_assignment_changed(_npc_id: StringName, building_id: StringName) -> void:
 	if not visible or str(building_id) != _current_building_id:
+		return
+	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(_current_building_id)
+	if instance != null:
+		_refresh_npc_zone(instance)
+
+
+func _on_npc_renamed(_npc_id: StringName, _new_name: String) -> void:
+	if not visible or _current_building_id == "":
 		return
 	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(_current_building_id)
 	if instance != null:
@@ -339,7 +453,7 @@ func _can_accept_drop(data: Variant) -> bool:
 	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(_current_building_id)
 	if instance == null:
 		return false
-	var allowed: Array = BuildingRegistry.INPUT_RESOURCES.get(instance.type, [])
+	var allowed: Array[StringName] = BuildingRegistry.get_active_input_resource_ids(_current_building_id)
 	if not res_id in allowed:
 		return false
 	return InventorySystem.get_global_quantity(res_id) > 0
@@ -361,6 +475,8 @@ func _refresh() -> void:
 	if instance == null:
 		close()
 		return
+	_upgrade_zone_open = false
+	_upgrade_zone.visible = false
 	_refresh_header(instance)
 	_refresh_progress(instance)
 	_refresh_storage_zone(instance)
@@ -375,14 +491,62 @@ func _refresh_header(instance: BuildingRegistry.BuildingInstance) -> void:
 	var dot_color: Color = STATE_COLORS.get(state_key, Color.GRAY)
 	_state_dot.color = dot_color
 	_state_label.text = _state_text(instance)
-	var eff: float = instance.efficiency
-	_efficiency_label.text = "Eff: %d%%" % int(eff * 100.0)
-	if eff >= 1.0:
-		_efficiency_label.add_theme_color_override("font_color", COLOR_CAP_GREEN)
-	elif eff >= 0.5:
-		_efficiency_label.add_theme_color_override("font_color", COLOR_CAP_AMBER)
+	# Storage and residential buildings have no production, so efficiency is meaningless for them.
+	var hide_efficiency: bool = instance.type == BuildingRegistry.BuildingType.STORAGE_BUILDING \
+		or instance.type == BuildingRegistry.BuildingType.COLLECTION_POINT \
+		or instance.type == BuildingRegistry.BuildingType.RESIDENTIAL_HOUSE
+	_efficiency_label.visible = not hide_efficiency
+	if not hide_efficiency:
+		var eff: float = instance.efficiency
+		_efficiency_label.text = "Eff: %d%%" % int(eff * 100.0)
+		_efficiency_label.tooltip_text = _building_efficiency_tooltip(instance)
+		if eff >= 1.0:
+			_efficiency_label.add_theme_color_override("font_color", COLOR_CAP_GREEN)
+		elif eff >= 0.5:
+			_efficiency_label.add_theme_color_override("font_color", COLOR_CAP_AMBER)
+		else:
+			_efficiency_label.add_theme_color_override("font_color", COLOR_CAP_RED)
+	var available_upgrades: Array = BuildingRegistry.get_available_upgrades(instance.building_id)
+	var has_upgrades := not available_upgrades.is_empty()
+	if _upgrade_btn != null:
+		_upgrade_btn.visible = has_upgrades
+	if _recipes_btn != null:
+		_recipes_btn.visible = BuildingRegistry.is_production_building(instance.type)
+		_recipes_btn.text = "✕" if _recipe_view_open else "⚙"
+
+
+## Hover breakdown for the building efficiency label (additive model):
+## base + resource tiles × 5% + assigned worker's efficiency (+ upgrades), clamped at the cap.
+func _building_efficiency_tooltip(instance: BuildingRegistry.BuildingInstance) -> String:
+	var base: float = EfficiencyFormulas.BUILDING_BASE_EFFICIENCY
+	var tiles: int = instance.adjacency_tile_count
+	var tile_bonus: float = float(tiles) * EfficiencyFormulas.ADJACENCY_EFFICIENCY_PER_TILE
+	var worker_eff: float = 0.0
+	var worker_name: String = ""
+	if instance.assigned_npc_id != &"":
+		var w: Object = NPCSystem.get_npc_instance(instance.assigned_npc_id)
+		if w != null:
+			worker_eff = w.efficiency
+			worker_name = NPCSystem.get_npc_display_name(instance.assigned_npc_id)
+	var raw: float = base + tile_bonus + worker_eff + instance.upgrade_bonus
+
+	var lines: PackedStringArray = PackedStringArray()
+	lines.append("Efficiency breakdown")
+	lines.append("Base: %d%%" % roundi(base * 100.0))
+	if tiles > 0:
+		lines.append("Resource tiles: %d × 5%% = +%d%%" % [tiles, roundi(tile_bonus * 100.0)])
+	if instance.assigned_npc_id != &"":
+		lines.append("Worker (%s): +%d%%" % [worker_name, roundi(worker_eff * 100.0)])
 	else:
-		_efficiency_label.add_theme_color_override("font_color", COLOR_CAP_RED)
+		lines.append("Worker: none (+0%)")
+	if instance.upgrade_bonus > 0.0:
+		lines.append("Upgrades: +%d%%" % roundi(instance.upgrade_bonus * 100.0))
+	var cap: float = EfficiencyFormulas.BUILDING_EFFICIENCY_MAX
+	if raw > cap:
+		lines.append("= %d%% (capped at %d%%)" % [roundi(cap * 100.0), roundi(cap * 100.0)])
+	else:
+		lines.append("= %d%%" % roundi(raw * 100.0))
+	return "\n".join(lines)
 
 
 func _refresh_progress(instance: BuildingRegistry.BuildingInstance) -> void:
@@ -390,6 +554,7 @@ func _refresh_progress(instance: BuildingRegistry.BuildingInstance) -> void:
 	var is_producing := (instance.state == BuildingRegistry.BuildingInstance.State.OPERATING
 		and (instance.cycle_running or _has_valid_input(instance)))
 	_progress_zone.visible = is_constructing or is_producing
+	_sep_progress.visible = _progress_zone.visible
 	if not (is_constructing or is_producing):
 		return
 	var total: int
@@ -418,7 +583,15 @@ func _refresh_storage_zone(instance: BuildingRegistry.BuildingInstance) -> void:
 	var is_storage := (instance.type == BuildingRegistry.BuildingType.COLLECTION_POINT
 		or instance.type == BuildingRegistry.BuildingType.STORAGE_BUILDING)
 	_storage_zone.visible = is_storage
+	_sep_storage.visible = is_storage
+	_storage_config_btn.visible = is_storage
 	if not is_storage:
+		return
+	_storage_normal_zone.visible = not _storage_config_mode
+	_storage_config_zone.visible = _storage_config_mode
+	_storage_config_btn.text = "✕" if _storage_config_mode else "⚙"
+	if _storage_config_mode:
+		_refresh_storage_config()
 		return
 	var container: InventoryContainer = InventorySystem.get_container(instance.assigned_container_id)
 	if container == null:
@@ -471,6 +644,184 @@ func _stop_storage_pulse() -> void:
 	_storage_bar_fill.modulate.a = 1.0
 
 
+func _on_storage_config_pressed() -> void:
+	_storage_config_mode = not _storage_config_mode
+	_storage_limit_mode = "max"
+	_storage_config_btn.text = "✕" if _storage_config_mode else "⚙"
+	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(_current_building_id)
+	if instance != null:
+		_refresh_storage_zone(instance)
+
+
+func _refresh_storage_config() -> void:
+	for child in _storage_config_rows.get_children():
+		child.queue_free()
+	for child in _storage_config_toggle.get_children():
+		child.queue_free()
+	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(_current_building_id)
+	if instance == null:
+		return
+	var cap: int = InventorySystem.get_capacity(instance.assigned_container_id)
+
+	# Mode toggle header — built into the persistent container outside the
+	# scroll so it stays pinned above the scrolling resource rows.
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_storage_config_toggle.add_child(spacer)
+
+	var min_btn := Button.new()
+	min_btn.text = "Min"
+	min_btn.custom_minimum_size = Vector2(44, 22)
+	min_btn.focus_mode = Control.FOCUS_NONE
+	min_btn.tooltip_text = "Set minimum reserve (transport won't take below this)"
+	_storage_config_toggle.add_child(min_btn)
+
+	var max_btn := Button.new()
+	max_btn.text = "Max"
+	max_btn.custom_minimum_size = Vector2(44, 22)
+	max_btn.focus_mode = Control.FOCUS_NONE
+	max_btn.tooltip_text = "Set delivery cap (transport won't deliver above this)"
+	_storage_config_toggle.add_child(max_btn)
+
+	_apply_storage_mode_btn_styles(min_btn, max_btn, _storage_limit_mode)
+	min_btn.pressed.connect(func() -> void:
+		_storage_limit_mode = "min"
+		_refresh_storage_config()
+	)
+	max_btn.pressed.connect(func() -> void:
+		_storage_limit_mode = "max"
+		_refresh_storage_config()
+	)
+
+	var all_ids: Array[StringName] = ResourceRegistry.get_all_resource_ids()
+	for res_id: StringName in all_ids:
+		var current_limit: int
+		if _storage_limit_mode == "min":
+			current_limit = BuildingRegistry.get_storage_min_limit(_current_building_id, res_id)
+		else:
+			current_limit = BuildingRegistry.get_storage_limit(_current_building_id, res_id)
+		var row := _build_limit_row(res_id, current_limit, cap)
+		_storage_config_rows.add_child(row)
+
+
+func _apply_storage_mode_btn_styles(min_btn: Button, max_btn: Button, mode: String) -> void:
+	var active_color   := Color(0.290, 0.494, 0.659)   ## COLOR_BTN_HOVER
+	var inactive_color := Color(0.353, 0.353, 0.353)   ## COLOR_BTN_NORMAL
+	var active_style  := StyleBoxFlat.new()
+	active_style.bg_color = active_color
+	active_style.corner_radius_top_left = 3
+	active_style.corner_radius_top_right = 3
+	active_style.corner_radius_bottom_left = 3
+	active_style.corner_radius_bottom_right = 3
+	active_style.content_margin_left = 6
+	active_style.content_margin_right = 6
+	var inactive_style := StyleBoxFlat.new()
+	inactive_style.bg_color = inactive_color
+	inactive_style.corner_radius_top_left = 3
+	inactive_style.corner_radius_top_right = 3
+	inactive_style.corner_radius_bottom_left = 3
+	inactive_style.corner_radius_bottom_right = 3
+	inactive_style.content_margin_left = 6
+	inactive_style.content_margin_right = 6
+	if mode == "min":
+		min_btn.add_theme_stylebox_override("normal", active_style)
+		min_btn.add_theme_stylebox_override("hover", active_style)
+		max_btn.add_theme_stylebox_override("normal", inactive_style)
+		max_btn.add_theme_stylebox_override("hover", inactive_style)
+	else:
+		max_btn.add_theme_stylebox_override("normal", active_style)
+		max_btn.add_theme_stylebox_override("hover", active_style)
+		min_btn.add_theme_stylebox_override("normal", inactive_style)
+		min_btn.add_theme_stylebox_override("hover", inactive_style)
+
+
+func _build_limit_row(res_id: StringName, current_limit: int, cap: int) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+
+	# Resource icon
+	var icon_container := Control.new()
+	icon_container.custom_minimum_size = Vector2(ItemGrid.ICON_SIZE, ItemGrid.ICON_SIZE)
+	icon_container.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	icon_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var icon_rect := TextureRect.new()
+	icon_rect.texture = ResourceRegistry.get_icon_texture(res_id, ItemGrid.ICON_SIZE / 2)
+	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon_container.add_child(icon_rect)
+	row.add_child(icon_container)
+
+	# Resource name
+	var name_lbl := Label.new()
+	name_lbl.text = str(res_id)
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.add_theme_font_size_override("font_size", 12)
+	name_lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(name_lbl)
+
+	# − button
+	var minus_btn := Button.new()
+	minus_btn.text = "−"
+	minus_btn.custom_minimum_size = Vector2(22, 22)
+	minus_btn.focus_mode = Control.FOCUS_NONE
+	_apply_secondary_btn_style(minus_btn)
+
+	var limit_lbl := Label.new()
+	limit_lbl.custom_minimum_size = Vector2(32, 0)
+	limit_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	limit_lbl.add_theme_font_size_override("font_size", 13)
+	limit_lbl.add_theme_color_override("font_color", COLOR_TEXT)
+	limit_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+
+	# + button
+	var plus_btn := Button.new()
+	plus_btn.text = "+"
+	plus_btn.custom_minimum_size = Vector2(22, 22)
+	plus_btn.focus_mode = Control.FOCUS_NONE
+	_apply_secondary_btn_style(plus_btn)
+
+	var bid := _current_building_id
+	var is_min_mode := (_storage_limit_mode == "min")
+	# ∞ label: for Max mode ∞ = no cap; for Min mode ∞ = not applicable, show 0 as default instead
+	limit_lbl.text = "∞" if (current_limit < 0 and not is_min_mode) else (str(current_limit) if current_limit >= 0 else "0")
+	minus_btn.pressed.connect(func() -> void:
+		var step: int = 10 if Input.is_key_pressed(KEY_SHIFT) else 1
+		if is_min_mode:
+			var cur: int = BuildingRegistry.get_storage_min_limit(bid, res_id)
+			var next: int = maxi(0, (cur if cur >= 0 else 0) - step)
+			BuildingRegistry.set_storage_min_limit(bid, res_id, next)
+			limit_lbl.text = str(next)
+		else:
+			var cur: int = BuildingRegistry.get_storage_limit(bid, res_id)
+			if cur < 0:
+				return
+			BuildingRegistry.set_storage_limit(bid, res_id, maxi(0, cur - step))
+			var next: int = BuildingRegistry.get_storage_limit(bid, res_id)
+			limit_lbl.text = "∞" if next < 0 else str(next)
+	)
+	plus_btn.pressed.connect(func() -> void:
+		var step: int = 10 if Input.is_key_pressed(KEY_SHIFT) else 1
+		if is_min_mode:
+			var cur: int = BuildingRegistry.get_storage_min_limit(bid, res_id)
+			var next: int = mini((cur if cur >= 0 else 0) + step, cap)
+			BuildingRegistry.set_storage_min_limit(bid, res_id, next)
+			limit_lbl.text = str(next)
+		else:
+			var cur: int = BuildingRegistry.get_storage_limit(bid, res_id)
+			var next: int = step if cur < 0 else mini(cur + step, cap)
+			BuildingRegistry.set_storage_limit(bid, res_id, next)
+			limit_lbl.text = str(next)
+	)
+
+	row.add_child(minus_btn)
+	row.add_child(limit_lbl)
+	row.add_child(plus_btn)
+	return row
+
+
 func _on_storage_item_drag_started(resource_id: StringName) -> void:
 	if _current_building_id == "":
 		return
@@ -503,58 +854,49 @@ func _on_output_item_drag_started(resource_id: StringName) -> void:
 
 
 func _refresh_production_zone(instance: BuildingRegistry.BuildingInstance) -> void:
-	var is_production := BuildingRegistry.PRODUCTION_TABLE.has(instance.type)
+	var is_production := BuildingRegistry.is_production_building(instance.type)
 	_production_zone.visible = is_production
+	_sep_production.visible = is_production
 	if not is_production:
 		return
 
-	var is_gathering := (instance.type == BuildingRegistry.BuildingType.GATHERING_HUT)
-	_production_input_col.visible = not is_gathering
-	_production_vsep.visible = not is_gathering
+	# Auto-switch GATHERING_HUT when current recipe is no longer terrain-supported.
+	var available_indices: Array[int] = BuildingRegistry.get_available_recipe_indices(instance.building_id)
+	if instance.type == BuildingRegistry.BuildingType.GATHERING_HUT \
+			and not available_indices.is_empty() \
+			and instance.active_recipe_index not in available_indices:
+		BuildingRegistry.set_active_recipe(instance.building_id, available_indices[0])
+		return
 
-	if not is_gathering:
-		var table_entry: Dictionary = BuildingRegistry.PRODUCTION_TABLE.get(instance.type, {})
+	var recipe: Dictionary = BuildingRegistry.get_active_recipe(instance)
+	var recipe_inputs: Array = recipe.get("inputs", [])
+	var base_ticks: int = recipe.get("base_cycle_ticks", 1)
+	var cycles_per_day: float = float(TickSystem.TICKS_PER_DAY) / float(base_ticks)
+	_production_input_col.visible = not recipe_inputs.is_empty()
+	_production_vsep.visible = not recipe_inputs.is_empty()
+
+	if not recipe_inputs.is_empty():
 		var input_items: Array[Dictionary] = []
 		var any_input := false
-		for input_spec: Dictionary in table_entry.get("inputs", []):
+		for input_spec: Dictionary in recipe_inputs:
 			var res_id: StringName = input_spec["resource_id"]
 			var have: int = int(instance.input_buffer.get(res_id, 0.0))
-			input_items.append({&"resource_id": res_id, &"quantity": have})
+			var qty_per_cycle: int = int(input_spec.get("charge_cost", float(input_spec.get("quantity", 0))))
+			input_items.append({&"resource_id": res_id, &"quantity": have,
+				&"subtitle": "%d/day" % int(qty_per_cycle * cycles_per_day)})
 			if have > 0:
 				any_input = true
 		_input_grid.populate(input_items)
 		_input_grid.modulate.a = 1.0 if any_input else 0.35
-		var rate_parts: Array[String] = []
-		for input_spec: Dictionary in table_entry.get("inputs", []):
-			var res_id: StringName = input_spec["resource_id"]
-			var qty: int = int(input_spec.get("charge_cost", float(input_spec.get("quantity", 0))))
-			rate_parts.append("%d %s" % [qty, str(res_id)])
-		_input_rate_label.text = "  ·  ".join(rate_parts) + " / cycle"
 
 	var output_items: Array[Dictionary] = []
-	if is_gathering:
-		for res_id: StringName in instance.gathering_output:
-			output_items.append({&"resource_id": res_id,
-				&"quantity": instance.buffered_output.get(res_id, 0)})
-	else:
-		var table_entry: Dictionary = BuildingRegistry.PRODUCTION_TABLE.get(instance.type, {})
-		for res_id: StringName in table_entry.get("output", {}):
-			output_items.append({&"resource_id": res_id,
-				&"quantity": instance.buffered_output.get(res_id, 0)})
+	for res_id: StringName in recipe.get("output", {}):
+		var qty_per_cycle: int = recipe["output"][res_id]
+		output_items.append({&"resource_id": res_id,
+			&"quantity": instance.buffered_output.get(res_id, 0),
+			&"subtitle": "~%d/day" % int(qty_per_cycle * cycles_per_day)})
 	_output_grid.populate(output_items)
 	_output_grid.modulate.a = 1.0 if not instance.buffered_output.is_empty() else 0.35
-
-	if is_gathering:
-		if instance.gathering_output.is_empty():
-			_output_rate_label.text = "No harvestable terrain"
-		else:
-			var parts: Array[String] = []
-			for res_id: StringName in instance.gathering_output:
-				parts.append("%d %s" % [instance.gathering_output[res_id], str(res_id)])
-			_output_rate_label.text = "  ·  ".join(parts) + " / cycle"
-	else:
-		var cycles_per_day: float = float(TickSystem.TICKS_PER_DAY) / float(_CYCLE_TICKS)
-		_output_rate_label.text = "%d / cycle  ·  ~%d / day" % [_OUTPUT_QTY, int(cycles_per_day * _OUTPUT_QTY)]
 
 
 
@@ -564,6 +906,8 @@ func _refresh_npc_zone(instance: BuildingRegistry.BuildingInstance) -> void:
 					or instance.type == BuildingRegistry.BuildingType.STORAGE_BUILDING)
 
 	_npc_zone.visible = not is_storage
+	# Separator after NPC zone only when production zone will also be visible.
+	_sep_npc.visible = (not is_storage) and BuildingRegistry.is_production_building(instance.type)
 
 	if is_residential:
 		# Show NPC tiles and recruit button; hide production NPC widgets.
@@ -577,12 +921,20 @@ func _refresh_npc_zone(instance: BuildingRegistry.BuildingInstance) -> void:
 		else:
 			_recruit_btn.visible = count < cap
 			_recruit_btn.disabled = false
+			_recruit_btn.text = "Recruit"
 		_npc_resident_grid.visible = true
 		var npc_ids: Array[StringName] = npc_sys.get_house_npcs(instance.tile) if npc_sys != null else []
 		var npc_data: Array[Dictionary] = []
 		for nid: StringName in npc_ids:
+			var res_npc: Object = npc_sys.get_npc_instance(nid)
+			var res_lvl: int = res_npc.level if res_npc != null else 1
+			var res_xp: int = res_npc.xp if res_npc != null else 0
 			npc_data.append({&"npc_id": nid, &"state": npc_sys.get_npc_state(nid),
-				&"display_name": npc_sys.get_npc_display_name(nid)})
+				&"display_name": npc_sys.get_npc_display_name(nid),
+				&"level": res_lvl,
+				&"xp_into_level": ExperienceFormulas.xp_into_level(res_xp, res_lvl),
+				&"xp_span": ExperienceFormulas.xp_span_of_level(res_lvl),
+				&"warnings": NpcGrid.build_npc_warnings(nid, res_npc)})
 		_npc_resident_grid.populate(npc_data)
 		return
 
@@ -594,19 +946,28 @@ func _refresh_npc_zone(instance: BuildingRegistry.BuildingInstance) -> void:
 
 	var has_npc := instance.assigned_npc_id != &""
 	if has_npc:
-		_npc_worker_tile.modulate.a = 1.0
-		_npc_worker_name_lbl.text = NPCSystem.get_npc_display_name(instance.assigned_npc_id)
+		var worker_npc: Object = NPCSystem.get_npc_instance(instance.assigned_npc_id)
+		var worker_lvl: int = worker_npc.level if worker_npc != null else 1
+		var worker_xp: int = worker_npc.xp if worker_npc != null else 0
+		_npc_worker_grid.populate([{
+			&"npc_id": instance.assigned_npc_id,
+			&"state": NPCSystem.get_npc_state(instance.assigned_npc_id),
+			&"display_name": NPCSystem.get_npc_display_name(instance.assigned_npc_id),
+			&"level": worker_lvl,
+			&"xp_into_level": ExperienceFormulas.xp_into_level(worker_xp, worker_lvl),
+			&"xp_span": ExperienceFormulas.xp_span_of_level(worker_lvl),
+			&"warnings": NpcGrid.build_npc_warnings(instance.assigned_npc_id, worker_npc),
+		}])
 		_assign_npc_btn.visible = false
 		_release_npc_btn.visible = true
 	else:
-		_npc_worker_tile.modulate.a = 0.35
-		_npc_worker_name_lbl.text = "—"
+		_npc_worker_grid.populate([])
 		_assign_npc_btn.visible = (instance.state != BuildingRegistry.BuildingInstance.State.CONSTRUCTING)
 		_release_npc_btn.visible = false
 
 
 func _refresh_transport_zone(instance: BuildingRegistry.BuildingInstance) -> void:
-	var is_production := BuildingRegistry.PRODUCTION_TABLE.has(instance.type)
+	var is_production := BuildingRegistry.is_production_building(instance.type)
 	_transport_zone.visible = is_production
 	if not is_production:
 		return
@@ -627,26 +988,28 @@ func _refresh_transport_zone(instance: BuildingRegistry.BuildingInstance) -> voi
 				and route.source_building_id == bid:
 			output_routes.append(route)
 
-	_populate_transport_flow(_carrier_in_flow, input_routes)
+	_populate_transport_flow(_carrier_in_flow, input_routes, "to")
 	_carrier_in_btn.visible = input_routes.is_empty()
 
-	_populate_transport_flow(_carrier_out_flow, output_routes)
+	_populate_transport_flow(_carrier_out_flow, output_routes, "from")
 	_carrier_out_btn.visible = output_routes.is_empty()
 
 
-func _populate_transport_flow(flow: HFlowContainer, routes: Array[LogisticsRoute]) -> void:
+func _populate_transport_flow(flow: HFlowContainer, routes: Array[LogisticsRoute], role: String) -> void:
 	for child in flow.get_children():
 		child.queue_free()
 	for route: LogisticsRoute in routes:
 		var res_id := _get_route_display_resource(route)
-		var per_day := _get_route_trips_per_day(route)
-		flow.add_child(_build_transport_route_tile(res_id, per_day, route))
+		flow.add_child(_build_transport_route_tile(res_id, route, role))
+	var n := routes.size()
+	flow.custom_minimum_size.x = n * ItemGrid.BLOCK_WIDTH + maxi(n - 1, 0) * ItemGrid.BLOCK_GAP
 
 
-func _build_transport_route_tile(resource_id: StringName, per_day: int, route: LogisticsRoute) -> Control:
+func _build_transport_route_tile(resource_id: StringName, route: LogisticsRoute, _role: String) -> Control:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(ItemGrid.BLOCK_WIDTH, ItemGrid.BLOCK_HEIGHT)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 
 	var style := StyleBoxFlat.new()
 	style.bg_color = ItemGrid.COLOR_BLOCK_BG
@@ -682,17 +1045,26 @@ func _build_transport_route_tile(resource_id: StringName, per_day: int, route: L
 	icon_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(icon_container)
 
-	var icon_lbl := Label.new()
-	icon_lbl.text = _transport_resource_icon(resource_id)
-	icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	icon_lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	icon_lbl.add_theme_font_size_override("font_size", 28)
-	icon_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon_container.add_child(icon_lbl)
+	if resource_id != &"":
+		var icon_rect := TextureRect.new()
+		icon_rect.texture      = ResourceRegistry.get_icon_texture(resource_id, ItemGrid.ICON_SIZE / 2)
+		icon_rect.expand_mode  = TextureRect.EXPAND_IGNORE_SIZE
+		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_container.add_child(icon_rect)
+	else:
+		var icon_lbl := Label.new()
+		icon_lbl.text                 = "?"
+		icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		icon_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+		icon_lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		icon_lbl.add_theme_font_size_override("font_size", 28)
+		icon_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_container.add_child(icon_lbl)
 
 	var rate_lbl := Label.new()
-	rate_lbl.text = "~%d/day" % per_day if per_day > 0 else "—"
+	rate_lbl.text = _get_route_stats_text(route)
 	rate_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	rate_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rate_lbl.add_theme_font_size_override("font_size", 11)
@@ -702,8 +1074,22 @@ func _build_transport_route_tile(resource_id: StringName, per_day: int, route: L
 
 	panel.mouse_entered.connect(func() -> void: style.border_color = ItemGrid.COLOR_HOVER_BORDER)
 	panel.mouse_exited.connect(func() -> void:  style.border_color = ItemGrid.COLOR_BLOCK_BORDER)
+	panel.gui_input.connect(func(event: InputEvent) -> void:
+		var mb := event as InputEventMouseButton
+		if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+			transport_route_edit_requested.emit(route)
+			get_viewport().set_input_as_handled())
 
 	return panel
+
+
+## Returns observed last-day stats as a display string.
+## Shows "—" until the first complete day has elapsed (stats_data_available == false).
+## Format: "3/day  47%" — items delivered and % of the day the carrier was active on this route.
+func _get_route_stats_text(route: LogisticsRoute) -> String:
+	if not route.stats_data_available:
+		return "—"
+	return "%d/day" % route.stats_items_last_day
 
 
 func _get_route_display_resource(route: LogisticsRoute) -> StringName:
@@ -712,42 +1098,205 @@ func _get_route_display_resource(route: LogisticsRoute) -> StringName:
 	var instance := BuildingRegistry.get_building_instance(str(route.source_building_id))
 	if instance == null:
 		return &""
-	if instance.type == BuildingRegistry.BuildingType.GATHERING_HUT:
-		var keys := instance.gathering_output.keys()
-		return keys[0] if not keys.is_empty() else &""
-	var table_entry: Dictionary = BuildingRegistry.PRODUCTION_TABLE.get(instance.type, {})
-	var out_keys: Array = table_entry.get("output", {}).keys()
+	var recipe: Dictionary = BuildingRegistry.get_active_recipe(instance)
+	var out_keys: Array = recipe.get("output", {}).keys()
 	return out_keys[0] if not out_keys.is_empty() else &""
 
 
-func _get_route_trips_per_day(route: LogisticsRoute) -> int:
-	const TICKS_PER_DAY := 1000
-	if route.path_valid and route.cached_path_cost > 0.0:
-		var round_trip := int(route.cached_path_cost * 2.0)
-		return TICKS_PER_DAY / round_trip if round_trip > 0 else 0
-	var from_inst := BuildingRegistry.get_building_instance(str(route.source_building_id))
-	var to_inst   := BuildingRegistry.get_building_instance(str(route.destination_building_id))
-	if from_inst == null or to_inst == null:
-		return 0
-	var dist := absi(to_inst.tile.x - from_inst.tile.x) + absi(to_inst.tile.y - from_inst.tile.y)
-	# Canonical logistics value (no local copy — avoids drift); nominal fed-carrier estimate.
-	var round_trip := dist * 2 * int(LogisticsSystem.TICKS_PER_TILE)
-	return TICKS_PER_DAY / round_trip if round_trip > 0 else 0
 
 
-func _transport_resource_icon(resource_id: StringName) -> String:
-	match resource_id:
-		&"wood":  return "🪵"
-		&"stone": return "🪨"
-		&"berry": return "🫐"
-		&"fiber": return "🌿"
-		&"tool":  return "🪓"
-		&"":      return "?"
-		_:        return "📦"
 
 
 func _get_building_short_name(building_id: String) -> String:
 	return BuildingRegistry.get_building_display_name(building_id)
+
+
+func _on_recipe_changed(building_id: String, _recipe_index: int) -> void:
+	if building_id == _current_building_id and visible:
+		var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(building_id)
+		if instance != null:
+			_refresh_production_zone(instance)
+
+
+func _on_storage_limit_changed(building_id: String, _resource_id: StringName, _limit: int) -> void:
+	if building_id == _current_building_id and visible and _storage_config_mode:
+		_refresh_storage_config()
+
+
+func _on_storage_min_limit_changed(building_id: String, _resource_id: StringName, _limit: int) -> void:
+	if building_id == _current_building_id and visible and _storage_config_mode:
+		_refresh_storage_config()
+
+
+func _on_recipes_btn_pressed() -> void:
+	_recipe_view_open = not _recipe_view_open
+	_content_body.visible = not _recipe_view_open
+	_recipe_view.visible = _recipe_view_open
+	_recipes_btn.text = "✕" if _recipe_view_open else "⚙"
+	if _recipe_view_open:
+		var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(_current_building_id)
+		if instance != null:
+			_rebuild_recipe_view(instance)
+
+
+func _rebuild_recipe_view(instance: BuildingRegistry.BuildingInstance) -> void:
+	for child in _recipe_view.get_children():
+		child.queue_free()
+
+	var title := Label.new()
+	title.text = "Recipes"
+	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_color_override("font_color", COLOR_LINK)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_recipe_view.add_child(title)
+
+	var recipes: Array = BuildingRegistry.get_recipes(instance.type)
+	var available: Array[int] = BuildingRegistry.get_available_recipe_indices(_current_building_id)
+	var all_available: bool = (instance.type != BuildingRegistry.BuildingType.GATHERING_HUT)
+	for i: int in range(recipes.size()):
+		var recipe: Dictionary = recipes[i]
+		# During a forced first-open pick, no recipe is shown active so the
+		# default recipe is also clickable (the click guard skips active cards).
+		var is_active: bool = (not _force_recipe_pick) and (i == instance.active_recipe_index)
+		var is_available: bool = all_available or (i in available)
+		_build_recipe_card(recipe, i, is_active, is_available)
+
+
+func _build_recipe_card(recipe: Dictionary, recipe_index: int, is_active: bool, is_available: bool) -> void:
+	var card := PanelContainer.new()
+	card.mouse_filter = Control.MOUSE_FILTER_STOP
+	if is_available and not is_active:
+		card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var style := StyleBoxFlat.new()
+	var _border_idle: Color
+	if is_active:
+		style.bg_color = Color(0.20, 0.20, 0.20)
+		_border_idle   = COLOR_PROGRESS_FG
+	elif is_available:
+		style.bg_color = Color(0.17, 0.17, 0.17)
+		_border_idle   = Color(0.30, 0.30, 0.30)
+	else:
+		style.bg_color = Color(0.14, 0.14, 0.14)
+		_border_idle   = Color(0.22, 0.22, 0.22)
+	style.border_width_left   = 2
+	style.border_width_right  = 2
+	style.border_width_top    = 2
+	style.border_width_bottom = 2
+	style.border_color = _border_idle
+	style.corner_radius_top_left     = 4
+	style.corner_radius_top_right    = 4
+	style.corner_radius_bottom_left  = 4
+	style.corner_radius_bottom_right = 4
+	style.content_margin_left   = 10
+	style.content_margin_right  = 10
+	style.content_margin_top    = 8
+	style.content_margin_bottom = 8
+	card.add_theme_stylebox_override("panel", style)
+	_recipe_view.add_child(card)  # in scene tree before inner nodes
+
+	if is_available and not is_active:
+		card.mouse_entered.connect(func() -> void:
+			style.border_color = COLOR_BTN_HOVER)
+		card.mouse_exited.connect(func() -> void:
+			style.border_color = _border_idle)
+	card.gui_input.connect(func(event: InputEvent) -> void:
+		var mb := event as InputEventMouseButton
+		if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+			if is_available and not is_active:
+				BuildingRegistry.set_active_recipe(_current_building_id, recipe_index)
+				_force_recipe_pick = false
+				_recipe_view_open = false
+				_recipe_view.visible = false
+				_content_body.visible = true
+				_recipes_btn.text = "⚙"
+				var inst := BuildingRegistry.get_building_instance(_current_building_id)
+				if inst != null:
+					_refresh_production_zone(inst))
+
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 6)
+	card.add_child(inner)
+
+	var name_lbl := Label.new()
+	name_lbl.text = recipe.get("label", "Recipe %d" % (recipe_index + 1))
+	name_lbl.add_theme_font_size_override("font_size", 14)
+	var name_color: Color
+	if is_active:
+		name_color = COLOR_TEXT
+	elif is_available:
+		name_color = COLOR_TEXT_DIM
+	else:
+		name_color = Color(0.45, 0.45, 0.45)
+	name_lbl.add_theme_color_override("font_color", name_color)
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inner.add_child(name_lbl)
+
+	if not is_available:
+		var unavail_lbl := Label.new()
+		unavail_lbl.text = "No adjacent terrain"
+		unavail_lbl.add_theme_font_size_override("font_size", 11)
+		unavail_lbl.add_theme_color_override("font_color", COLOR_ERR)
+		unavail_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		unavail_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(unavail_lbl)
+
+	_add_recipe_formula_row(recipe, inner)
+
+	var ticks: int = recipe.get("base_cycle_ticks", 1)
+	var output_parts: Array[String] = []
+	for res_id: StringName in recipe.get("output", {}):
+		var qty: int = recipe["output"][res_id]
+		var cpd: float = float(TickSystem.TICKS_PER_DAY) / float(ticks)
+		output_parts.append("%d %s / day" % [int(qty * cpd), str(res_id)])
+	var info_lbl := Label.new()
+	info_lbl.text = "  ·  ".join(output_parts) if not output_parts.is_empty() else "%d ticks / cycle" % ticks
+	info_lbl.add_theme_font_size_override("font_size", 11)
+	info_lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+	info_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	info_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inner.add_child(info_lbl)
+
+
+## Appends a formula row (inputs → outputs) to `parent`, which must already be
+## in the scene tree so that ItemGrid._ready() runs before populate() is called.
+func _add_recipe_formula_row(recipe: Dictionary, parent: Control) -> void:
+	var hbox := HBoxContainer.new()
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	hbox.add_theme_constant_override("separation", 8)
+	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(hbox)
+
+	var inputs_arr: Array = recipe.get("inputs", [])
+	if not inputs_arr.is_empty():
+		var input_grid := ItemGrid.new()
+		input_grid.center = true
+		input_grid.hide_empty = true
+		hbox.add_child(input_grid)
+		var input_items: Array[Dictionary] = []
+		for spec: Dictionary in inputs_arr:
+			var qty: int = int(spec.get("charge_cost", float(spec.get("quantity", 1))))
+			input_items.append({&"resource_id": spec["resource_id"], &"quantity": qty})
+		input_grid.populate(input_items)
+
+		var arrow := Label.new()
+		arrow.text = "→"
+		arrow.add_theme_font_size_override("font_size", 20)
+		arrow.add_theme_color_override("font_color", COLOR_LINK)
+		arrow.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		arrow.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hbox.add_child(arrow)
+
+	var output_grid := ItemGrid.new()
+	output_grid.center = true
+	output_grid.hide_empty = true
+	hbox.add_child(output_grid)
+	var output_items: Array[Dictionary] = []
+	for res_id: StringName in recipe.get("output", {}):
+		output_items.append({&"resource_id": res_id, &"quantity": recipe["output"][res_id]})
+	output_grid.populate(output_items)
 
 # ── Button callbacks ──────────────────────────────────────────────────────────
 
@@ -771,12 +1320,22 @@ func _on_release_npc_pressed() -> void:
 
 
 func _on_recruit_pressed() -> void:
+	_open_recruit_dialog()
+
+
+func _on_recruit_confirmed() -> void:
 	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(_current_building_id)
 	if instance == null:
+		_close_recruit_dialog()
 		return
 	var npc_sys: Node = NPCSystem
-	if npc_sys != null:
-		npc_sys.recruit_npc(instance.tile)
+	if npc_sys != null and _recruit_food_option != null:
+		var idx: int = _recruit_food_option.selected
+		if idx >= 0 and idx < _recruit_food_option.item_count:
+			var resource_id: StringName = _recruit_food_option.get_item_metadata(idx)
+			if npc_sys.can_afford_recruit_with(resource_id):
+				npc_sys.recruit_npc(instance.tile, resource_id)
+	_close_recruit_dialog()
 	_refresh()
 
 
@@ -792,12 +1351,8 @@ func _on_resident_npc_clicked(npc_id: StringName) -> void:
 	npc_detail_requested.emit(npc_id, state)
 
 
-func _on_worker_tile_clicked() -> void:
-	var npc_id := _get_assigned_npc_id()
-	if npc_id == &"":
-		return
-	var npc_sys: Node = NPCSystem
-	var state: int = npc_sys.get_npc_state(npc_id) if npc_sys != null else 0
+func _on_worker_npc_clicked(npc_id: StringName) -> void:
+	var state: int = NPCSystem.get_npc_state(npc_id)
 	npc_detail_requested.emit(npc_id, state)
 
 
@@ -827,6 +1382,62 @@ func _on_rename_confirmed() -> void:
 	_close_rename_dialog()
 
 
+func _open_recruit_dialog() -> void:
+	if _recruit_dialog == null or _current_building_id == "":
+		return
+	var npc_sys: Node = NPCSystem
+	if npc_sys == null:
+		return
+
+	# Populate food picker.
+	_recruit_food_option.clear()
+	var food_ids: Array[StringName] = ResourceRegistry.get_food_resource_ids()
+	for fid: StringName in food_ids:
+		var glyph: String = ResourceRegistry.get_glyph(fid)
+		_recruit_food_option.add_item("%s %s" % [glyph, str(fid).capitalize()])
+		_recruit_food_option.set_item_metadata(_recruit_food_option.item_count - 1, fid)
+	# Default to berry if available, otherwise first entry.
+	var berry_idx: int = food_ids.find(&"berry")
+	_recruit_food_option.selected = maxi(0, berry_idx)
+
+	_refresh_recruit_costs()
+	_recruit_dialog.visible = true
+
+
+func _refresh_recruit_costs() -> void:
+	if _recruit_food_option == null or _recruit_body_lbl == null:
+		return
+	var npc_sys: Node = NPCSystem
+	if npc_sys == null:
+		return
+	var idx: int = _recruit_food_option.selected
+	if idx < 0 or idx >= _recruit_food_option.item_count:
+		return
+	var resource_id: StringName = _recruit_food_option.get_item_metadata(idx)
+	var amount: int = npc_sys.get_recruit_amount_for_resource(resource_id)
+	var glyph: String = ResourceRegistry.get_glyph(resource_id)
+	var have: int = InventorySystem.get_global_quantity(resource_id)
+	var can_afford: bool = have >= amount
+
+	var lines: PackedStringArray = []
+	lines.append("A new villager will move into this house.")
+	lines.append("")
+	lines.append("Cost:       %s %d" % [glyph, amount])
+	lines.append("In storage: %s %d" % [glyph, have])
+	if not can_afford:
+		lines.append("")
+		lines.append("Not enough food.")
+	_recruit_body_lbl.text = "\n".join(lines)
+	_recruit_body_lbl.add_theme_color_override(
+			"font_color", COLOR_ERR if not can_afford else COLOR_TEXT)
+	_recruit_confirm_btn.disabled = not can_afford
+
+
+func _close_recruit_dialog() -> void:
+	if _recruit_dialog != null:
+		_recruit_dialog.visible = false
+
+
 func _open_npc_popup() -> void:
 	if _npc_popup == null:
 		return
@@ -841,8 +1452,15 @@ func _populate_npc_popup() -> void:
 	var available: Array[StringName] = npc_sys.get_available_npcs() if npc_sys != null else []
 	var data: Array[Dictionary] = []
 	for npc_id: StringName in available:
+		var popup_npc: Object = npc_sys.get_npc_instance(npc_id)
+		var popup_lvl: int = popup_npc.level if popup_npc != null else 1
+		var popup_xp: int = popup_npc.xp if popup_npc != null else 0
 		data.append({&"npc_id": npc_id, &"state": NPCSystem.TaskState.IDLE,
-			&"display_name": npc_sys.get_npc_display_name(npc_id)})
+			&"display_name": npc_sys.get_npc_display_name(npc_id),
+			&"level": popup_lvl,
+			&"xp_into_level": ExperienceFormulas.xp_into_level(popup_xp, popup_lvl),
+			&"xp_span": ExperienceFormulas.xp_span_of_level(popup_lvl),
+			&"warnings": NpcGrid.build_npc_warnings(npc_id, popup_npc)})
 	_npc_popup_grid.populate(data)
 
 
@@ -894,7 +1512,7 @@ func _state_key(instance: BuildingRegistry.BuildingInstance) -> String:
 	match instance.state:
 		BuildingRegistry.BuildingInstance.State.CONSTRUCTING: return "CONSTRUCTING"
 		BuildingRegistry.BuildingInstance.State.OPERATING:
-			if BuildingRegistry.PRODUCTION_TABLE.has(instance.type):
+			if BuildingRegistry.is_production_building(instance.type):
 				if instance.cycle_running:
 					return "PRODUCING"
 				return "IDLE"
@@ -912,7 +1530,7 @@ func _state_text(instance: BuildingRegistry.BuildingInstance) -> String:
 			var pct: int = int(float(current) / float(total) * 100.0) if total > 0 else 100
 			return "Constructing — %d/%d ticks (%d%%)" % [current, total, pct]
 		BuildingRegistry.BuildingInstance.State.OPERATING:
-			if BuildingRegistry.PRODUCTION_TABLE.has(instance.type):
+			if BuildingRegistry.is_production_building(instance.type):
 				if instance.cycle_running:
 					return "Producing"
 				return "Idle — %s" % _production_idle_reason(instance)
@@ -932,18 +1550,18 @@ func _state_text(instance: BuildingRegistry.BuildingInstance) -> String:
 func _production_idle_reason(instance: BuildingRegistry.BuildingInstance) -> String:
 	if instance.assigned_npc_id == &"":
 		return "No NPC assigned"
-	var table_entry: Dictionary = BuildingRegistry.PRODUCTION_TABLE.get(instance.type, {})
+	var recipe: Dictionary = BuildingRegistry.get_active_recipe(instance)
 	var buffered_total: int = 0
 	for qty: int in instance.buffered_output.values():
 		buffered_total += qty
-	if buffered_total >= table_entry.get("output_capacity", 0):
+	if buffered_total >= recipe.get("output_capacity", 0):
 		return "Output full"
 	return "No input"
 
 
 func _has_valid_input(instance: BuildingRegistry.BuildingInstance) -> bool:
-	var table_entry: Dictionary = BuildingRegistry.PRODUCTION_TABLE.get(instance.type, {})
-	var inputs: Array = table_entry.get("inputs", [])
+	var recipe: Dictionary = BuildingRegistry.get_active_recipe(instance)
+	var inputs: Array = recipe.get("inputs", [])
 	if inputs.is_empty():
 		return false
 	for input_spec: Dictionary in inputs:
@@ -979,14 +1597,33 @@ func _build_ui() -> void:
 
 	_build_header_zone(vbox)
 	_build_separator(vbox)
-	_build_progress_zone(vbox)
-	_build_storage_zone(vbox)
-	_build_npc_zone(vbox)
-	_build_production_zone(vbox)
-	_build_transport_zone(vbox)
+	_build_upgrade_zone(vbox)
+
+	_content_body = VBoxContainer.new()
+	_content_body.name = "ContentBody"
+	_content_body.add_theme_constant_override("separation", 6)
+	_content_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(_content_body)
+
+	_build_progress_zone(_content_body)
+	_sep_progress = _build_separator(_content_body)
+	_build_storage_zone(_content_body)
+	_sep_storage = _build_separator(_content_body)
+	_build_npc_zone(_content_body)
+	_sep_npc = _build_separator(_content_body)
+	_build_production_zone(_content_body)
+	_sep_production = _build_separator(_content_body)
+	_build_transport_zone(_content_body)
+
+	_recipe_view = VBoxContainer.new()
+	_recipe_view.name = "RecipeView"
+	_recipe_view.add_theme_constant_override("separation", 10)
+	_recipe_view.visible = false
+	vbox.add_child(_recipe_view)
 
 	_build_rename_dialog()
 	_build_npc_popup()
+	_build_recruit_dialog()
 
 
 func _build_header_zone(parent: VBoxContainer) -> void:
@@ -1013,6 +1650,39 @@ func _build_header_zone(parent: VBoxContainer) -> void:
 	_apply_secondary_btn_style(_rename_btn)
 	header_row.add_child(_rename_btn)
 
+	_recipes_btn = Button.new()
+	_recipes_btn.name = "RecipesBtn"
+	_recipes_btn.text = "⚙"
+	_recipes_btn.custom_minimum_size = Vector2(28, 28)
+	_recipes_btn.focus_mode = Control.FOCUS_ALL
+	_recipes_btn.tooltip_text = "Show all recipes"
+	_recipes_btn.visible = false
+	_recipes_btn.pressed.connect(_on_recipes_btn_pressed)
+	_apply_secondary_btn_style(_recipes_btn)
+	header_row.add_child(_recipes_btn)
+
+	_storage_config_btn = Button.new()
+	_storage_config_btn.name = "StorageConfigBtn"
+	_storage_config_btn.text = "⚙"
+	_storage_config_btn.custom_minimum_size = Vector2(28, 28)
+	_storage_config_btn.focus_mode = Control.FOCUS_ALL
+	_storage_config_btn.tooltip_text = "Set delivery limits"
+	_storage_config_btn.visible = false
+	_storage_config_btn.pressed.connect(_on_storage_config_pressed)
+	_apply_secondary_btn_style(_storage_config_btn)
+	header_row.add_child(_storage_config_btn)
+
+	_upgrade_btn = Button.new()
+	_upgrade_btn.name = "UpgradeBtn"
+	_upgrade_btn.text = "↑"
+	_upgrade_btn.custom_minimum_size = Vector2(28, 28)
+	_upgrade_btn.focus_mode = Control.FOCUS_ALL
+	_upgrade_btn.tooltip_text = "Building upgrades"
+	_upgrade_btn.visible = false
+	_upgrade_btn.pressed.connect(_on_upgrade_btn_pressed)
+	_apply_secondary_btn_style(_upgrade_btn)
+	header_row.add_child(_upgrade_btn)
+
 	var state_row := HBoxContainer.new()
 	state_row.add_theme_constant_override("separation", 6)
 	zone.add_child(state_row)
@@ -1035,7 +1705,113 @@ func _build_header_zone(parent: VBoxContainer) -> void:
 	_efficiency_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_efficiency_label.add_theme_font_size_override("font_size", 12)
 	_efficiency_label.add_theme_color_override("font_color", COLOR_CAP_GREEN)
+	_efficiency_label.mouse_filter = Control.MOUSE_FILTER_STOP  # needed for the hover tooltip
 	state_row.add_child(_efficiency_label)
+
+
+func _build_upgrade_zone(parent: VBoxContainer) -> void:
+	_upgrade_zone = VBoxContainer.new()
+	_upgrade_zone.name = "UpgradeZone"
+	_upgrade_zone.add_theme_constant_override("separation", 6)
+	_upgrade_zone.visible = false
+	parent.add_child(_upgrade_zone)
+
+
+func _refresh_upgrade_zone(instance: BuildingRegistry.BuildingInstance) -> void:
+	for child in _upgrade_zone.get_children():
+		child.queue_free()
+	var upgrades: Array = BuildingRegistry.get_available_upgrades(instance.building_id)
+	if upgrades.is_empty():
+		_upgrade_zone.visible = false
+		_upgrade_zone_open = false
+		return
+	var title := Label.new()
+	title.text = "Upgrades"
+	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+	_upgrade_zone.add_child(title)
+	for upg: Dictionary in upgrades:
+		var uid: StringName = upg.get(&"id", &"")
+		var installed := instance.has_upgrade(uid)
+		var tile := _make_upgrade_tile(instance.building_id, upg, installed)
+		_upgrade_zone.add_child(tile)
+	_build_separator(_upgrade_zone)
+
+
+func _make_upgrade_tile(building_id: String, upg: Dictionary, installed: bool) -> Control:
+	var uid: StringName = upg.get(&"id", &"")
+	var display_name: String = upg.get(&"display_name", str(uid))
+	var cost: Dictionary = upg.get(&"cost", {})
+	var tick_cost: int = upg.get(&"tick_cost", 0)
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 8)
+
+	var name_lbl := Label.new()
+	name_lbl.text = display_name
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.add_theme_font_size_override("font_size", 13)
+	hbox.add_child(name_lbl)
+
+	var cost_parts: PackedStringArray = []
+	for res_id: StringName in cost:
+		cost_parts.append("%s %d" % [ResourceRegistry.get_glyph(res_id), cost[res_id]])
+	cost_parts.append("%d ticks" % tick_cost)
+	var cost_lbl := Label.new()
+	cost_lbl.text = " · ".join(cost_parts)
+	cost_lbl.add_theme_font_size_override("font_size", 11)
+	cost_lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+	hbox.add_child(cost_lbl)
+
+	# Check if this upgrade is currently being installed by the player.
+	var player: PlayerCharacter = get_tree().get_first_node_in_group(&"player_character") as PlayerCharacter
+	var is_building := player != null \
+		and player.get_active_action_id() == PlayerCharacter.ManualActionType.INSTALL_UPGRADE \
+		and player.get_active_building_id() == building_id \
+		and player.get_active_upgrade_id() == uid
+
+	var can_afford := true
+	var missing_parts: PackedStringArray = []
+	for res_id: StringName in cost:
+		var have: int = InventorySystem.get_global_quantity(res_id)
+		var need: int = cost[res_id]
+		if have < need:
+			can_afford = false
+			missing_parts.append("%s %d/%d" % [ResourceRegistry.get_glyph(res_id), have, need])
+
+	var btn := Button.new()
+	if installed:
+		btn.text = "✓ Installed"
+		btn.disabled = true
+	elif is_building:
+		btn.text = "Building…"
+		btn.disabled = true
+	elif not can_afford:
+		btn.text = "Install"
+		btn.disabled = true
+		btn.tooltip_text = "Missing: %s" % ", ".join(missing_parts)
+	else:
+		btn.text = "Install"
+		btn.pressed.connect(func() -> void: _on_install_upgrade_pressed(building_id, uid))
+	_apply_secondary_btn_style(btn)
+	hbox.add_child(btn)
+	return hbox
+
+
+func _on_upgrade_btn_pressed() -> void:
+	_upgrade_zone_open = not _upgrade_zone_open
+	_upgrade_zone.visible = _upgrade_zone_open
+	if _upgrade_zone_open:
+		var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(_current_building_id)
+		if instance != null:
+			_refresh_upgrade_zone(instance)
+
+
+func _on_install_upgrade_pressed(building_id: String, upgrade_id: StringName) -> void:
+	var player: PlayerCharacter = get_tree().get_first_node_in_group(&"player_character") as PlayerCharacter
+	if player == null:
+		return
+	player.try_start_upgrade(building_id, upgrade_id)
 
 
 func _build_progress_zone(parent: VBoxContainer) -> void:
@@ -1067,19 +1843,25 @@ func _build_progress_zone(parent: VBoxContainer) -> void:
 	_progress_label.add_theme_font_size_override("font_size", 13)
 	_progress_label.add_theme_color_override("font_color", COLOR_TEXT_DIM)
 	_progress_zone.add_child(_progress_label)
-	_build_separator(parent)
 
 
 func _build_storage_zone(parent: VBoxContainer) -> void:
 	_storage_zone = VBoxContainer.new()
 	_storage_zone.name = "StorageZone"
 	_storage_zone.add_theme_constant_override("separation", 6)
+	_storage_zone.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_storage_zone.visible = false
 	parent.add_child(_storage_zone)
 
+	# ── Normal view (capacity bar + item grid) ────────────────────────────────
+	_storage_normal_zone = VBoxContainer.new()
+	_storage_normal_zone.name = "StorageNormalZone"
+	_storage_normal_zone.add_theme_constant_override("separation", 6)
+	_storage_zone.add_child(_storage_normal_zone)
+
 	var cap_row := HBoxContainer.new()
 	cap_row.add_theme_constant_override("separation", 8)
-	_storage_zone.add_child(cap_row)
+	_storage_normal_zone.add_child(cap_row)
 
 	_storage_capacity_label = Label.new()
 	_storage_capacity_label.name = "StorageCapacityLabel"
@@ -1118,9 +1900,44 @@ func _build_storage_zone(parent: VBoxContainer) -> void:
 	_storage_item_grid = ItemGrid.new()
 	_storage_item_grid.name = "StorageItemGrid"
 	_storage_item_grid.item_drag_started.connect(_on_storage_item_drag_started)
-	_storage_zone.add_child(_storage_item_grid)
+	_storage_normal_zone.add_child(_storage_item_grid)
 
-	_build_separator(parent)
+	# ── Config view (per-resource limit spinners) ─────────────────────────────
+	_storage_config_zone = VBoxContainer.new()
+	_storage_config_zone.name = "StorageConfigZone"
+	_storage_config_zone.add_theme_constant_override("separation", 4)
+	_storage_config_zone.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_storage_config_zone.visible = false
+	_storage_zone.add_child(_storage_config_zone)
+
+	var config_header := Label.new()
+	config_header.text = "Delivery Limits"
+	config_header.add_theme_font_size_override("font_size", 12)
+	config_header.add_theme_color_override("font_color", COLOR_LINK)
+	config_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_storage_config_zone.add_child(config_header)
+
+	# Min/Max mode toggle — lives OUTSIDE the scroll container so it stays
+	# pinned while the resource rows scroll.
+	_storage_config_toggle = HBoxContainer.new()
+	_storage_config_toggle.name = "StorageConfigToggle"
+	_storage_config_toggle.add_theme_constant_override("separation", 4)
+	_storage_config_zone.add_child(_storage_config_toggle)
+
+	var config_scroll := ScrollContainer.new()
+	config_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	config_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	config_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_storage_config_zone.add_child(config_scroll)
+
+	_storage_config_rows = VBoxContainer.new()
+	_storage_config_rows.name = "StorageConfigRows"
+	_storage_config_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_storage_config_rows.add_theme_constant_override("separation", 2)
+	config_scroll.add_child(_storage_config_rows)
+	_storage_config_rows.minimum_size_changed.connect(func() -> void:
+		config_scroll.custom_minimum_size.y = minf(
+			_storage_config_rows.get_combined_minimum_size().y, 220.0))
 
 
 func _build_production_zone(parent: VBoxContainer) -> void:
@@ -1151,11 +1968,6 @@ func _build_production_zone(parent: VBoxContainer) -> void:
 	_input_grid.hide_empty = true
 	_input_grid.item_drag_started.connect(_on_input_item_drag_started)
 	input_col.add_child(_input_grid)
-	_input_rate_label = Label.new()
-	_input_rate_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_input_rate_label.add_theme_font_size_override("font_size", 12)
-	_input_rate_label.add_theme_color_override("font_color", COLOR_LINK)
-	input_col.add_child(_input_rate_label)
 	cols.add_child(input_col)
 	_input_drop_zone = input_col
 	_production_input_col = input_col
@@ -1186,14 +1998,7 @@ func _build_production_zone(parent: VBoxContainer) -> void:
 	_output_grid.hide_empty = true
 	_output_grid.item_drag_started.connect(_on_output_item_drag_started)
 	output_col.add_child(_output_grid)
-	_output_rate_label = Label.new()
-	_output_rate_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_output_rate_label.add_theme_font_size_override("font_size", 12)
-	_output_rate_label.add_theme_color_override("font_color", COLOR_LINK)
-	output_col.add_child(_output_rate_label)
 	cols.add_child(output_col)
-
-	_build_separator(parent)
 
 
 func _build_npc_zone(parent: VBoxContainer) -> void:
@@ -1209,58 +2014,11 @@ func _build_npc_zone(parent: VBoxContainer) -> void:
 	_npc_worker_col.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_npc_zone.add_child(_npc_worker_col)
 
-	_npc_worker_tile = PanelContainer.new()
-	_npc_worker_tile.name = "NpcWorkerTile"
-	_npc_worker_tile.custom_minimum_size = Vector2(NpcGrid.BLOCK_WIDTH, NpcGrid.BLOCK_HEIGHT)
-	_npc_worker_tile.mouse_filter = Control.MOUSE_FILTER_STOP
-	_npc_worker_tile_style = StyleBoxFlat.new()
-	_npc_worker_tile_style.bg_color = NpcGrid.COLOR_BLOCK_BG
-	_npc_worker_tile_style.border_width_left   = 1
-	_npc_worker_tile_style.border_width_right  = 1
-	_npc_worker_tile_style.border_width_top    = 1
-	_npc_worker_tile_style.border_width_bottom = 1
-	_npc_worker_tile_style.border_color = NpcGrid.COLOR_BLOCK_BORDER
-	_npc_worker_tile.add_theme_stylebox_override("panel", _npc_worker_tile_style)
-	_npc_worker_tile.mouse_entered.connect(func() -> void:
-		if _get_assigned_npc_id() != &"":
-			_npc_worker_tile_style.border_color = NpcGrid.COLOR_HOVER_BORDER)
-	_npc_worker_tile.mouse_exited.connect(func() -> void:
-		_npc_worker_tile_style.border_color = NpcGrid.COLOR_BLOCK_BORDER)
-	_npc_worker_tile.gui_input.connect(func(event: InputEvent) -> void:
-		var mb := event as InputEventMouseButton
-		if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
-			_on_worker_tile_clicked())
-	_npc_worker_col.add_child(_npc_worker_tile)
-
-	var tile_vbox := VBoxContainer.new()
-	tile_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	tile_vbox.add_theme_constant_override("separation", 2)
-	_npc_worker_tile.add_child(tile_vbox)
-
-	var icon_container := Control.new()
-	icon_container.custom_minimum_size   = Vector2(NpcGrid.ICON_SIZE, NpcGrid.ICON_SIZE)
-	icon_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	icon_container.mouse_filter          = Control.MOUSE_FILTER_IGNORE
-	tile_vbox.add_child(icon_container)
-
-	_npc_worker_icon_lbl = Label.new()
-	_npc_worker_icon_lbl.text                 = "🧑"
-	_npc_worker_icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_npc_worker_icon_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	_npc_worker_icon_lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_npc_worker_icon_lbl.add_theme_font_size_override("font_size", 24)
-	_npc_worker_icon_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon_container.add_child(_npc_worker_icon_lbl)
-
-	_npc_worker_name_lbl = Label.new()
-	_npc_worker_name_lbl.text                  = "—"
-	_npc_worker_name_lbl.horizontal_alignment  = HORIZONTAL_ALIGNMENT_CENTER
-	_npc_worker_name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_npc_worker_name_lbl.add_theme_font_size_override("font_size", 11)
-	_npc_worker_name_lbl.add_theme_color_override("font_color", NpcGrid.COLOR_TEXT_DIM)
-	_npc_worker_name_lbl.clip_text   = true
-	_npc_worker_name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tile_vbox.add_child(_npc_worker_name_lbl)
+	_npc_worker_grid = NpcGrid.new()
+	_npc_worker_grid.name   = "NpcWorkerGrid"
+	_npc_worker_grid.center = true
+	_npc_worker_grid.npc_clicked.connect(_on_worker_npc_clicked)
+	_npc_worker_col.add_child(_npc_worker_grid)
 
 	_assign_npc_btn = Button.new()
 	_assign_npc_btn.name = "AssignNpcBtn"
@@ -1307,8 +2065,6 @@ func _build_npc_zone(parent: VBoxContainer) -> void:
 	_recruit_btn.pressed.connect(_on_recruit_pressed)
 	_apply_primary_btn_style(_recruit_btn)
 	_npc_zone.add_child(_recruit_btn)
-
-	_build_separator(parent)
 
 
 func _build_transport_zone(parent: VBoxContainer) -> void:
@@ -1475,16 +2231,80 @@ func _build_npc_popup() -> void:
 	_apply_secondary_btn_style(cancel_btn)
 	vbox.add_child(cancel_btn)
 
+
+func _build_recruit_dialog() -> void:
+	_recruit_dialog = PanelContainer.new()
+	_recruit_dialog.name = "RecruitDialog"
+	_recruit_dialog.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	_recruit_dialog.custom_minimum_size = Vector2(280, 0)
+	_recruit_dialog.visible = false
+	_apply_panel_style(_recruit_dialog)
+	add_child(_recruit_dialog)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	_recruit_dialog.add_child(vbox)
+
+	var title_lbl := Label.new()
+	title_lbl.text = "Recruit Villager"
+	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_lbl.add_theme_font_size_override("font_size", 14)
+	title_lbl.add_theme_color_override("font_color", COLOR_TEXT)
+	vbox.add_child(title_lbl)
+
+	var food_row := HBoxContainer.new()
+	food_row.add_theme_constant_override("separation", 8)
+	food_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_child(food_row)
+
+	var pay_lbl := Label.new()
+	pay_lbl.text = "Pay with:"
+	pay_lbl.add_theme_font_size_override("font_size", 13)
+	pay_lbl.add_theme_color_override("font_color", COLOR_TEXT)
+	food_row.add_child(pay_lbl)
+
+	_recruit_food_option = OptionButton.new()
+	_recruit_food_option.name = "RecruitFoodOption"
+	_recruit_food_option.custom_minimum_size = Vector2(130, 0)
+	_recruit_food_option.focus_mode = Control.FOCUS_ALL
+	_recruit_food_option.item_selected.connect(func(_idx: int) -> void: _refresh_recruit_costs())
+	food_row.add_child(_recruit_food_option)
+
+	_recruit_body_lbl = Label.new()
+	_recruit_body_lbl.name = "RecruitBody"
+	_recruit_body_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_recruit_body_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_recruit_body_lbl.add_theme_font_size_override("font_size", 13)
+	_recruit_body_lbl.add_theme_color_override("font_color", COLOR_TEXT)
+	vbox.add_child(_recruit_body_lbl)
+
+	var btn_row := HBoxContainer.new()
+	btn_row.add_theme_constant_override("separation", 8)
+	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_child(btn_row)
+
+	_recruit_confirm_btn = Button.new()
+	_recruit_confirm_btn.text = "Recruit"
+	_recruit_confirm_btn.custom_minimum_size = Vector2(100, 30)
+	_recruit_confirm_btn.focus_mode = Control.FOCUS_ALL
+	_recruit_confirm_btn.pressed.connect(_on_recruit_confirmed)
+	_apply_primary_btn_style(_recruit_confirm_btn)
+	btn_row.add_child(_recruit_confirm_btn)
+
+	var cancel_btn := Button.new()
+	cancel_btn.text = "Cancel"
+	cancel_btn.custom_minimum_size = Vector2(80, 30)
+	cancel_btn.focus_mode = Control.FOCUS_ALL
+	cancel_btn.pressed.connect(_close_recruit_dialog)
+	_apply_secondary_btn_style(cancel_btn)
+	btn_row.add_child(cancel_btn)
+
 # ── Style helpers ─────────────────────────────────────────────────────────────
 
-func _build_separator(parent: VBoxContainer) -> void:
-	var sep := HSeparator.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = COLOR_SEP
-	style.content_margin_top    = 0
-	style.content_margin_bottom = 0
-	sep.add_theme_stylebox_override("separator", style)
+func _build_separator(parent: VBoxContainer) -> HSeparator:
+	var sep := StyleFactory.separator(COLOR_SEP)
 	parent.add_child(sep)
+	return sep
 
 
 func _apply_panel_style(panel: PanelContainer) -> void:

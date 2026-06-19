@@ -63,5 +63,7 @@ func get_tile_movement_cost(pos: Vector2i) -> float:
 | LogisticsSystem   | src/systems/logistics/logistics_system.gd |
 | PathSystem        | src/systems/path_system.gd                |
 | HungerSystem      | src/systems/hunger_system.gd              |
+| CraftingRegistry  | src/gameplay/crafting_registry.gd         |
+| WildSystem        | src/systems/wild_system.gd                |
 
 Extend this table whenever a new Autoload is added.

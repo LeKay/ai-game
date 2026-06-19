@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-06-04",
+  "last_updated": "2026-06-18",
   "resources": [
 	{
 	  "id": "wood",
@@ -13,8 +13,18 @@
 	  "max_charge": 100.0,
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/wood.png",
+	  "glyph": "🪵",
+	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_wood.png",
+	  "fallback_color": [
+		0.55,
+		0.28,
+		0.08
+	  ],
 	  "description": "Freshly chopped logs.",
-	  "tags": ["burnable", "construction_material"]
+	  "tags": [
+		"burnable",
+        "construction_material"
+	  ]
 	},
 	{
 	  "id": "stone",
@@ -27,8 +37,17 @@
 	  "max_charge": 100.0,
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/stone.png",
+	  "glyph": "🪨",
+	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_stone.png",
+	  "fallback_color": [
+		0.62,
+		0.62,
+		0.62
+	  ],
 	  "description": "Solid chunks of rock.",
-	  "tags": ["construction_material"]
+	  "tags": [
+        "construction_material"
+	  ]
 	},
 	{
 	  "id": "fiber",
@@ -41,6 +60,13 @@
 	  "max_charge": 100.0,
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/fiber.png",
+	  "glyph": "🌿",
+	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_fiber.png",
+	  "fallback_color": [
+		0.78,
+		0.88,
+		0.12
+	  ],
 	  "description": "Plant fibers useful for crafting.",
 	  "tags": []
 	},
@@ -55,9 +81,18 @@
 	  "max_charge": 100.0,
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/berry.png",
+	  "glyph": "🫐",
+	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_berry.png",
+	  "fallback_color": [
+		0.9,
+		0.12,
+		0.22
+	  ],
 	  "description": "Wild berries. Edible and nutritious.",
 	  "nutrition": 1,
-	  "tags": ["food"]
+	  "tags": [
+        "food"
+	  ]
 	},
 	{
 	  "id": "bread",
@@ -70,13 +105,17 @@
 	  "max_charge": 100.0,
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/bread.png",
+	  "glyph": "🍞",
 	  "description": "Baked bread. Dense, efficient food.",
 	  "nutrition": 5,
-	  "tags": ["food"]
+	  "tags": [
+        "food"
+	  ]
 	},
 	{
 	  "id": "plank",
 	  "display_name": "Plank",
+	  "perk_eligible": true,
 	  "category": "production_good",
 	  "subcategory": "intermediate",
 	  "stack_limit": 99,
@@ -85,22 +124,297 @@
 	  "max_charge": 100.0,
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/plank.png",
+	  "glyph": "🟫",
+	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_plank.png",
+	  "fallback_color": [
+		0.83,
+		0.66,
+		0.38
+	  ],
 	  "description": "Processed lumber, ready for construction.",
-	  "tags": ["construction_material"]
+	  "tags": [
+        "construction_material"
+	  ]
 	},
 	{
-	  "id": "tool",
-	  "display_name": "Tool",
+	  "id": "cloth",
+	  "display_name": "Cloth",
+	  "perk_eligible": true,
+	  "category": "production_good",
+	  "subcategory": "intermediate",
+	  "stack_limit": 99,
+	  "weight": 0.8,
+	  "base_value": 8,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/cloth.png",
+	  "glyph": "🧶",
+	  "description": "Woven textile, ready for further processing.",
+	  "tags": []
+	},
+	{
+	  "id": "clothing",
+	  "display_name": "Clothing",
+	  "perk_eligible": true,
+	  "category": "production_good",
+	  "subcategory": "trade_good",
+	  "stack_limit": 50,
+	  "weight": 0.6,
+	  "base_value": 20,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/clothing.png",
+	  "glyph": "👘",
+	  "description": "Finished garments. A valuable trade commodity.",
+	  "tags": [
+        "trade_good"
+	  ]
+	},
+	{
+	  "id": "axe",
+	  "display_name": "Axe",
+	  "perk_eligible": true,
 	  "category": "production_good",
 	  "subcategory": "tool",
 	  "stack_limit": 10,
 	  "weight": 2.0,
-	  "base_value": 30,
+	  "base_value": 25,
 	  "max_charge": 100.0,
 	  "movement_cost": 4.0,
-	  "icon_path": "res://assets/art/tiles/env_tile_resource_tool.png",
-	  "description": "A sturdy general-purpose tool for chopping, mining, and crafting.",
-	  "tags": ["tool"]
+	  "icon_path": "assets/ui/icons/resources/axe.png",
+	  "glyph": "🪓",
+	  "description": "A sharp axe for felling trees and cutting wood.",
+	  "tags": [
+        "tool"
+	  ]
+	},
+	{
+	  "id": "pickaxe",
+	  "display_name": "Pickaxe",
+	  "category": "production_good",
+	  "subcategory": "tool",
+	  "stack_limit": 10,
+	  "weight": 2.5,
+	  "base_value": 25,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/pickaxe.png",
+	  "glyph": "⛏️",
+	  "description": "A heavy pickaxe for breaking stone.",
+	  "tags": [
+        "tool"
+	  ]
+	},
+	{
+	  "id": "spindle",
+	  "display_name": "Spindle",
+	  "perk_eligible": true,
+	  "category": "production_good",
+	  "subcategory": "tool",
+	  "stack_limit": 10,
+	  "weight": 1.0,
+	  "base_value": 20,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/spindle.png",
+	  "glyph": "🪡",
+	  "description": "A wooden spindle for spinning fiber into thread.",
+	  "tags": [
+        "tool"
+	  ]
+	},
+	{
+	  "id": "tree_seed",
+	  "display_name": "Tree Seed",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 20,
+	  "weight": 0.1,
+	  "base_value": 1,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/tree_seed.png",
+	  "glyph": "🌱",
+	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_tree_seed.png",
+	  "fallback_color": [
+		0.18,
+		0.54,
+		0.18
+	  ],
+	  "description": "A tree seed. Plant on empty ground to grow a new tree.",
+	  "tags": [
+        "plantable"
+	  ]
+	},
+	{
+	  "id": "grass_seed",
+	  "display_name": "Grass Seed",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 20,
+	  "weight": 0.1,
+	  "base_value": 1,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/grass_seed.png",
+	  "glyph": "🌾",
+	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_grass_seed.png",
+	  "fallback_color": [
+		0.65,
+		0.78,
+		0.22
+	  ],
+	  "description": "Grass seeds. Plant on empty ground to grow a fiber grass patch.",
+	  "tags": [
+        "plantable"
+	  ]
+	},
+	{
+	  "id": "berry_seed",
+	  "display_name": "Berry Seed",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 20,
+	  "weight": 0.1,
+	  "base_value": 1,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/berry_seed.png",
+	  "glyph": "🍒",
+	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_berry_seed.png",
+	  "fallback_color": [
+		0.55,
+		0.15,
+		0.6
+	  ],
+	  "description": "Berry seeds. Plant on empty ground to grow a berry bush.",
+	  "tags": [
+        "plantable"
+	  ]
+	},
+	{
+	  "id": "clay",
+	  "display_name": "Clay",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 99,
+	  "weight": 3.0,
+	  "base_value": 2,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/clay.png",
+	  "glyph": "🧱",
+	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_clay.png",
+	  "fallback_color": [
+		0.70,
+		0.45,
+		0.25
+	  ],
+	  "description": "A deposit of raw clay. Hidden at map generation — must be located by searching.",
+	  "tags": [
+		"construction_material"
+	  ]
+	},
+	{
+	  "id": "wheat",
+	  "display_name": "Wheat",
+	  "category": "consumable",
+	  "subcategory": "food",
+	  "stack_limit": 50,
+	  "weight": 0.3,
+	  "base_value": 2,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/wheat.png",
+	  "glyph": "🌾",
+	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_wheat.png",
+	  "fallback_color": [
+		0.85,
+		0.72,
+		0.30
+	  ],
+	  "description": "Golden wheat. Grows only on land with wheat fertility.",
+	  "nutrition": 0.5,
+	  "tags": [
+		"food"
+	  ]
+	},
+	{
+	  "id": "wheat_seed",
+	  "display_name": "Wheat Seed",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 20,
+	  "weight": 0.1,
+	  "base_value": 1,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/wheat_seed.png",
+	  "glyph": "🌱",
+	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_wheat_seed.png",
+	  "fallback_color": [
+		0.80,
+		0.70,
+		0.35
+	  ],
+	  "description": "Wheat seeds. Plantable only on land with wheat fertility.",
+	  "tags": [
+		"plantable"
+	  ]
+	},
+	{
+	  "id": "meat",
+	  "display_name": "Meat",
+	  "category": "consumable",
+	  "subcategory": "food",
+	  "stack_limit": 50,
+	  "weight": 0.5,
+	  "base_value": 4,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/meat.png",
+	  "glyph": "🍖",
+	  "description": "Fresh meat from a hunting lodge. Nutritious food.",
+	  "nutrition": 4,
+	  "tags": [
+		"food"
+	  ]
+	},
+	{
+	  "id": "hide",
+	  "display_name": "Hide",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 50,
+	  "weight": 1.0,
+	  "base_value": 5,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/hide.png",
+	  "glyph": "🟤",
+	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_hide.png",
+	  "fallback_color": [
+		0.55,
+		0.40,
+		0.25
+	  ],
+	  "description": "Raw animal hide from a hunting lodge. Can be processed into leather goods.",
+	  "tags": []
+	},
+	{
+	  "id": "flour",
+	  "display_name": "Flour",
+	  "category": "production_good",
+	  "subcategory": "intermediate",
+	  "stack_limit": 99,
+	  "weight": 0.5,
+	  "base_value": 4,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/flour.png",
+	  "glyph": "🫙",
+	  "description": "Ground wheat flour, ready for baking.",
+	  "tags": []
 	}
   ]
 }

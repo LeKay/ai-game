@@ -410,8 +410,8 @@ func test_force_fix_adds_tiles_adjacent_to_existing_cluster() -> void:
 				continue
 			if grid._terrain[x][y] != GridMapScript.TileType.TREE:
 				continue
-			for anchor in cluster:
-				var dist := abs(x - anchor.x) + abs(y - anchor.y)
+			for anchor: Vector2i in cluster:
+				var dist: int = abs(x - anchor.x) + abs(y - anchor.y)
 				if dist == 1:
 					found_adjacent = true
 	assert_bool(found_adjacent).is_true()

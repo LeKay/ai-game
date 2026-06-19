@@ -51,10 +51,16 @@ func create_container(id: StringName, p_display_name: String, p_capacity: int, p
 
 
 ## Permanently removes the container for the given id and emits container_removed.
+## Emits item_withdrawn for every non-empty slot so DayLedger registers the loss
+## (e.g. building demolition drops — prevents double-counting on re-deposit).
 ## No-op if the container does not exist.
 func remove_container(id: StringName) -> void:
 	if not _containers.has(id):
 		return
+	var container: InventoryContainer = _containers[id]
+	for slot: InventorySlot in container.slots:
+		if slot.resource_id != &"" and slot.quantity > 0:
+			item_withdrawn.emit(slot.resource_id, slot.quantity)
 	_containers.erase(id)
 	container_removed.emit(id)
 

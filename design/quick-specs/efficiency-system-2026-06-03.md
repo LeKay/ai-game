@@ -1,5 +1,11 @@
 # Quick Design Spec: Efficiency System
 
+> **SUPERSEDED (2026-06-13)** by `design/gdd/efficiency-system.md` (full GDD, synced
+> to the implementation) and ADR-0012 Amendment 2026-06-13. Key deviations from this
+> spec as built: NPC base efficiency 0.5 (not 1.0), nutrition curve instead of binary
+> hunger modifier, building cap 1.0 (not 2.0), added adjacency curve F6, constants not
+> yet externalized to JSON config. Kept for design history.
+
 **Type**: New Small System
 **Scope**: Ein numerischer Effizienz-Wert (0.0–2.0, Basis 1.0) auf Gebäuden und NPCs.
 Gebäude: Effizienz beschleunigt Produktionszyklen. Worker-NPCs: tragen ihre Effizienz-Delta

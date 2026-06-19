@@ -18,7 +18,7 @@
 ##   AC-4 — Failed recalculation: active route transitions to DEACTIVATED
 ##   AC-5 — In-flight carrier: remaining_ticks unchanged after path recalculation
 ##   AC-6 — DEACTIVATED route: path_valid updated but lifecycle stays DEACTIVATED
-##   AC-7 — WAITING carrier not interrupted; carrier_state and wait_ticks preserved
+##   AC-7 — WAITING carrier not interrupted; carrier_state preserved
 
 extends GdUnitTestSuite
 
@@ -286,19 +286,17 @@ func test_inflight_carrier_remaining_ticks_unchanged_after_path_recalculation() 
 
 # ---- AC-7: WAITING carrier not immediately interrupted ----------------------
 
-func test_waiting_carrier_state_and_wait_ticks_preserved_after_deactivation() -> void:
-	# Arrange: carrier in WAITING_SOURCE with wait_ticks = 5
+func test_waiting_carrier_state_preserved_after_deactivation() -> void:
+	# Arrange: carrier in WAITING_SOURCE (legacy state from an old save)
 	var route := _make_route()
 	route.carrier_state = LogisticsRouteScript.CarrierState.WAITING_SOURCE
-	route.wait_ticks = 5
 
 	# Act: block all paths → route deactivated during recalculation
 	_grid.block_column(4)
 	_grid.emit_terrain_changed(Vector2i(4, 5))
 	_logistics._recalculate_invalid_paths()
 
-	# Assert: route DEACTIVATED but carrier_state and wait_ticks unchanged;
+	# Assert: route DEACTIVATED but carrier_state unchanged;
 	# interruption deferred to next tick processing cycle (not applied synchronously).
 	assert_int(route.lifecycle_state).is_equal(LogisticsRouteScript.LifecycleState.DEACTIVATED)
 	assert_int(route.carrier_state).is_equal(LogisticsRouteScript.CarrierState.WAITING_SOURCE)
-	assert_int(route.wait_ticks).is_equal(5)

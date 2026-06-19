@@ -11,13 +11,13 @@ const ICON_SIZE    := 48
 
 const DEMOLISH_SENTINEL := -2
 
-const COLOR_BLOCK_BG       := Color("#2a2a2a")
-const COLOR_BLOCK_BORDER   := Color("#4a4a4a")
-const COLOR_HOVER_BORDER   := Color("#A8A49C")
-const COLOR_NAME_TEXT      := Color("#F0EDE6")
-const COLOR_DISABLED_BG    := Color("#1a1a1a")
-const COLOR_DISABLED_BORDER := Color("#2e2e2e")
-const DISABLED_ALPHA       := 0.5
+const COLOR_BLOCK_BG       := UiPalette.BLOCK_BG
+const COLOR_BLOCK_BORDER   := UiPalette.BLOCK_BORDER
+const COLOR_HOVER_BORDER   := UiPalette.HOVER_BORDER
+const COLOR_NAME_TEXT      := UiPalette.TEXT_PRIMARY
+const COLOR_DISABLED_BG    := UiPalette.BLOCK_BG_DISABLED
+const COLOR_DISABLED_BORDER := UiPalette.BLOCK_BORDER_DISABLED
+const DISABLED_ALPHA       := UiPalette.DISABLED_ALPHA
 
 var _flow: HFlowContainer
 var _empty_label: Label
@@ -73,13 +73,9 @@ func _make_block(building_type: int, display_name: String, can_afford: bool, cos
 	panel.custom_minimum_size = Vector2(BLOCK_WIDTH, BLOCK_HEIGHT)
 	panel.mouse_filter        = Control.MOUSE_FILTER_STOP
 
-	var style := StyleBoxFlat.new()
-	style.bg_color            = COLOR_BLOCK_BG if can_afford else COLOR_DISABLED_BG
-	style.border_width_left   = 1
-	style.border_width_right  = 1
-	style.border_width_top    = 1
-	style.border_width_bottom = 1
-	style.border_color        = COLOR_BLOCK_BORDER if can_afford else COLOR_DISABLED_BORDER
+	var style := StyleFactory.block(
+		COLOR_BLOCK_BG if can_afford else COLOR_DISABLED_BG,
+		COLOR_BLOCK_BORDER if can_afford else COLOR_DISABLED_BORDER, 1, 0)
 	panel.add_theme_stylebox_override("panel", style)
 
 	if not can_afford:
@@ -98,14 +94,23 @@ func _make_block(building_type: int, display_name: String, can_afford: bool, cos
 	icon_container.mouse_filter          = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(icon_container)
 
-	var icon_lbl := Label.new()
-	icon_lbl.text                 = _building_icon(building_type)
-	icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	icon_lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	icon_lbl.add_theme_font_size_override("font_size", 28)
-	icon_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon_container.add_child(icon_lbl)
+	var bld_tex: Texture2D = BuildingRegistry.get_building_texture(building_type)
+	if bld_tex != null:
+		var icon_rect := TextureRect.new()
+		icon_rect.texture      = bld_tex
+		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_container.add_child(icon_rect)
+	else:
+		var icon_lbl := Label.new()
+		icon_lbl.text                 = _building_icon(building_type)
+		icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		icon_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+		icon_lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		icon_lbl.add_theme_font_size_override("font_size", 28)
+		icon_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_container.add_child(icon_lbl)
 
 	var name_lbl := Label.new()
 	name_lbl.text                  = display_name
@@ -143,12 +148,7 @@ func _build_cost_tooltip(cost: Dictionary, available: Dictionary, energy_cost: i
 
 
 func _resource_emoji(res_id: StringName) -> String:
-	match res_id:
-		&"wood":  return "🪵"
-		&"stone": return "🪨"
-		&"food":  return "🍖"
-		&"iron":  return "⛏️"
-	return "📦"
+	return ResourceRegistry.get_glyph(res_id)
 
 
 func _building_icon(building_type: int) -> String:
@@ -161,4 +161,11 @@ func _building_icon(building_type: int) -> String:
 		BuildingRegistry.BuildingType.LUMBER_CAMP:       return "🪚"
 		BuildingRegistry.BuildingType.GATHERING_HUT:     return "🧺"
 		BuildingRegistry.BuildingType.TOOL_WORKSHOP:     return "🔨"
+		BuildingRegistry.BuildingType.WEAVER:            return "🧶"
+		BuildingRegistry.BuildingType.TAILOR:            return "✂️"
+		BuildingRegistry.BuildingType.SAWMILL:           return "🪚"
+		BuildingRegistry.BuildingType.HUNTING_LODGE:     return "🦌"
+		BuildingRegistry.BuildingType.FARM:              return "🌾"
+		BuildingRegistry.BuildingType.MILL:              return "⚙️"
+		BuildingRegistry.BuildingType.BAKERY:            return "🥖"
 	return "🏛️"

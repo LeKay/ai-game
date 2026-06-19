@@ -15,6 +15,9 @@ const NPC_SPAWN_DELAY_TICKS: int = 1000
 ## Base travel ticks per tile at 100% efficiency (matches LogisticsSystem). Travel is then
 ## scaled by the NPC's food-efficiency (F4). Anchored 2026-06-12 so 50% efficiency = 10/tile.
 const TICKS_PER_TILE: int = 5
+## Nutrition cost step per recruitment. Total cost scales with colony size (+5 nutrition per villager).
+## Actual food amount = ceili(nutrition_cost / food.nutrition). berry(1)→5,10…; bread(5)→1,2…
+const RECRUIT_COST_PER_NPC: int = 5
 
 # ---- Enums -------------------------------------------------------------------
 
@@ -60,12 +63,30 @@ class NPCInstance:
 	var current_output_amount: int = 0
 	## Player-assigned display name. Empty string means use str(npc_id) as display name.
 	var display_name: String = ""
+	## Experience System (cosmetic at this scope — see design/gdd/experience-system.md).
+	## Cumulative lifetime XP — only ever increases. Source of truth; `level` is derived from it.
+	var xp: int = 0
+	## Cached level in [1, ExperienceFormulas.MAX_LEVEL], derived from `xp` via F2.
+	var level: int = 1
+	## XP earned during the current day, not yet applied. Flushed into `xp` on day_transition.
+	var pending_xp: int = 0
+	## Perk System (design/perks/perk-catalog.md). Profession = a BuildingRegistry.BuildingType
+	## the NPC specialised into; -1 = none. Permanent once set (via the Berufung perk).
+	var profession: int = -1
+	## Acquired perk instances. Each: {perk_id: StringName, good: StringName, building_type: int}.
+	var perks: Array = []
+	## Unresolved level-up perk choices, presented in the Day Overview before the next day starts.
+	var pending_perk_choices: int = 0
+	## Perk instances whose bound good was supplied this day (transient — recomputed each day_transition).
+	## Only these grant their effect today. Not serialized.
+	var active_perks: Array = []
 	## Efficiency modifiers — written by external systems via signals (ADR-0012).
-	var food_modifier: float = 1.0          ## set by HungerSystem via NPCSystem (1.0 = no food)
+	var food_modifier: float = EfficiencyFormulas.calculate_food_modifier(0.0)  ## set by HungerSystem; default = unfed (0 nutrition)
 	var satisfaction_modifier: float = 1.0  ## set by future SatisfactionSystem
 	var equipment_modifier: float = 1.0     ## set by future EquipmentSystem
 	## Computed efficiency [0.0–2.0]. Call recalculate_efficiency() after any modifier change.
-	var efficiency: float = EfficiencyFormulas.BASE_NPC_EFFICIENCY
+	var efficiency: float = EfficiencyFormulas.calculate_npc_efficiency(
+			EfficiencyFormulas.calculate_food_modifier(0.0), 1.0, 1.0)
 
 	## Recomputes efficiency from current modifiers using F1 (ADR-0012).
 	func recalculate_efficiency() -> void:
@@ -102,12 +123,25 @@ signal npc_removed(npc_id: StringName)
 signal house_demolished(npc_ids: Array[StringName])
 ## Emitted when the player renames an NPC.
 signal npc_renamed(npc_id: StringName, new_name: String)
+## Emitted on every XP grant (Experience System). xp_into_level / xp_span drive the UI bar (F3).
+signal npc_xp_gained(npc_id: StringName, total_xp: int, xp_into_level: int, xp_span: int)
+## Emitted only when an NPC's level actually increases. Drives the "Level Up!" map float and badges.
+signal npc_leveled_up(npc_id: StringName, new_level: int)
+## Emitted when a perk choice is applied to an NPC (Perk System). Drives UI refresh.
+signal npc_perk_chosen(npc_id: StringName, perk_id: StringName)
+## Emitted at the day transition with the perk bound-goods consumed that day: {resource_id: qty}.
+## Mirrors HungerSystem.food_consumed_daily so the Day Overview can show perk upkeep as consumption.
+signal perk_goods_consumed_daily(items: Dictionary)
 
 # ---- State -------------------------------------------------------------------
 
 ## Central NPC registry. Keys: npc_id (StringName), Values: NPCInstance.
 ## Untyped Dictionary — inner classes are not usable as typed Dictionary value params in GDScript 4.x.
 var all_npcs: Dictionary = {}
+## Frozen per-NPC XP summary from the last completed day (Experience System). Each entry:
+## {npc_id, display_name, xp_before, level_before, xp_gained, xp_after, level_after, leveled_up}.
+## Read by the Day Overview Panel; populated on day_transition.
+var _last_day_xp_summary: Array = []
 ## Per-house state. Keys: tile (Vector2i), Values: _HouseState.
 var _house_registry: Dictionary = {}
 ## Monotonic NPC ID counter.
@@ -125,8 +159,13 @@ var _grid: Object = null
 
 func _enter_tree() -> void:
 	TickSystem.ticks_advanced.connect(_on_ticks_advanced)
+	# Experience: accrued XP is flushed into NPC levels at the day boundary (autoload connects
+	# before the Day Overview Panel, so the summary is ready when the panel reads it).
+	TickSystem.day_transition.connect(_on_day_transition)
 	_building_system = BuildingRegistry
 	_building_system.building_demolished.connect(_on_building_demolished)
+	# Experience: a building's assigned worker accrues XP each time a production cycle completes.
+	_building_system.production_output_ready.connect(_on_production_output_ready)
 
 	_inventory_system = InventorySystem
 	if _inventory_system != null:
@@ -144,6 +183,8 @@ func set_grid_map(grid: Object) -> void:
 func _exit_tree() -> void:
 	if _building_system != null and _building_system.building_demolished.is_connected(_on_building_demolished):
 		_building_system.building_demolished.disconnect(_on_building_demolished)
+	if _building_system != null and _building_system.production_output_ready.is_connected(_on_production_output_ready):
+		_building_system.production_output_ready.disconnect(_on_production_output_ready)
 	if _inventory_system != null:
 		if _inventory_system.storage_changed.is_connected(_on_storage_changed):
 			_inventory_system.storage_changed.disconnect(_on_storage_changed)
@@ -154,11 +195,15 @@ func _exit_tree() -> void:
 
 ## Creates a new NPC in IDLE state at home_base and registers it to that house.
 ## Enforces NPC_CAPACITY_PER_HOUSE and NPC_SPAWN_DELAY_TICKS for the second slot.
-## Returns the generated npc_id, or &"" if recruitment is blocked.
-func recruit_npc(home_base: Vector2i) -> StringName:
+## resource_id must be a food resource (nutrition > 0). Returns &"" if blocked.
+func recruit_npc(home_base: Vector2i, resource_id: StringName) -> StringName:
 	var house := _get_or_create_house(home_base)
 
 	if house.npc_ids.size() >= NPC_CAPACITY_PER_HOUSE:
+		return &""
+
+	var amount: int = get_recruit_amount_for_resource(resource_id)
+	if not _pay_recruit_cost(resource_id, amount):
 		return &""
 
 	if house.npc_ids.is_empty():
@@ -180,6 +225,49 @@ func recruit_npc(home_base: Vector2i) -> StringName:
 
 	npc_recruited.emit(npc_id, home_base)
 	return npc_id
+
+## Nutrition units needed for the next recruitment. Scales with the whole colony:
+## nutrition_cost = RECRUIT_COST_PER_NPC × (current NPC count + 1) → 5, 10, 15, …
+func get_recruit_nutrition_cost() -> float:
+	return float(RECRUIT_COST_PER_NPC * (get_npc_count() + 1))
+
+## Amount of resource_id needed to recruit the next villager.
+## Returns 0 when resource_id has no nutrition (i.e. is not edible food).
+func get_recruit_amount_for_resource(resource_id: StringName) -> int:
+	var nutrition: float = ResourceRegistry.get_nutrition(resource_id)
+	if nutrition <= 0.0:
+		return 0
+	return ceili(get_recruit_nutrition_cost() / nutrition)
+
+## True when the colony holds enough of resource_id to pay for the next recruitment.
+## Returns true when no inventory is wired (e.g. unit tests) so recruitment stays usable.
+func can_afford_recruit_with(resource_id: StringName) -> bool:
+	if _inventory_system == null:
+		return true
+	var amount: int = get_recruit_amount_for_resource(resource_id)
+	if amount <= 0:
+		return false
+	return _inventory_system.get_global_quantity(resource_id) >= amount
+
+## Consumes `amount` of `resource_id` spread across all storage containers.
+## Returns false (no change) when the colony cannot pay. Null inventory recruits for free.
+func _pay_recruit_cost(resource_id: StringName, amount: int) -> bool:
+	if amount <= 0 or _inventory_system == null:
+		return true
+	if _inventory_system.get_global_quantity(resource_id) < amount:
+		return false
+	var remaining: int = amount
+	for container: Object in _inventory_system.get_all_containers():
+		if remaining <= 0:
+			break
+		var available: int = _inventory_system.get_resource_quantity(
+				container.container_id, resource_id)
+		if available <= 0:
+			continue
+		var take: int = mini(available, remaining)
+		_inventory_system.try_consume(container.container_id, resource_id, take)
+		remaining -= take
+	return true
 
 ## Returns the number of NPCs registered to the given house tile.
 func get_house_npc_count(home_base: Vector2i) -> int:
@@ -250,6 +338,25 @@ func get_npc_display_name(npc_id: StringName) -> String:
 	return str(npc_id)
 
 
+## Returns a human-readable job label for an NPC, derived from what they currently do.
+## Priority: active building assignment → logistics carrier → chosen profession → unemployed.
+## Job labels live in BuildingRegistry.BUILDING_JOB_NAMES (the building data structure).
+func get_npc_job_name(npc_id: StringName) -> String:
+	var npc: NPCInstance = all_npcs.get(npc_id)
+	if npc == null:
+		return ""
+	if npc.assigned_building_id != &"" and _building_system != null:
+		var inst: Object = _building_system.get_building_instance(str(npc.assigned_building_id))
+		if inst != null:
+			return BuildingRegistry.BUILDING_JOB_NAMES.get(inst.type, "Worker")
+	for route: LogisticsRoute in LogisticsSystem.get_active_routes():
+		if route.npc_id == npc_id:
+			return "Carrier"
+	if npc.profession != -1:
+		return BuildingRegistry.BUILDING_JOB_NAMES.get(npc.profession, "Worker")
+	return "Unemployed"
+
+
 ## Sets a player-defined display name for an NPC. Pass "" to revert to the generated ID.
 ## Emits npc_renamed on success.
 func rename_npc(npc_id: StringName, new_name: String) -> void:
@@ -258,6 +365,252 @@ func rename_npc(npc_id: StringName, new_name: String) -> void:
 		return
 	npc.display_name = new_name.strip_edges()
 	npc_renamed.emit(npc_id, npc.display_name)
+
+
+## Grants XP to an NPC and resolves level-ups (Experience System, Rule 3).
+## `amount` <= 0 and unknown NPCs are no-ops. Emits npc_xp_gained on every grant; emits
+## npc_leveled_up only when the derived level increases (capped at MAX_LEVEL). XP is cosmetic
+## at this scope — it applies no gameplay modifier (see design/gdd/experience-system.md Rule 5).
+func grant_xp(npc_id: StringName, amount: int) -> void:
+	if amount <= 0:
+		return
+	var npc: NPCInstance = all_npcs.get(npc_id)
+	if npc == null:
+		return
+	npc.xp += amount
+	var old_level: int = npc.level
+	var new_level: int = ExperienceFormulas.level_for_total_xp(npc.xp)
+	npc.level = new_level
+	npc_xp_gained.emit(npc_id, npc.xp,
+			ExperienceFormulas.xp_into_level(npc.xp, npc.level),
+			ExperienceFormulas.xp_span_of_level(npc.level))
+	if new_level > old_level:
+		# Each level gained queues one perk choice, resolved in the Day Overview (Perk System).
+		npc.pending_perk_choices += (new_level - old_level)
+		npc_leveled_up.emit(npc_id, new_level)
+
+
+## Applies a chosen perk card to an NPC (Perk System). Adds the perk instance, sets the profession
+## if it is a Berufung card, and decrements the NPC's pending choice count. `card` is a Dictionary
+## from PerkRegistry.generate_choices. No-op if the NPC has no pending choices.
+func apply_perk_choice(npc_id: StringName, card: Dictionary) -> void:
+	var npc: NPCInstance = all_npcs.get(npc_id)
+	if npc == null or npc.pending_perk_choices <= 0:
+		return
+	var perk_id: StringName = card.get(&"perk_id", &"")
+	var def: Dictionary = PerkRegistry.get_def(perk_id)
+	npc.perks.append({
+		&"perk_id": perk_id,
+		&"good": card.get(&"good", &""),
+		&"building_type": int(card.get(&"building_type", -1)),
+		# Assigned daily units (player-adjustable, like food). Defaults to 0 — the perk starts
+		# disabled (consumes nothing) and must be switched on manually in the NPC detail panel.
+		&"amount": 0,
+	})
+	if def.get("is_profession", false):
+		npc.profession = int(card.get(&"building_type", -1))
+	npc.pending_perk_choices -= 1
+	npc_perk_chosen.emit(npc_id, perk_id)
+
+
+## Decrements a pending perk choice without granting a perk (used when no valid cards can be
+## generated, e.g. no perk-eligible goods exist yet) — prevents the "next day" gate from soft-locking.
+func skip_perk_choice(npc_id: StringName) -> void:
+	var npc: NPCInstance = all_npcs.get(npc_id)
+	if npc != null and npc.pending_perk_choices > 0:
+		npc.pending_perk_choices -= 1
+
+
+## Total unresolved perk choices across all NPCs (gates the Day Overview "next day" button).
+func get_total_pending_perk_choices() -> int:
+	var total: int = 0
+	for npc: NPCInstance in all_npcs.values():
+		total += npc.pending_perk_choices
+	return total
+
+
+## Sets the daily consumption amount for the perk at `index` on an NPC (like food amount).
+## Clamped to [0, required]: 0 disables the perk (consumes nothing, same as food set to 0),
+## and the perk's required amount is the ceiling — assigning more than it needs is pointless.
+func set_perk_amount(npc_id: StringName, index: int, amount: int) -> void:
+	var npc: NPCInstance = all_npcs.get(npc_id)
+	if npc == null or index < 0 or index >= npc.perks.size():
+		return
+	var perk: Dictionary = npc.perks[index]
+	var required: int = int(PerkRegistry.get_def(perk.get(&"perk_id", &"")).get("required", 1))
+	perk[&"amount"] = clampi(amount, 0, maxi(required, 0))
+
+
+## Returns NPC IDs that still have at least one unresolved perk choice.
+func get_npcs_with_pending_perk_choices() -> Array[StringName]:
+	var result: Array[StringName] = []
+	for npc: NPCInstance in all_npcs.values():
+		if npc.pending_perk_choices > 0:
+			result.append(npc.npc_id)
+	return result
+
+
+## Accrues XP toward the current day's total without applying it (Experience System).
+## Accrued XP is flushed into `xp`/`level` at the next day_transition (_on_day_transition).
+## `amount` <= 0 and unknown NPCs are no-ops.
+func add_pending_xp(npc_id: StringName, amount: int) -> void:
+	if amount <= 0:
+		return
+	var npc: NPCInstance = all_npcs.get(npc_id)
+	if npc == null:
+		return
+	npc.pending_xp += amount
+
+
+## Flushes each NPC's accrued daily XP into its level at the day boundary and records a
+## per-NPC summary for the Day Overview Panel. Subscribed to TickSystem.day_transition.
+## First consumes each NPC's perk goods to fix the day's active-perk set (Perk System), then
+## applies perk XP multipliers (Lernbegierig / Lehrmeister / Berufung) to the flushed XP.
+func _on_day_transition(_days: int) -> void:
+	_refresh_active_perks()
+	var summary: Array = []
+	for npc: NPCInstance in all_npcs.values():
+		if npc.pending_xp <= 0:
+			continue
+		var raw: int = npc.pending_xp
+		var gained: int = int(round(float(raw) * _effective_xp_multiplier(npc)))
+		var xp_before: int = npc.xp
+		var level_before: int = npc.level
+		npc.pending_xp = 0
+		grant_xp(npc.npc_id, gained)  # applies XP, updates level, emits signals
+		summary.append({
+			&"npc_id": npc.npc_id,
+			&"display_name": get_npc_display_name(npc.npc_id),
+			&"xp_before": xp_before,
+			&"level_before": level_before,
+			&"xp_gained": gained,
+			&"xp_after": npc.xp,
+			&"level_after": npc.level,
+			&"leveled_up": npc.level > level_before,
+		})
+	_last_day_xp_summary = summary
+
+
+# ---- Perk System: daily active-perk resolution + effect queries ---------------
+
+## Consumes one unit of each perk's bound good and records the perks that were supplied today
+## into npc.active_perks. Perks whose good is out of stock are inactive (no effect) that day.
+func _refresh_active_perks() -> void:
+	var consumed: Dictionary = {}  # {good: total qty consumed this day} — for the Day Overview
+	for npc: NPCInstance in all_npcs.values():
+		npc.active_perks = []
+		for perk: Dictionary in npc.perks:
+			var good: StringName = perk.get(&"good", &"")
+			var required: int = int(PerkRegistry.get_def(perk.get(&"perk_id", &"")).get("required", 1))
+			var assigned: int = int(perk.get(&"amount", 1))
+			# Binary (no partial): active only if the assigned amount meets the requirement AND is
+			# available to consume. Under-assigning leaves the perk off and consumes nothing.
+			var active: bool = false
+			if good == &"":
+				active = true
+			elif assigned >= required:
+				active = _consume_good_amount(good, assigned)
+				if active:
+					consumed[good] = int(consumed.get(good, 0)) + assigned
+			perk[&"active"] = active  # transient flag for the UI
+			if active:
+				npc.active_perks.append(perk)
+		# Perk #3 (Meisterhand) now raises the efficiency ceiling additively via the nutrition cap
+		# (HungerSystem folds EFFECT_NPC_EFF_CAP into calculate_food_modifier), just like a level-up —
+		# the higher max must be filled with more food. satisfaction_modifier stays a neutral
+		# placeholder for the future Satisfaction System. HungerSystem re-emits food modifiers right
+		# after (autoload order); recalc here too so efficiency is correct meanwhile.
+		npc.satisfaction_modifier = 1.0
+		npc.recalculate_efficiency()
+	perk_goods_consumed_daily.emit(consumed)
+
+
+## Consumes `amount` units of `good` across storage containers (all-or-nothing). Returns success.
+func _consume_good_amount(good: StringName, amount: int) -> bool:
+	if _inventory_system == null or good == &"" or amount <= 0:
+		return false
+	var containers: Array = _inventory_system.get_all_containers()
+	var total: int = 0
+	for c: Object in containers:
+		total += _inventory_system.get_resource_quantity(c.container_id, good)
+	if total < amount:
+		return false
+	var remaining: int = amount
+	for c: Object in containers:
+		if remaining <= 0:
+			break
+		var avail: int = _inventory_system.get_resource_quantity(c.container_id, good)
+		if avail <= 0:
+			continue
+		var take: int = mini(avail, remaining)
+		_inventory_system.try_consume(c.container_id, good, take)
+		remaining -= take
+	return true
+
+
+## Combined XP multiplier for an NPC from its own active XP perks plus housemates' Lehrmeister.
+func _effective_xp_multiplier(npc: NPCInstance) -> float:
+	var mult: float = 1.0
+	for perk: Dictionary in npc.active_perks:
+		var def: Dictionary = PerkRegistry.get_def(perk.get(&"perk_id", &""))
+		var effect: StringName = def.get("effect", &"")
+		if effect == PerkRegistry.EFFECT_XP_SELF or effect == PerkRegistry.EFFECT_PROFESSION_XP:
+			mult += float(def.get("magnitude", 0.0))
+	# Housemate mentors (Lehrmeister) boost this NPC's XP.
+	var house: _HouseState = _house_registry.get(npc.home_base)
+	if house != null:
+		for mate_id: StringName in house.npc_ids:
+			if mate_id == npc.npc_id:
+				continue
+			var mate: NPCInstance = all_npcs.get(mate_id)
+			if mate == null:
+				continue
+			for perk: Dictionary in mate.active_perks:
+				var def: Dictionary = PerkRegistry.get_def(perk.get(&"perk_id", &""))
+				if def.get("effect", &"") == PerkRegistry.EFFECT_XP_HOUSEMATE:
+					mult += float(def.get("magnitude", 0.0))
+	return mult
+
+
+## Sum of magnitudes of this NPC's active perks with the given effect (0.0 if none / unknown NPC).
+func npc_perk_bonus(npc_id: StringName, effect: StringName) -> float:
+	var npc: NPCInstance = all_npcs.get(npc_id)
+	if npc == null:
+		return 0.0
+	var total: float = 0.0
+	for perk: Dictionary in npc.active_perks:
+		if PerkRegistry.get_def(perk.get(&"perk_id", &"")).get("effect", &"") == effect:
+			total += float(PerkRegistry.get_def(perk.get(&"perk_id", &"")).get("magnitude", 0.0))
+	return total
+
+
+## Sum of magnitudes of all active perks (across every NPC) that are bound to `building_type`
+## and have the given effect. Used by building-bound effects (output bonus, caps, etc.).
+func building_perk_bonus(building_type: int, effect: StringName) -> float:
+	var total: float = 0.0
+	for npc: NPCInstance in all_npcs.values():
+		for perk: Dictionary in npc.active_perks:
+			if int(perk.get(&"building_type", -1)) != building_type:
+				continue
+			if PerkRegistry.get_def(perk.get(&"perk_id", &"")).get("effect", &"") == effect:
+				total += float(PerkRegistry.get_def(perk.get(&"perk_id", &"")).get("magnitude", 0.0))
+	return total
+
+
+## True if any active perk bound to `building_type` has the given effect (e.g. input-skip).
+func building_has_active_perk(building_type: int, effect: StringName) -> bool:
+	for npc: NPCInstance in all_npcs.values():
+		for perk: Dictionary in npc.active_perks:
+			if int(perk.get(&"building_type", -1)) == building_type \
+					and PerkRegistry.get_def(perk.get(&"perk_id", &"")).get("effect", &"") == effect:
+				return true
+	return false
+
+
+## Returns the frozen per-NPC XP summary from the last completed day (see _last_day_xp_summary).
+## Empty before the first day completes or when no NPC gained XP.
+func get_last_day_xp_summary() -> Array:
+	return _last_day_xp_summary
 
 
 ## Returns the tile position of the given NPC, or Vector2i(-1, -1) if not found.
@@ -492,6 +845,17 @@ func _begin_return_to_base(npc: NPCInstance) -> void:
 	npc.state = TaskState.RETURN_TO_BASE
 	npc_travel_started.emit(npc.npc_id, home_tile, return_ticks)
 
+## Called when BuildingRegistry emits production_output_ready (a production cycle completed).
+## Accrues daily work XP (Experience System) to the worker assigned to that building, if any.
+## XP is time-based: proportional to the cycle's nominal duration (`cycle_ticks`), so a short-cycle
+## building no longer levels its worker faster than a slow one for the same working time.
+## Buildings producing without an assigned worker (e.g. unstaffed gathering) accrue nothing.
+func _on_production_output_ready(building_id: String, _output: Dictionary, cycle_ticks: int) -> void:
+	var npc_id: StringName = get_assigned_npc(StringName(building_id))
+	if npc_id != &"":
+		add_pending_xp(npc_id, ExperienceFormulas.xp_for_production(cycle_ticks))
+
+
 ## Called when BuildingRegistry emits building_demolished. Releases the NPC assigned to
 ## that building — they abandon the current task and return home (or go IDLE if already there).
 ## Single NPC per production building at VS scope: breaks after first match.
@@ -659,6 +1023,11 @@ func _serialize_npc(npc: NPCInstance) -> Dictionary:
 		"food_modifier": npc.food_modifier,
 		"satisfaction_modifier": npc.satisfaction_modifier,
 		"equipment_modifier": npc.equipment_modifier,
+		"xp": npc.xp,
+		"pending_xp": npc.pending_xp,
+		"profession": npc.profession,
+		"pending_perk_choices": npc.pending_perk_choices,
+		"perks": _serialize_perks(npc.perks),
 	}
 
 
@@ -684,7 +1053,44 @@ func _deserialize_npc(data: Dictionary) -> NPCInstance:
 	npc.satisfaction_modifier = data.get("satisfaction_modifier", 1.0)
 	npc.equipment_modifier = data.get("equipment_modifier", 1.0)
 	npc.recalculate_efficiency()
+	# Experience: xp is the source of truth; level is always re-derived (Rule 6 / EC-6 / EC-9).
+	npc.xp = int(data.get("xp", 0))
+	npc.level = ExperienceFormulas.level_for_total_xp(npc.xp)
+	npc.pending_xp = int(data.get("pending_xp", 0))
+	npc.profession = int(data.get("profession", -1))
+	npc.pending_perk_choices = int(data.get("pending_perk_choices", 0))
+	npc.perks = _deserialize_perks(data.get("perks", []))
 	return npc
+
+
+## Serializes an NPC's perk instances to JSON-safe dictionaries.
+func _serialize_perks(perks: Array) -> Array:
+	var out: Array = []
+	for perk: Dictionary in perks:
+		out.append({
+			"perk_id": str(perk.get(&"perk_id", &"")),
+			"good": str(perk.get(&"good", &"")),
+			"building_type": int(perk.get(&"building_type", -1)),
+			"amount": int(perk.get(&"amount", 1)),
+		})
+	return out
+
+
+## Restores perk instances from serialized data, re-interning StringName keys/values.
+func _deserialize_perks(data: Variant) -> Array:
+	var out: Array = []
+	if not data is Array:
+		return out
+	for entry in data:
+		if not entry is Dictionary:
+			continue
+		out.append({
+			&"perk_id": StringName(str(entry.get("perk_id", ""))),
+			&"good": StringName(str(entry.get("good", ""))),
+			&"building_type": int(entry.get("building_type", -1)),
+			&"amount": int(entry.get("amount", 1)),
+		})
+	return out
 
 
 ## Recalculates efficiency for every building that has an assigned worker.

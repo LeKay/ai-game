@@ -101,11 +101,22 @@ func _build_chrome() -> void:
 	bar_row.add_child(_close_btn)
 
 	content = VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(content)
 
 
 # ── Drag handling ────────────────────────────────────────────────────────────
+
+## Consume scroll wheel events so they don't propagate to _unhandled_input
+## and trigger camera zoom while the mouse is over any DraggableWindow.
+func _gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_WHEEL_UP \
+				or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			accept_event()
+
 
 ## Drag start is detected on the title bar. Motion/release are handled in
 ## _input() so the drag survives the cursor leaving the bar (fast drags).

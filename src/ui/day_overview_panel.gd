@@ -1,7 +1,7 @@
 class_name DayOverviewPanel extends CanvasLayer
 ## Day Overview Panel — shown at each day transition.
-## Displays day number, NPC count, hunger consumption, and resource deltas.
-## Dismisses via "Nächster Tag" button, resuming the game.
+## Displays day number, NPC count, daily consumption (food + perk goods), and resource deltas.
+## Dismisses via "Next Day" button, resuming the game.
 ## Per ADR-0003 (InputContext push/pop). Story 008.
 
 const BLOCK_WIDTH  := 72
@@ -14,11 +14,18 @@ const COLOR_QTY_TEXT     := Color("#F0EDE6")
 const COLOR_GAIN         := Color("#4CAF50")
 const COLOR_LOSS         := Color("#E05555")
 
+## Experience XP-bar colours + per-segment animation duration (one segment = one level fill).
+const COLOR_XP_BAR_BG   := Color("#2A2A2A")
+const COLOR_XP_BAR_FILL := Color("#D4A85C")
+const COLOR_XP_BAR_MAX  := Color("#E8C860")
+const XP_SEG_SEC        := 0.45
+
 @onready var _day_label: Label = $PanelContainer/MarginContainer/VBoxContainer/HeaderRow/DayLabel
 @onready var _npc_label: Label = $PanelContainer/MarginContainer/VBoxContainer/HeaderRow/NpcLabel
 @onready var _hunger_list: VBoxContainer = $PanelContainer/MarginContainer/VBoxContainer/SectionsRow/LeftSection/HungerList
 @onready var _delta_list: VBoxContainer = $PanelContainer/MarginContainer/VBoxContainer/SectionsRow/RightSection/DeltaList
 @onready var _next_day_btn: Button = $PanelContainer/MarginContainer/VBoxContainer/NextDayButton
+@onready var _npc_xp_list: VBoxContainer = $PanelContainer/MarginContainer/VBoxContainer/NpcSection/NpcScroll/NpcXpList
 
 
 func _ready() -> void:
@@ -37,10 +44,12 @@ func _on_day_transition(_days: int) -> void:
 
 
 func _populate() -> void:
-	_day_label.text = "Tag %d" % TickSystem.get_current_day()
-	_npc_label.text = "%d Bewohner" % NPCSystem.get_npc_count()
-	_fill_item_grid(_hunger_list, DayLedger.get_last_hunger_consumed(), false)
+	_day_label.text = "Day %d" % TickSystem.get_current_day()
+	_npc_label.text = "%d Residents" % NPCSystem.get_npc_count()
+	_fill_item_grid(_hunger_list, DayLedger.get_last_consumed(), false)
 	_fill_item_grid(_delta_list, DayLedger.get_last_day_deltas(), true)
+	_fill_npc_xp(NPCSystem.get_last_day_xp_summary())
+	_update_levelup_gate()
 
 
 func _fill_item_grid(container: VBoxContainer, data: Dictionary, show_sign: bool) -> void:
@@ -48,7 +57,7 @@ func _fill_item_grid(container: VBoxContainer, data: Dictionary, show_sign: bool
 		child.queue_free()
 	if data.is_empty():
 		var lbl := Label.new()
-		lbl.text = "Keine Änderungen" if show_sign else "Keine Nahrung verbraucht"
+		lbl.text = "No changes" if show_sign else "Nothing consumed"
 		lbl.add_theme_font_size_override("font_size", 13)
 		lbl.modulate = Color("#A8A49C")
 		container.add_child(lbl)
@@ -58,6 +67,8 @@ func _fill_item_grid(container: VBoxContainer, data: Dictionary, show_sign: bool
 	flow.add_theme_constant_override("v_separation", 8)
 	container.add_child(flow)
 	for resource_id: StringName in data:
+		if show_sign and data[resource_id] == 0:
+			continue
 		flow.add_child(_make_item_block(resource_id, data[resource_id], show_sign))
 
 
@@ -89,14 +100,13 @@ func _make_item_block(resource_id: StringName, quantity: int, show_sign: bool) -
 	icon_container.mouse_filter          = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(icon_container)
 
-	var icon_lbl := Label.new()
-	icon_lbl.text                = _resource_icon(resource_id)
-	icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lbl.vertical_alignment  = VERTICAL_ALIGNMENT_CENTER
-	icon_lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	icon_lbl.add_theme_font_size_override("font_size", 28)
-	icon_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon_container.add_child(icon_lbl)
+	var icon_rect := TextureRect.new()
+	icon_rect.texture      = ResourceRegistry.get_icon_texture(resource_id, ICON_SIZE / 2)
+	icon_rect.expand_mode  = TextureRect.EXPAND_IGNORE_SIZE
+	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon_container.add_child(icon_rect)
 
 	var qty_lbl := Label.new()
 	if show_sign:
@@ -115,17 +125,142 @@ func _make_item_block(resource_id: StringName, quantity: int, show_sign: bool) -
 	return panel
 
 
-func _resource_icon(resource_id: StringName) -> String:
-	match resource_id:
-		&"wood":  return "🪵"
-		&"stone": return "🪨"
-		&"berry": return "🫐"
-		&"fiber": return "🌿"
-		&"tool":  return "🪓"
-		_:        return "📦"
 
 
-func _on_next_day_pressed() -> void:
+# ── NPC experience section ──────────────────────────────────────────────────
+
+## Builds one animated row per NPC that gained XP this day (Experience System).
+## `summary` entries: {display_name, xp_before, level_before, xp_gained, xp_after, level_after}.
+func _fill_npc_xp(summary: Array) -> void:
+	for child in _npc_xp_list.get_children():
+		child.queue_free()
+	if summary.is_empty():
+		var lbl := Label.new()
+		lbl.text = "No experience gained"
+		lbl.add_theme_font_size_override("font_size", 13)
+		lbl.modulate = Color("#A8A49C")
+		_npc_xp_list.add_child(lbl)
+		return
+	for entry: Dictionary in summary:
+		_npc_xp_list.add_child(_make_npc_xp_row(entry))
+
+
+func _make_npc_xp_row(entry: Dictionary) -> Control:
+	var row := VBoxContainer.new()
+	row.add_theme_constant_override("separation", 2)
+
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 8)
+	row.add_child(top)
+
+	var name_lbl := Label.new()
+	var job: String = NPCSystem.get_npc_job_name(entry[&"npc_id"])
+	name_lbl.text                  = "%s (%s)" % [str(entry[&"display_name"]), job] if job != "" \
+			else str(entry[&"display_name"])
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.add_theme_font_size_override("font_size", 13)
+	name_lbl.add_theme_color_override("font_color", COLOR_QTY_TEXT)
+	top.add_child(name_lbl)
+
+	var level_lbl := Label.new()
+	level_lbl.text = "Lv %d" % int(entry[&"level_before"])
+	level_lbl.add_theme_font_size_override("font_size", 13)
+	level_lbl.add_theme_color_override("font_color", COLOR_XP_BAR_MAX)
+	top.add_child(level_lbl)
+
+	var gain_lbl := Label.new()
+	gain_lbl.text = "+%d XP" % int(entry[&"xp_gained"])
+	gain_lbl.add_theme_font_size_override("font_size", 13)
+	gain_lbl.add_theme_color_override("font_color", COLOR_GAIN)
+	top.add_child(gain_lbl)
+
+	var bar_outer := Control.new()
+	bar_outer.custom_minimum_size   = Vector2(0, 10)
+	bar_outer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar_outer.mouse_filter          = Control.MOUSE_FILTER_IGNORE
+	row.add_child(bar_outer)
+
+	var bg := ColorRect.new()
+	bg.color        = COLOR_XP_BAR_BG
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bar_outer.add_child(bg)
+
+	var fill := ColorRect.new()
+	fill.color         = COLOR_XP_BAR_FILL
+	fill.mouse_filter  = Control.MOUSE_FILTER_IGNORE
+	fill.anchor_left   = 0.0
+	fill.anchor_top    = 0.0
+	fill.anchor_bottom = 1.0
+	fill.offset_left   = 0.0
+	fill.offset_top    = 0.0
+	fill.offset_right  = 0.0
+	fill.offset_bottom = 0.0
+	bar_outer.add_child(fill)
+
+	_animate_xp_row(fill, level_lbl, entry)
+	return row
+
+
+## Animates the bar from the day's starting fill to its end fill, replaying each level-up:
+## fill current level to 100%, snap to 0 and bump the "Lv N" label, repeat, then settle on
+## the final partial fill. Handles multiple level-ups in one day and the MAX-level colour.
+func _animate_xp_row(fill: ColorRect, level_lbl: Label, entry: Dictionary) -> void:
+	var xp_before: int    = int(entry[&"xp_before"])
+	var level_before: int = int(entry[&"level_before"])
+	var xp_after: int     = int(entry[&"xp_after"])
+	var level_after: int  = int(entry[&"level_after"])
+
+	fill.anchor_right = ExperienceFormulas.progress_in_level(xp_before, level_before)
+
+	var tween := create_tween()
+	var cur_level: int = level_before
+	while cur_level < level_after:
+		tween.tween_property(fill, "anchor_right", 1.0, XP_SEG_SEC)
+		cur_level += 1
+		tween.tween_callback(_advance_level_visual.bind(fill, level_lbl, cur_level))
+	var end_frac: float = ExperienceFormulas.progress_in_level(xp_after, level_after)
+	tween.tween_property(fill, "anchor_right", end_frac, XP_SEG_SEC)
+	if level_after >= ExperienceFormulas.MAX_LEVEL:
+		tween.tween_callback(func() -> void: fill.color = COLOR_XP_BAR_MAX)
+
+
+## Tween callback: reset the bar to empty and show the newly reached level.
+func _advance_level_visual(fill: ColorRect, level_lbl: Label, new_level: int) -> void:
+	fill.anchor_right = 0.0
+	level_lbl.text    = "Lv %d" % new_level
+
+
+## "Next day" is gated by unresolved level-ups (Perk System): while any NPC has a pending perk
+## choice, the button opens the standalone Perk Choice UI instead of advancing.
+func _update_levelup_gate() -> void:
+	var pending: int = NPCSystem.get_total_pending_perk_choices()
+	_next_day_btn.text = "Resolve level-ups (%d)" % pending if pending > 0 else "Next Day"
+
+
+func _open_perk_choices() -> void:
+	var panel: Node = get_tree().get_first_node_in_group(&"perk_choice_panel")
+	if panel == null:
+		_advance_day()  # fail open — never trap the player on a missing panel
+		return
+	if not panel.resolved.is_connected(_on_perk_choices_resolved):
+		panel.resolved.connect(_on_perk_choices_resolved, CONNECT_ONE_SHOT)
+	panel.begin()
+
+
+func _on_perk_choices_resolved() -> void:
+	_update_levelup_gate()
+	_next_day_btn.grab_focus()
+
+
+func _advance_day() -> void:
 	hide()
 	InputContext.pop_context()
 	TickSystem.set_pause(false)
+
+
+func _on_next_day_pressed() -> void:
+	if NPCSystem.get_total_pending_perk_choices() > 0:
+		_open_perk_choices()
+		return
+	_advance_day()

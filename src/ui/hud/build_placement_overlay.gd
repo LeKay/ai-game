@@ -178,6 +178,8 @@ func _process_path_ghost(tile: Vector2i) -> void:
 		match result:
 			PathSystem.PathPlacementResult.ALREADY_HAS_PATH:
 				_label.text = "Path already here"
+			PathSystem.PathPlacementResult.ALREADY_CONSTRUCTING:
+				_label.text = "Under construction"
 			PathSystem.PathPlacementResult.BLOCKED_BY_BUILDING:
 				_label.text = "Blocked by building"
 			_:
@@ -251,7 +253,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				PathSystem.remove_path(tile)
 			# Stay in demolish mode for continuous demolishing.
 		elif _is_path_mode:
-			PathSystem.place_path(tile)
+			PathSystem.initiate_path(tile)
 			# Stay in path mode for continuous painting.
 		elif BuildingRegistry.check_build_conditions(_building_type, tile) == BuildingRegistry.PlacementResult.SUCCESS:
 			BuildingRegistry.initiate_build(_building_type, tile)
