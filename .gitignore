@@ -42,7 +42,9 @@ dist/
 # === Engine: Godot ===
 .godot/
 *.translation
-export_presets.cfg
+# export_presets.cfg is tracked: it holds the Web export config needed by CI
+# (GitHub Pages deploy). It contains NO secrets. Re-add the ignore if a preset
+# ever stores a keystore password or signing credential.
 # Uncomment if using Godot:
 # *.import
 
