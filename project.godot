@@ -32,6 +32,8 @@ HungerSystem="*res://src/gameplay/hunger_system.gd"
 DayLedger="*res://src/ui/day_ledger.gd"
 LogisticsSystem="*res://src/systems/logistics/logistics_system.gd"
 WildSystem="*res://src/systems/wild_system.gd"
+ProgressionSystem="*res://src/systems/progression_system.gd"
+TaskSystem="*res://src/systems/task_system.gd"
 
 [display]
 
@@ -39,6 +41,10 @@ window/size/viewport_width=1920
 window/size/viewport_height=1080
 window/stretch/mode="canvas_items"
 window/handheld/layout="horizontal"
+
+[gui]
+
+theme/custom="res://assets/ui/ui_theme.tres"
 
 [editor_plugins]
 
