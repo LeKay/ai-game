@@ -9,7 +9,7 @@ const SAVE_PATH: String = "user://saves/"
 const MAX_SLOTS: int = 10
 
 ## Systems serialised on save, in order.
-const SAVE_SYSTEMS: Array[String] = ["InventorySystem", "BuildingRegistry", "PathSystem", "NPCSystem", "HungerSystem", "LogisticsSystem", "WildSystem", "TickSystem"]
+const SAVE_SYSTEMS: Array[String] = ["ProgressionSystem", "TaskSystem", "InventorySystem", "BuildingRegistry", "PathSystem", "NPCSystem", "HungerSystem", "LogisticsSystem", "WildSystem", "TickSystem"]
 
 ## Systems deserialised on load; InventorySystem must precede BuildingRegistry
 ## (containers must exist before buildings reference them). PathSystem follows
@@ -19,7 +19,11 @@ const SAVE_SYSTEMS: Array[String] = ["InventorySystem", "BuildingRegistry", "Pat
 ## LogisticsSystem follows NPCSystem so routes can reference already-restored NPCs.
 ## WildSystem follows the building/terrain systems; it only needs the (already restored)
 ## WorldGrid terrain to recompute forests before restoring serialized wild groups.
-const LOAD_ORDER: Array[String] = ["InventorySystem", "BuildingRegistry", "PathSystem", "NPCSystem", "HungerSystem", "LogisticsSystem", "WildSystem", "TickSystem"]
+## ProgressionSystem leads: its unlock set has no dependency on other systems and
+## buildings restored after it are never gated (place_building bypasses the gate anyway).
+## TaskSystem follows ProgressionSystem so its grandfather pass sees the restored unlock set;
+## it also precedes nothing it depends on (it only reads ProgressionSystem state on load).
+const LOAD_ORDER: Array[String] = ["ProgressionSystem", "TaskSystem", "InventorySystem", "BuildingRegistry", "PathSystem", "NPCSystem", "HungerSystem", "LogisticsSystem", "WildSystem", "TickSystem"]
 
 ## Emitted after apply_pending_load() has finished deserialising all systems.
 signal load_completed

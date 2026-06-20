@@ -59,6 +59,7 @@ var _panel:              DraggableWindow
 var _state_dot:          ColorRect
 var _state_label:        Label
 var _efficiency_label:   Label
+var _utilization_label:  Label
 var _rename_btn:         Button
 
 var _rename_dialog:      Control
@@ -496,6 +497,7 @@ func _refresh_header(instance: BuildingRegistry.BuildingInstance) -> void:
 		or instance.type == BuildingRegistry.BuildingType.COLLECTION_POINT \
 		or instance.type == BuildingRegistry.BuildingType.RESIDENTIAL_HOUSE
 	_efficiency_label.visible = not hide_efficiency
+	_utilization_label.visible = not hide_efficiency
 	if not hide_efficiency:
 		var eff: float = instance.efficiency
 		_efficiency_label.text = "Eff: %d%%" % int(eff * 100.0)
@@ -506,6 +508,19 @@ func _refresh_header(instance: BuildingRegistry.BuildingInstance) -> void:
 			_efficiency_label.add_theme_color_override("font_color", COLOR_CAP_AMBER)
 		else:
 			_efficiency_label.add_theme_color_override("font_color", COLOR_CAP_RED)
+		# Utilization: share of the last day spent actively producing. "—" until a full day elapses.
+		var util: float = BuildingRegistry.get_building_utilization(instance.building_id)
+		if util < 0.0:
+			_utilization_label.text = "Util: —"
+			_utilization_label.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+		else:
+			_utilization_label.text = "Util: %d%%" % int(util * 100.0)
+			if util >= 0.9:
+				_utilization_label.add_theme_color_override("font_color", COLOR_CAP_GREEN)
+			elif util >= 0.5:
+				_utilization_label.add_theme_color_override("font_color", COLOR_CAP_AMBER)
+			else:
+				_utilization_label.add_theme_color_override("font_color", COLOR_CAP_RED)
 	var available_upgrades: Array = BuildingRegistry.get_available_upgrades(instance.building_id)
 	var has_upgrades := not available_upgrades.is_empty()
 	if _upgrade_btn != null:
@@ -695,6 +710,10 @@ func _refresh_storage_config() -> void:
 
 	var all_ids: Array[StringName] = ResourceRegistry.get_all_resource_ids()
 	for res_id: StringName in all_ids:
+		# Only list resources the player can currently obtain (an unlocked Progression node
+		# produces them); not-yet-unlocked items are hidden from the delivery-limits view.
+		if not ProgressionSystem.is_resource_unlocked(res_id):
+			continue
 		var current_limit: int
 		if _storage_limit_mode == "min":
 			current_limit = BuildingRegistry.get_storage_min_limit(_current_building_id, res_id)
@@ -978,14 +997,18 @@ func _refresh_transport_zone(instance: BuildingRegistry.BuildingInstance) -> voi
 
 	var bid := StringName(_current_building_id)
 
+	# Filter by ROLE (am I the source or destination?), not by route_type. A route's type is
+	# fixed at creation from the SOURCE building type (storage→INPUT, production→OUTPUT), so a
+	# production→production delivery is an OUTPUT route. Filtering the destination's input panel
+	# by route_type == INPUT would miss it entirely (it's OUTPUT-typed, and its source isn't this
+	# building either), leaving the assign button up despite an active feed. Role-based filtering
+	# shows every route that ends here as an input and every route that starts here as an output.
 	var input_routes: Array[LogisticsRoute] = []
 	var output_routes: Array[LogisticsRoute] = []
 	for route: LogisticsRoute in LogisticsSystem.get_active_routes():
-		if route.route_type == LogisticsRoute.RouteType.INPUT \
-				and route.destination_building_id == bid:
+		if route.destination_building_id == bid:
 			input_routes.append(route)
-		elif route.route_type == LogisticsRoute.RouteType.OUTPUT \
-				and route.source_building_id == bid:
+		elif route.source_building_id == bid:
 			output_routes.append(route)
 
 	_populate_transport_flow(_carrier_in_flow, input_routes, "to")
@@ -1158,7 +1181,11 @@ func _rebuild_recipe_view(instance: BuildingRegistry.BuildingInstance) -> void:
 		# During a forced first-open pick, no recipe is shown active so the
 		# default recipe is also clickable (the click guard skips active cards).
 		var is_active: bool = (not _force_recipe_pick) and (i == instance.active_recipe_index)
-		var is_available: bool = all_available or (i in available)
+		# Progression gate: a recipe locked in the tech tree (e.g. LUMBER_CAMP:with_tool
+		# before "Tooled Logging") is shown unavailable until its node is unlocked.
+		var recipe_unlocked: bool = ProgressionSystem.is_building_recipe_unlocked(
+				instance.type, recipe.get("id", &""))
+		var is_available: bool = recipe_unlocked and (all_available or (i in available))
 		_build_recipe_card(recipe, i, is_active, is_available)
 
 
@@ -1707,6 +1734,25 @@ func _build_header_zone(parent: VBoxContainer) -> void:
 	_efficiency_label.add_theme_color_override("font_color", COLOR_CAP_GREEN)
 	_efficiency_label.mouse_filter = Control.MOUSE_FILTER_STOP  # needed for the hover tooltip
 	state_row.add_child(_efficiency_label)
+
+	# Utilization sits in its own row directly under the efficiency label, right-aligned.
+	var util_row := HBoxContainer.new()
+	util_row.add_theme_constant_override("separation", 6)
+	zone.add_child(util_row)
+
+	var util_spacer := Control.new()
+	util_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	util_row.add_child(util_spacer)
+
+	_utilization_label = Label.new()
+	_utilization_label.text = "Util: —"
+	_utilization_label.size_flags_horizontal = Control.SIZE_SHRINK_END
+	_utilization_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_utilization_label.add_theme_font_size_override("font_size", 12)
+	_utilization_label.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+	_utilization_label.mouse_filter = Control.MOUSE_FILTER_STOP  # needed for the hover tooltip
+	_utilization_label.tooltip_text = "Share of the last day this building spent actively producing.\n100% = produced all day; lower means it stalled or idled."
+	util_row.add_child(_utilization_label)
 
 
 func _build_upgrade_zone(parent: VBoxContainer) -> void:

@@ -22,10 +22,14 @@ const XP_SEG_SEC        := 0.45
 
 @onready var _day_label: Label = $PanelContainer/MarginContainer/VBoxContainer/HeaderRow/DayLabel
 @onready var _npc_label: Label = $PanelContainer/MarginContainer/VBoxContainer/HeaderRow/NpcLabel
-@onready var _hunger_list: VBoxContainer = $PanelContainer/MarginContainer/VBoxContainer/SectionsRow/LeftSection/HungerList
-@onready var _delta_list: VBoxContainer = $PanelContainer/MarginContainer/VBoxContainer/SectionsRow/RightSection/DeltaList
+@onready var _hunger_list: VBoxContainer = $PanelContainer/MarginContainer/VBoxContainer/SectionsRow/LeftSection/HungerScroll/HungerList
+@onready var _delta_list: VBoxContainer = $PanelContainer/MarginContainer/VBoxContainer/SectionsRow/RightSection/DeltaScroll/DeltaList
 @onready var _next_day_btn: Button = $PanelContainer/MarginContainer/VBoxContainer/NextDayButton
 @onready var _npc_xp_list: VBoxContainer = $PanelContainer/MarginContainer/VBoxContainer/NpcSection/NpcScroll/NpcXpList
+
+## npc_id -> the per-row ⬆️ level-up Button, so their visibility can be refreshed after a perk
+## choice is resolved without rebuilding (and re-animating) the whole list.
+var _levelup_buttons: Dictionary = {}
 
 
 func _ready() -> void:
@@ -49,7 +53,7 @@ func _populate() -> void:
 	_fill_item_grid(_hunger_list, DayLedger.get_last_consumed(), false)
 	_fill_item_grid(_delta_list, DayLedger.get_last_day_deltas(), true)
 	_fill_npc_xp(NPCSystem.get_last_day_xp_summary())
-	_update_levelup_gate()
+	_next_day_btn.text = "Next Day"
 
 
 func _fill_item_grid(container: VBoxContainer, data: Dictionary, show_sign: bool) -> void:
@@ -132,6 +136,7 @@ func _make_item_block(resource_id: StringName, quantity: int, show_sign: bool) -
 ## Builds one animated row per NPC that gained XP this day (Experience System).
 ## `summary` entries: {display_name, xp_before, level_before, xp_gained, xp_after, level_after}.
 func _fill_npc_xp(summary: Array) -> void:
+	_levelup_buttons.clear()
 	for child in _npc_xp_list.get_children():
 		child.queue_free()
 	if summary.is_empty():
@@ -173,6 +178,20 @@ func _make_npc_xp_row(entry: Dictionary) -> Control:
 	gain_lbl.add_theme_font_size_override("font_size", 13)
 	gain_lbl.add_theme_color_override("font_color", COLOR_GAIN)
 	top.add_child(gain_lbl)
+
+	# ⬆️ level-up button — only when this NPC is held at the cap with a full bar, or still has an
+	# unresolved perk choice from an auto-level. Tapping it raises the level (if possible) and opens
+	# the shared Perk Choice panel. Leveling no longer gates the day, so this is purely optional.
+	var npc_id: StringName = entry[&"npc_id"]
+	var levelup_btn := Button.new()
+	levelup_btn.text         = "⬆"
+	levelup_btn.tooltip_text = "Level up"
+	levelup_btn.focus_mode   = Control.FOCUS_NONE
+	levelup_btn.add_theme_font_size_override("font_size", 13)
+	levelup_btn.visible      = _npc_can_levelup(npc_id)
+	levelup_btn.pressed.connect(_on_row_levelup_pressed.bind(npc_id))
+	top.add_child(levelup_btn)
+	_levelup_buttons[npc_id] = levelup_btn
 
 	var bar_outer := Control.new()
 	bar_outer.custom_minimum_size   = Vector2(0, 10)
@@ -231,25 +250,35 @@ func _advance_level_visual(fill: ColorRect, level_lbl: Label, new_level: int) ->
 	level_lbl.text    = "Lv %d" % new_level
 
 
-## "Next day" is gated by unresolved level-ups (Perk System): while any NPC has a pending perk
-## choice, the button opens the standalone Perk Choice UI instead of advancing.
-func _update_levelup_gate() -> void:
-	var pending: int = NPCSystem.get_total_pending_perk_choices()
-	_next_day_btn.text = "Resolve level-ups (%d)" % pending if pending > 0 else "Next Day"
+## True when this NPC can be manually levelled (held at the cap with a full bar) or still owes a
+## perk choice from an auto-level. Drives the per-row ⬆️ button visibility.
+func _npc_can_levelup(npc_id: StringName) -> bool:
+	return NPCSystem.can_level_up(npc_id) or NPCSystem.get_pending_perk_choices(npc_id) > 0
 
 
-func _open_perk_choices() -> void:
+## Re-evaluates every row's ⬆️ button visibility (e.g. after a perk choice was resolved).
+func _refresh_levelup_buttons() -> void:
+	for npc_id: StringName in _levelup_buttons:
+		var btn: Button = _levelup_buttons[npc_id]
+		if is_instance_valid(btn):
+			btn.visible = _npc_can_levelup(npc_id)
+
+
+## Row ⬆️ pressed: raise the level if one is banked, then open the Perk Choice panel for THIS NPC
+## only — one choice per press, never chaining into other NPCs' pending choices.
+func _on_row_levelup_pressed(npc_id: StringName) -> void:
+	if NPCSystem.can_level_up(npc_id):
+		NPCSystem.level_up(npc_id)
 	var panel: Node = get_tree().get_first_node_in_group(&"perk_choice_panel")
 	if panel == null:
-		_advance_day()  # fail open — never trap the player on a missing panel
-		return
+		return  # no panel wired — nothing to resolve; day advances independently now
 	if not panel.resolved.is_connected(_on_perk_choices_resolved):
 		panel.resolved.connect(_on_perk_choices_resolved, CONNECT_ONE_SHOT)
-	panel.begin()
+	panel.begin_for_npc(npc_id)
 
 
 func _on_perk_choices_resolved() -> void:
-	_update_levelup_gate()
+	_refresh_levelup_buttons()
 	_next_day_btn.grab_focus()
 
 
@@ -260,7 +289,5 @@ func _advance_day() -> void:
 
 
 func _on_next_day_pressed() -> void:
-	if NPCSystem.get_total_pending_perk_choices() > 0:
-		_open_perk_choices()
-		return
+	# Leveling is no longer a prerequisite — the day always advances.
 	_advance_day()

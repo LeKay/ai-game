@@ -1,0 +1,194 @@
+{
+  "version": 1,
+  "last_updated": "2026-06-20",
+  "_comment": "Delivery tasks granted on Progression Tree node unlock. Keyed by node_id. Each task's required resources MUST be obtainable from that node's prerequisite closure (the node itself + all transitive prerequisites), or the player can soft-lock. See design/quick-specs/delivery-task-system-2026-06-20.md.",
+  "tasks": {
+    "foraging": {
+      "title": "First Harvest",
+      "requires": [ { "resource": "berry", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "gathering_hut": {
+      "title": "Stock the Baskets",
+      "requires": [ { "resource": "berry", "amount": 10 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "shelter": {
+      "title": "Provision the House",
+      "requires": [ { "resource": "berry", "amount": 10 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "paving": {
+      "title": "Feed the Roadworks",
+      "requires": [ { "resource": "berry", "amount": 12 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "agriculture": {
+      "title": "First Field",
+      "requires": [ { "resource": "wheat", "amount": 8 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "milling": {
+      "title": "Grain for the Mill",
+      "requires": [ { "resource": "wheat", "amount": 12 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "baking": {
+      "title": "Fresh Bread",
+      "requires": [ { "resource": "bread", "amount": 3 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "hunting": {
+      "title": "The Hunt",
+      "requires": [ { "resource": "meat", "amount": 4 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+
+    "woodcutting": {
+      "title": "Gather Firewood",
+      "requires": [ { "resource": "wood", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "fiber_harvesting": {
+      "title": "Pull Fiber",
+      "requires": [ { "resource": "fiber", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "stonecutting": {
+      "title": "Quarry Stone",
+      "requires": [ { "resource": "stone", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "storage": {
+      "title": "Build the Stockpile",
+      "requires": [ { "resource": "wood", "amount": 8 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "workbench": {
+      "title": "Lumber for the Bench",
+      "requires": [ { "resource": "wood", "amount": 10 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "forestry": {
+      "title": "Feed the Camp",
+      "requires": [ { "resource": "wood", "amount": 12 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "tooled_logging": {
+      "title": "Tooled Output",
+      "requires": [ { "resource": "wood", "amount": 18 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "masonry": {
+      "title": "Mason's Supply",
+      "requires": [ { "resource": "stone", "amount": 10 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "tooled_quarrying": {
+      "title": "Tooled Quarry",
+      "requires": [ { "resource": "stone", "amount": 18 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "prospecting": {
+      "title": "Clay Deposits",
+      "requires": [ { "resource": "clay", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "sawmilling": {
+      "title": "Stack the Planks",
+      "requires": [ { "resource": "plank", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+
+    "axe": {
+      "title": "Forge an Axe",
+      "requires": [ { "resource": "axe", "amount": 1 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "pickaxe": {
+      "title": "Forge a Pickaxe",
+      "requires": [ { "resource": "pickaxe", "amount": 1 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "spindle": {
+      "title": "Spin the Thread",
+      "requires": [ { "resource": "cloth", "amount": 4 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "tool_workshop": {
+      "title": "Workshop Quota",
+      "requires": [ { "resource": "axe", "amount": 2 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+
+    "spinning": {
+      "title": "Weave Cloth",
+      "requires": [ { "resource": "cloth", "amount": 2 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "weaving": {
+      "title": "Loom Output",
+      "requires": [ { "resource": "cloth", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "garment_making": {
+      "title": "Sew a Garment",
+      "requires": [ { "resource": "clothing", "amount": 1 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "tailoring": {
+      "title": "Tailor's Order",
+      "requires": [ { "resource": "clothing", "amount": 2 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+
+    "npc_level_2": {
+      "title": "Provision the Ranks",
+      "requires": [ { "resource": "berry", "amount": 10 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_3": {
+      "title": "Feed the Workforce",
+      "requires": [ { "resource": "berry", "amount": 18 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_4": {
+      "title": "Fill the Granary",
+      "requires": [ { "resource": "wheat", "amount": 10 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_5": {
+      "title": "Bread for the People",
+      "requires": [ { "resource": "bread", "amount": 6 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_6": {
+      "title": "Stock the Smokehouse",
+      "requires": [ { "resource": "meat", "amount": 8 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_7": {
+      "title": "The Baker's Levy",
+      "requires": [ { "resource": "bread", "amount": 10 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_8": {
+      "title": "The Hunter's Tithe",
+      "requires": [ { "resource": "meat", "amount": 12 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_9": {
+      "title": "Sustain the Settlement",
+      "requires": [ { "resource": "bread", "amount": 14 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_10": {
+      "title": "Bounty for All",
+      "requires": [
+        { "resource": "bread", "amount": 10 },
+        { "resource": "meat", "amount": 10 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    }
+  }
+}

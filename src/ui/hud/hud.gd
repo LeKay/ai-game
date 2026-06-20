@@ -43,6 +43,10 @@ var _transportation_panel:  TransportationPanel
 var _transport_btn:          Button
 var _route_toggle_btn:       Button
 var _save_btn:               Button
+var _progression_btn:        Button
+var _progression_screen:     ProgressionTreeScreen
+var _tasks_btn:              Button
+var _task_dialog:           TaskDialog
 var _map_select_prompt:      Label
 var _map_select_step:        String = ""
 var _toast_label:            Label
@@ -114,6 +118,8 @@ func _build_ui() -> void:
 	_add_energy_bar(hbox)
 	_add_transport_btn(hbox)
 	_add_route_toggle_btn(hbox)
+	_add_progression_btn(hbox)
+	_add_tasks_btn(hbox)
 	_add_save_btn(hbox)
 
 	var right_pad := Control.new()
@@ -291,6 +297,32 @@ func _add_route_toggle_btn(parent: HBoxContainer) -> void:
 	parent.add_child(_route_toggle_btn)
 
 
+## Adds the Progression Tree toggle button to the HUD top band.
+func _add_progression_btn(parent: HBoxContainer) -> void:
+	_progression_btn = Button.new()
+	_progression_btn.name = "ProgressionBtn"
+	_progression_btn.text = "🌳"
+	_progression_btn.tooltip_text = "Progression Tree"
+	_progression_btn.custom_minimum_size = Vector2(36, 28)
+	_progression_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_progression_btn.focus_mode = Control.FOCUS_NONE
+	_progression_btn.pressed.connect(_on_progression_btn_pressed)
+	parent.add_child(_progression_btn)
+
+
+## Adds the Delivery Tasks toggle button to the HUD top band.
+func _add_tasks_btn(parent: HBoxContainer) -> void:
+	_tasks_btn = Button.new()
+	_tasks_btn.name = "TasksBtn"
+	_tasks_btn.text = "📋"
+	_tasks_btn.tooltip_text = "Tasks"
+	_tasks_btn.custom_minimum_size = Vector2(36, 28)
+	_tasks_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_tasks_btn.focus_mode = Control.FOCUS_NONE
+	_tasks_btn.pressed.connect(_on_tasks_btn_pressed)
+	parent.add_child(_tasks_btn)
+
+
 ## Adds the save icon button to the HUD top band.
 func _add_save_btn(parent: HBoxContainer) -> void:
 	_save_btn = Button.new()
@@ -394,6 +426,16 @@ func _add_stubs() -> void:
 	_transportation_panel.name = "TransportationPanel"
 	add_child(_transportation_panel)
 
+	# Progression Tree overlay — its own CanvasLayer, toggled by the 🌳 HUD button.
+	_progression_screen = preload(
+		"res://src/ui/progression/ProgressionTreeScreen.tscn").instantiate()
+	add_child(_progression_screen)
+
+	# Delivery Tasks overlay — its own CanvasLayer, toggled by the 📋 HUD button.
+	_task_dialog = TaskDialog.new()
+	_task_dialog.name = "TaskDialog"
+	add_child(_task_dialog)
+
 	# Map-select text prompt — shown during map-select mode over the gameplay view.
 	_map_select_prompt = Label.new()
 	_map_select_prompt.name = "MapSelectPrompt"
@@ -478,6 +520,16 @@ func _on_pause_state_changed(is_paused: bool) -> void:
 
 func _on_energy_changed(current: int, max_energy: int) -> void:
 	_update_energy_bar(current, max_energy)
+
+
+func _on_progression_btn_pressed() -> void:
+	if _progression_screen != null:
+		_progression_screen.toggle()
+
+
+func _on_tasks_btn_pressed() -> void:
+	if _task_dialog != null:
+		_task_dialog.toggle()
 
 
 func _on_transport_btn_pressed() -> void:

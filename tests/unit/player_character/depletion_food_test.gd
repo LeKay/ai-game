@@ -16,6 +16,17 @@ func _make_pc() -> PlayerCharacter:
 	return pc
 
 
+func before_test() -> void:
+	# Open the whole tech tree so the progression gate never blocks gather actions
+	# (PICK_BERRIES is gated); these tests cover depletion/food, not gating.
+	ProgressionSystem.unlock_all()
+
+
+func after_test() -> void:
+	# Restore the game-start unlock state so the open tree doesn't leak into other suites.
+	ProgressionSystem.reset_to_initial()
+
+
 # ---- AC5: Depleted (0 energy) allows actions; non-zero insufficient blocks ----
 
 func test_try_start_action_at_zero_energy_returns_success() -> void:

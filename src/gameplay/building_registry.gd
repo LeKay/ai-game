@@ -26,6 +26,10 @@ enum BuildingType {
 	FARM,                ## harvests Wheat; efficiency scales with adjacent WHEAT terrain
 	MILL,                ## processes Wheat → Flour; built-in millstone
 	BAKERY,              ## processes Flour → Bread; built-in oven
+	CLAY_PIT,            ## extracts Clay from adjacent CLAY terrain; uses Pickaxe
+	POTTERY_KILN,        ## fires Clay → Pottery vessels; with_tool uses Pickaxe
+	TANNERY,             ## processes Hide → Leather; with_knife uses Knife
+	BOWYERS_WORKSHOP,    ## crafts Hunting Bow from Wood + Fiber; supplies Hunting Lodge
 }
 
 ## Building operational status codes — exposed for cross-system API use (e.g. LogisticsSystem).
@@ -47,6 +51,7 @@ enum PlacementResult {
 	INSUFFICIENT_RESOURCES,
 	INSUFFICIENT_ENERGY,
 	BLOCKED_BY_ADJACENCY,   ## building requires a specific terrain type in an adjacent tile
+	LOCKED,                 ## building type not yet unlocked in the Progression Tree
 }
 
 ## Return codes for _try_start_production_cycle. Private — not part of public API.
@@ -103,6 +108,12 @@ class BuildingInstance:
 	## Efficiency fields (ADR-0012). upgrade_bonus is 0.0 at VS scope.
 	var upgrade_bonus: float = 0.0
 	var efficiency: float = 1.0
+	## Utilization tracking — fraction of the day the building was actively producing.
+	## Accumulates while a cycle is advancing; snapshotted into *_last_day each day rollover.
+	var util_active_ticks_today: int = 0
+	var util_active_ticks_last_day: int = 0
+	## False until the first full day has elapsed — UI shows "—" until then.
+	var util_data_available: bool = false
 	## Count of adjacent terrain tiles satisfying ADJACENCY_REQUIREMENTS for this type.
 	## Managed by BuildingRegistry. Only relevant for types in ADJACENCY_REQUIREMENTS.
 	var adjacency_tile_count: int = 0
@@ -167,6 +178,10 @@ const BUILD_COST: Dictionary = {
 	BuildingType.FARM:              {&"wood": 8, &"stone": 2},
 	BuildingType.MILL:              {&"wood": 10, &"stone": 5},
 	BuildingType.BAKERY:            {&"wood": 10, &"stone": 5},
+	BuildingType.CLAY_PIT:          {&"wood": 8,  &"stone": 3},
+	BuildingType.POTTERY_KILN:       {&"wood": 5,  &"stone": 8, &"clay": 5},
+	BuildingType.TANNERY:            {&"wood": 8,  &"stone": 3},
+	BuildingType.BOWYERS_WORKSHOP:   {&"wood": 8,  &"fiber": 3, &"stone": 2},
 }
 
 ## Canonical list of player-buildable types, in build-menu display order.
@@ -187,6 +202,10 @@ const BUILDABLE_TYPES: Array[int] = [
 	BuildingType.FARM,
 	BuildingType.MILL,
 	BuildingType.BAKERY,
+	BuildingType.CLAY_PIT,
+	BuildingType.POTTERY_KILN,
+	BuildingType.TANNERY,
+	BuildingType.BOWYERS_WORKSHOP,
 ]
 
 ## Build times rescaled for pacing (balancing 2026-06-11): anchor 1 tick ≈ 1 minute,
@@ -208,6 +227,10 @@ const BUILD_TIME: Dictionary = {
 	BuildingType.FARM:              480,
 	BuildingType.MILL:              800,
 	BuildingType.BAKERY:            900,
+	BuildingType.CLAY_PIT:          800,
+	BuildingType.POTTERY_KILN:       900,
+	BuildingType.TANNERY:            700,
+	BuildingType.BOWYERS_WORKSHOP:   700,
 }
 
 ## Energy cost the player spends to manually construct a building (ManualActionType.CONSTRUCT_BUILDING).
@@ -227,6 +250,10 @@ const BUILD_ENERGY: Dictionary = {
 	BuildingType.FARM:              15,
 	BuildingType.MILL:              20,
 	BuildingType.BAKERY:            22,
+	BuildingType.CLAY_PIT:          22,
+	BuildingType.POTTERY_KILN:       25,
+	BuildingType.TANNERY:            22,
+	BuildingType.BOWYERS_WORKSHOP:   22,
 }
 
 ## Movement cost for buildings that NPCs and carriers can traverse.
@@ -270,6 +297,10 @@ const BUILDING_TEXTURES: Dictionary = {
 	BuildingType.FARM:              "res://assets/art/tiles/bld_tile_farm.png",
 	BuildingType.MILL:              "res://assets/art/tiles/bld_tile_mill.png",
 	BuildingType.BAKERY:            "res://assets/art/tiles/bld_tile_bakery.png",
+	BuildingType.CLAY_PIT:          "res://assets/art/tiles/bld_tile_clay_pit.png",
+	BuildingType.POTTERY_KILN:       "res://assets/art/tiles/bld_tile_pottery_kiln.png",
+	BuildingType.TANNERY:            "res://assets/art/tiles/bld_tile_tannery.png",
+	BuildingType.BOWYERS_WORKSHOP:   "res://assets/art/tiles/bld_tile_bowyers_workshop.png",
 }
 
 ## Maps BuildingType → the job/profession label of a worker employed there.
@@ -287,6 +318,10 @@ const BUILDING_JOB_NAMES: Dictionary = {
 	BuildingType.FARM:          "Farmer",
 	BuildingType.MILL:          "Miller",
 	BuildingType.BAKERY:        "Baker",
+	BuildingType.CLAY_PIT:      "Clay Digger",
+	BuildingType.POTTERY_KILN:       "Potter",
+	BuildingType.TANNERY:            "Tanner",
+	BuildingType.BOWYERS_WORKSHOP:   "Bowyer",
 }
 
 ## Multi-recipe table: BuildingType → Array of recipe dicts (index 0 = default recipe).
@@ -398,6 +433,19 @@ const RECIPES: Dictionary = {
 			"base_cycle_ticks": 375,
 			"npc_required": true,
 		},
+		{
+			"id": &"craft_knife",
+			"label": "Craft Knife",
+			"inputs": [
+				{"resource_id": &"wood",  "quantity": 2},
+				{"resource_id": &"stone", "quantity": 1},
+			],
+			"output": {&"knife": 1},
+			"output_capacity": 10,
+			"input_capacity": 10,
+			"base_cycle_ticks": 375,
+			"npc_required": true,
+		},
 	],
 	BuildingType.WEAVER: [
 		{
@@ -417,7 +465,7 @@ const RECIPES: Dictionary = {
 			"id": &"bare_hands",
 			"label": "Bare Hands (slow)",
 			"inputs": [
-				{"resource_id": &"fiber", "quantity": 3},
+				{"resource_id": &"fiber", "quantity": 5},
 			],
 			"output": {&"cloth": 1},
 			"output_capacity": 20,
@@ -452,6 +500,19 @@ const RECIPES: Dictionary = {
 			"base_cycle_ticks": 900,
 			"npc_required": true,
 		},
+		{
+			"id": &"leather_garments",
+			"label": "Leather Garments",
+			"inputs": [
+				{"resource_id": &"leather", "quantity": 2},
+				{"resource_id": &"spindle", "quantity": 1},
+			],
+			"output": {&"clothing": 2},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 300,
+			"npc_required": true,
+		},
 	],
 	BuildingType.SAWMILL: [
 		{
@@ -470,13 +531,23 @@ const RECIPES: Dictionary = {
 	],
 	BuildingType.HUNTING_LODGE: [
 		{
+			"id": &"hunt_with_bow",
+			"label": "Hunt (with Bow)",
+			"inputs": [{"resource_id": &"hunting_bow", "quantity": 1}],
+			"output": {&"meat": 3, &"hide": 2},
+			"output_capacity": 20,
+			"input_capacity": 5,
+			"base_cycle_ticks": 300,
+			"npc_required": true,
+		},
+		{
 			"id": &"hunt",
-			"label": "Hunt",
+			"label": "Hunt (bare hands)",
 			"inputs": [],
 			"output": {&"meat": 2, &"hide": 1},
 			"output_capacity": 20,
 			"input_capacity": 0,
-			"base_cycle_ticks": 300,
+			"base_cycle_ticks": 450,
 			"npc_required": true,
 		},
 	],
@@ -485,7 +556,7 @@ const RECIPES: Dictionary = {
 			"id": &"harvest_wheat",
 			"label": "Harvest Wheat",
 			"inputs": [],
-			"output": {&"wheat": 5},
+			"output": {&"wheat": 3},
 			"output_capacity": 20,
 			"input_capacity": 0,
 			"base_cycle_ticks": 250,
@@ -520,6 +591,87 @@ const RECIPES: Dictionary = {
 			"npc_required": true,
 		},
 	],
+	BuildingType.CLAY_PIT: [
+		{
+			"id": &"extract_clay",
+			"label": "Extract Clay",
+			"inputs": [{"resource_id": &"pickaxe", "quantity": 1}],
+			"output": {&"clay": 5},
+			"output_capacity": 20,
+			"input_capacity": 5,
+			"base_cycle_ticks": 250,
+			"npc_required": true,
+		},
+	],
+	BuildingType.POTTERY_KILN: [
+		{
+			"id": &"with_tool",
+			"label": "Fire Pottery (with Tool)",
+			"inputs": [
+				{"resource_id": &"clay",    "quantity": 2},
+				{"resource_id": &"pickaxe", "quantity": 1},
+			],
+			"output": {&"pottery": 3},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 300,
+			"npc_required": true,
+		},
+		{
+			"id": &"bare_hands",
+			"label": "Fire Pottery (slow)",
+			"inputs": [
+				{"resource_id": &"clay", "quantity": 2},
+			],
+			"output": {&"pottery": 1},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 900,
+			"npc_required": true,
+		},
+	],
+	BuildingType.TANNERY: [
+		{
+			"id": &"with_knife",
+			"label": "Tan Hide (with Knife)",
+			"inputs": [
+				{"resource_id": &"hide",  "quantity": 2},
+				{"resource_id": &"knife", "quantity": 1},
+			],
+			"output": {&"leather": 3},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 250,
+			"npc_required": true,
+		},
+		{
+			"id": &"bare_hands",
+			"label": "Tan Hide (slow)",
+			"inputs": [
+				{"resource_id": &"hide", "quantity": 2},
+			],
+			"output": {&"leather": 1},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 750,
+			"npc_required": true,
+		},
+	],
+	BuildingType.BOWYERS_WORKSHOP: [
+		{
+			"id": &"craft_bow",
+			"label": "Craft Hunting Bow",
+			"inputs": [
+				{"resource_id": &"wood",  "quantity": 2},
+				{"resource_id": &"fiber", "quantity": 3},
+			],
+			"output": {&"hunting_bow": 1},
+			"output_capacity": 10,
+			"input_capacity": 10,
+			"base_cycle_ticks": 375,
+			"npc_required": true,
+		},
+	],
 }
 
 ## Terrain types required in at least one cardinal neighbor for a building to be placeable.
@@ -532,6 +684,7 @@ const ADJACENCY_REQUIREMENTS: Dictionary = {
 	## adjacent forest must contain wild — enforced in _check_adjacency via WildSystem.
 	BuildingType.HUNTING_LODGE:  [WorldGrid.TileType.TREE],
 	BuildingType.FARM:           [WorldGrid.TileType.WHEAT],
+	BuildingType.CLAY_PIT:       [WorldGrid.TileType.CLAY],
 }
 
 ## Maps WorldGrid.TileType → resource output produced per cycle by GATHERING_HUT.
@@ -573,6 +726,10 @@ const PRODUCTION_TABLE: Dictionary = {
 	BuildingType.FARM:           true,
 	BuildingType.MILL:           true,
 	BuildingType.BAKERY:         true,
+	BuildingType.CLAY_PIT:       true,
+	BuildingType.POTTERY_KILN:        true,
+	BuildingType.TANNERY:             true,
+	BuildingType.BOWYERS_WORKSHOP:    true,
 }
 
 # ---- Signals ----------------------------------------------------------------
@@ -629,6 +786,7 @@ func _enter_tree() -> void:
 	_inventory_system = InventorySystem
 	if _tick_system != null:
 		_tick_system.ticks_advanced.connect(_on_ticks_advanced)
+		_tick_system.day_transition.connect(_on_day_transition)
 	if _inventory_system != null:
 		_inventory_system.container_removed.connect(_on_container_removed)
 
@@ -648,6 +806,10 @@ func initiate_build(building_type: int, tile: Vector2i) -> int:
 	if _grid == null:
 		push_warning("BuildingRegistry: GridMap dependency not set — call init_dependencies() first")
 		return PlacementResult.BLOCKED_BY_BOUNDS
+	# Progression gate (command layer): reject types not yet unlocked in the tech tree.
+	# Unknown/ungated types default to unlocked (see ProgressionSystem.is_building_unlocked).
+	if not ProgressionSystem.is_building_unlocked(building_type):
+		return PlacementResult.LOCKED
 	var grid_result: int = _grid.validate_placement(tile, building_type)
 	if grid_result != 0:  # WorldGrid.PlacementResult.SUCCESS == 0
 		return grid_result
@@ -883,6 +1045,8 @@ func get_placement_validity(tile: Vector2i, building_type: int) -> int:
 func check_build_conditions(building_type: int, tile: Vector2i) -> int:
 	if _grid == null:
 		return PlacementResult.BLOCKED_BY_BOUNDS
+	if not ProgressionSystem.is_building_unlocked(building_type):
+		return PlacementResult.LOCKED
 	var grid_result: int = _grid.validate_placement(tile, building_type)
 	if grid_result != 0:
 		return grid_result
@@ -1019,6 +1183,27 @@ func _on_ticks_advanced(delta: int) -> void:
 		building_npc_spawn_requested.emit(instance.building_id, instance.tile, 1)
 
 
+## Snapshots each building's per-day production time into util_active_ticks_last_day,
+## then resets the accumulator. Called once per game-day via TickSystem.day_transition.
+func _on_day_transition(_days_elapsed: int) -> void:
+	for instance: BuildingInstance in _all_buildings:
+		instance.util_active_ticks_last_day = instance.util_active_ticks_today
+		instance.util_data_available = true
+		instance.util_active_ticks_today = 0
+
+
+## Returns the building's utilization for the last complete day as a fraction in [0, 1]:
+## the share of the day it spent actively producing (100% = produced all day).
+## Returns -1.0 if no full day has elapsed yet (caller should show "—").
+func get_building_utilization(building_id: String) -> float:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null or not instance.util_data_available:
+		return -1.0
+	if _tick_system == null or _tick_system.TICKS_PER_DAY <= 0:
+		return -1.0
+	return clampf(float(instance.util_active_ticks_last_day) / float(_tick_system.TICKS_PER_DAY), 0.0, 1.0)
+
+
 ## Advances NPC spawn timer for Residential House; spawns up to MAX_HOUSE_NPCS (AC-22).
 func _advance_npc_timer(instance: BuildingInstance, delta: int) -> void:
 	instance.npc_spawn_timer += delta
@@ -1043,6 +1228,8 @@ func _advance_production_cycle(instance: BuildingInstance, delta: int) -> void:
 				building_state_changed.emit(instance.building_id, instance.state, reason)
 		return
 	instance.production_cycle_ticks += delta
+	# Utilization: count every tick spent advancing an active cycle (blocked/idle ticks don't count).
+	instance.util_active_ticks_today += delta
 	# F3 (live): recompute the effective duration from the CURRENT building efficiency every tick,
 	# so feeding / placement changes affect the in-progress cycle immediately (not only the next
 	# one). base / efficiency: eff 1.0 → base, eff 0.5 → 2× base, eff 0.25 → 4× base.
@@ -1498,6 +1685,10 @@ func _building_type_name(building_type: int) -> String:
 		BuildingType.FARM:              return "Farm"
 		BuildingType.MILL:              return "Mill"
 		BuildingType.BAKERY:            return "Bakery"
+		BuildingType.CLAY_PIT:          return "Clay Pit"
+		BuildingType.POTTERY_KILN:       return "Pottery Kiln"
+		BuildingType.TANNERY:            return "Tannery"
+		BuildingType.BOWYERS_WORKSHOP:   return "Bowyer's Workshop"
 	return "Unknown"
 
 # ---- Stub methods (future stories) -----------------------------------------
@@ -1715,7 +1906,12 @@ func get_available_upgrades(building_id: String) -> Array:
 	var instance: BuildingInstance = get_building_instance(building_id)
 	if instance == null:
 		return []
-	return BUILDING_UPGRADES.get(instance.type, [])
+	# Progression gate: only offer upgrades whose Progression Tree node is unlocked.
+	var result: Array = []
+	for upgrade: Dictionary in BUILDING_UPGRADES.get(instance.type, []):
+		if ProgressionSystem.is_upgrade_unlocked(upgrade.get(&"id", &"")):
+			result.append(upgrade)
+	return result
 
 
 ## Returns true if the building has the named upgrade installed.
@@ -1766,6 +1962,12 @@ func serialize() -> Dictionary:
 		var buf_out: Dictionary = {}
 		for k: StringName in instance.buffered_output:
 			buf_out[str(k)] = instance.buffered_output[k]
+		var storage_lim: Dictionary = {}
+		for k: StringName in instance.storage_limits:
+			storage_lim[str(k)] = instance.storage_limits[k]
+		var storage_min_lim: Dictionary = {}
+		for k: StringName in instance.storage_min_limits:
+			storage_min_lim[str(k)] = instance.storage_min_limits[k]
 		buildings_data.append({
 			"building_id": instance.building_id,
 			"type": instance.type,
@@ -1789,10 +1991,15 @@ func serialize() -> Dictionary:
 			"output_carrier_id": str(instance.output_carrier_id),
 			"upgrade_bonus": instance.upgrade_bonus,
 			"efficiency": instance.efficiency,
+			"util_active_ticks_today": instance.util_active_ticks_today,
+			"util_active_ticks_last_day": instance.util_active_ticks_last_day,
+			"util_data_available": instance.util_data_available,
 			"adjacency_tile_count": instance.adjacency_tile_count,
 			"active_recipe_index": instance.active_recipe_index,
 			"recipe_selected": instance.recipe_selected,
 			"active_upgrades": instance.active_upgrades.map(func(u: StringName) -> String: return str(u)),
+			"storage_limits": storage_lim,
+			"storage_min_limits": storage_min_lim,
 		})
 	return {"build_counter": _build_counter, "buildings": buildings_data}
 
@@ -1840,6 +2047,9 @@ func deserialize(data: Dictionary) -> void:
 		instance.output_carrier_id = StringName(bd.get("output_carrier_id", ""))
 		instance.upgrade_bonus = bd.get("upgrade_bonus", 0.0)
 		instance.efficiency = bd.get("efficiency", 1.0)
+		instance.util_active_ticks_today = bd.get("util_active_ticks_today", 0)
+		instance.util_active_ticks_last_day = bd.get("util_active_ticks_last_day", 0)
+		instance.util_data_available = bd.get("util_data_available", false)
 		instance.adjacency_tile_count = bd.get("adjacency_tile_count", 0)
 		instance.active_recipe_index = bd.get("active_recipe_index", 0)
 		# Default true so buildings from older saves don't re-prompt for a recipe.
@@ -1847,6 +2057,12 @@ func deserialize(data: Dictionary) -> void:
 		for u: String in bd.get("active_upgrades", []):
 			if u != "":
 				instance.active_upgrades.append(StringName(u))
+		var sl: Dictionary = bd.get("storage_limits", {})
+		for k: String in sl:
+			instance.storage_limits[StringName(k)] = int(sl[k])
+		var sml: Dictionary = bd.get("storage_min_limits", {})
+		for k: String in sml:
+			instance.storage_min_limits[StringName(k)] = int(sml[k])
 		_insert_sorted(instance)
 		if instance.type == BuildingType.GATHERING_HUT or instance.type == BuildingType.FARM:
 			_update_gathering_output(instance)

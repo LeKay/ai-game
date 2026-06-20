@@ -377,17 +377,50 @@ func grant_xp(npc_id: StringName, amount: int) -> void:
 	var npc: NPCInstance = all_npcs.get(npc_id)
 	if npc == null:
 		return
+	# The progression-tree Leadership branch caps how high an NPC may level. XP accrues normally up
+	# to a full bar at the cap level, then stops banking — the NPC holds there until the player
+	# raises the cap (then levels up manually via the ⬆️ button). See get_npc_level_cap().
+	var cap: int = ProgressionSystem.get_npc_level_cap()
 	npc.xp += amount
+	var natural_level: int = ExperienceFormulas.level_for_total_xp(npc.xp)
+	if natural_level > cap and cap < ExperienceFormulas.MAX_LEVEL:
+		npc.xp = mini(npc.xp, ExperienceFormulas.cumulative_xp(cap + 1))
 	var old_level: int = npc.level
-	var new_level: int = ExperienceFormulas.level_for_total_xp(npc.xp)
-	npc.level = new_level
+	npc.level = mini(natural_level, cap)
 	npc_xp_gained.emit(npc_id, npc.xp,
 			ExperienceFormulas.xp_into_level(npc.xp, npc.level),
 			ExperienceFormulas.xp_span_of_level(npc.level))
-	if new_level > old_level:
-		# Each level gained queues one perk choice, resolved in the Day Overview (Perk System).
-		npc.pending_perk_choices += (new_level - old_level)
-		npc_leveled_up.emit(npc_id, new_level)
+	if npc.level > old_level:
+		# Each level gained queues one perk choice, resolved via the ⬆️ button (Perk System).
+		npc.pending_perk_choices += (npc.level - old_level)
+		npc_leveled_up.emit(npc_id, npc.level)
+
+
+## True when an NPC has banked a full XP bar but is held below the progression-tree level cap —
+## i.e. it can be manually advanced now that the player has (or could) raise the cap. Drives the
+## ⬆️ "level up" button in the Day Overview and NPC detail panel.
+func can_level_up(npc_id: StringName) -> bool:
+	var npc: NPCInstance = all_npcs.get(npc_id)
+	if npc == null:
+		return false
+	if npc.level >= ExperienceFormulas.MAX_LEVEL:
+		return false
+	if npc.level >= ProgressionSystem.get_npc_level_cap():
+		return false
+	return npc.xp >= ExperienceFormulas.cumulative_xp(npc.level + 1)
+
+
+## Manually advances a held NPC one level (player clicked the ⬆️ button) and queues its perk choice.
+## No-op (returns false) unless can_level_up() holds. Because banked XP is clamped to one bar above
+## the previous cap, this advances exactly one level per cap raise.
+func level_up(npc_id: StringName) -> bool:
+	if not can_level_up(npc_id):
+		return false
+	var npc: NPCInstance = all_npcs.get(npc_id)
+	npc.level += 1
+	npc.pending_perk_choices += 1
+	npc_leveled_up.emit(npc_id, npc.level)
+	return true
 
 
 ## Applies a chosen perk card to an NPC (Perk System). Adds the perk instance, sets the profession
@@ -421,7 +454,14 @@ func skip_perk_choice(npc_id: StringName) -> void:
 		npc.pending_perk_choices -= 1
 
 
-## Total unresolved perk choices across all NPCs (gates the Day Overview "next day" button).
+## Unresolved perk choices owed by a single NPC (drives the per-NPC ⬆️ button in the Day Overview
+## and the NPC detail panel). 0 for unknown NPCs.
+func get_pending_perk_choices(npc_id: StringName) -> int:
+	var npc: NPCInstance = all_npcs.get(npc_id)
+	return npc.pending_perk_choices if npc != null else 0
+
+
+## Total unresolved perk choices across all NPCs.
 func get_total_pending_perk_choices() -> int:
 	var total: int = 0
 	for npc: NPCInstance in all_npcs.values():
@@ -1053,9 +1093,11 @@ func _deserialize_npc(data: Dictionary) -> NPCInstance:
 	npc.satisfaction_modifier = data.get("satisfaction_modifier", 1.0)
 	npc.equipment_modifier = data.get("equipment_modifier", 1.0)
 	npc.recalculate_efficiency()
-	# Experience: xp is the source of truth; level is always re-derived (Rule 6 / EC-6 / EC-9).
+	# Experience: xp is the source of truth; level is always re-derived (Rule 6 / EC-6 / EC-9),
+	# then clamped to the progression-tree level cap (ProgressionSystem loads before NPCSystem, so
+	# the cap is available here — see WorldSaveManager.LOAD_ORDER).
 	npc.xp = int(data.get("xp", 0))
-	npc.level = ExperienceFormulas.level_for_total_xp(npc.xp)
+	npc.level = mini(ExperienceFormulas.level_for_total_xp(npc.xp), ProgressionSystem.get_npc_level_cap())
 	npc.pending_xp = int(data.get("pending_xp", 0))
 	npc.profession = int(data.get("profession", -1))
 	npc.pending_perk_choices = int(data.get("pending_perk_choices", 0))

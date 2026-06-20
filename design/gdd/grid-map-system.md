@@ -33,7 +33,7 @@ The grid is a fixed-size 2D array (`GRID_SIZE × GRID_SIZE`, 30×30 for Vertical
 
 | Layer | What It Stores | Mutability | Write Access |
 |-------|---------------|------------|--------------|
-| **TerrainLayer** | Base terrain type: `EMPTY`, `TREE`, `STONE`, `BERRY`, `GRASS`, `IMPASSABLE` | Write-once at generation | MapGenerator only (set during `_ready()`) |
+| **TerrainLayer** | Base terrain type: `EMPTY`, `TREE`, `STONE`, `BERRY`, `GRASS`, `IMPASSABLE`, `WATER` | Write-once at generation | MapGenerator only (set during `_ready()`) |
 | **ResourceLayer** | Resource tile data: `resource_id`, `clearable` (whether the resource can be removed for building) | Mutable | MapGenerator (generation), Building System (clear on placement), dedicated buildings (replant) |
 | **BuildingLayer** | Building instance on tile: `building_id` or `null` | Mutable | Building System (place/remove) |
 
@@ -99,9 +99,19 @@ For each tile, count 8-way neighbor types. With 60% probability, replace the til
 
 Flood-fill connected components. Destroy any cluster smaller than 3 tiles by converting it to `EMPTY`. Rationale: a 1–2 tile resource cluster is unusable — no worker can harvest meaningfully from it, and it wastes visual space.
 
-**Step 5 — Minimum Count Verification**
+**Step 4.5 — Carve Water (Rivers, Lakes, Coast)**
 
-After generation, verify minimum resource counts. If insufficient, regenerate with a different seed (max 5 attempts, then force-fix by converting `EMPTY` tiles to required resources).
+After cluster cleanup, carve `WATER` tiles into the working terrain. Water is impassable and non-buildable (treated like `IMPASSABLE` for movement/placement). Three features are carved in order, each with a dedicated seed-offset RNG for determinism (same seed → identical water):
+
+1. **Coast** (optional, prob `coast_chance`): pick one random map edge and carve a band of depth `coast_depth` tiles inward, with a jagged inner boundary (±1 depth jitter per row/column).
+2. **Lakes** (optional, prob `lake_chance`, up to `lake_count_max`): pick a random interior tile and region-grow a blob of `lake_size` tiles.
+3. **River** (mandatory, `river_count ≥ 1` — every map, including the starting map, has at least one): trace a meandering walk from one edge to a different edge (perpendicular jog with prob `river_meander_chance`), carving width `river_width`.
+
+Total water is capped at `max_water_fraction` of the map.
+
+**Step 5 — Minimum Count & Connectivity Verification**
+
+After generation, verify (a) minimum resource counts and (b) land connectivity: the largest passable connected component must cover ≥ `min_land_fraction` of all passable tiles. If either check fails, regenerate with a different seed (max 5 attempts, which also re-rolls water), then force-fix: convert `EMPTY` tiles to required resources, and `_ensure_connectivity()` — convert `WATER` tiles on the shortest line between the two largest passable regions back to `EMPTY` (a land bridge), so the shipped map is always fully connected and playable. Tiny isolated passable pockets (< `min_pocket_size`) are flooded to `WATER`.
 
 **Map persistence:** Each game has exactly one map. There is no "Regenerate Map" feature for player use — the generated layout is final. This preserves the "earned perception" fantasy: you learn the map you have, not optimize for a better one.
 
@@ -586,6 +596,17 @@ Grid → Resource System: Grid's `resource_id` strings reference the Resource Sy
 | `badge_scatter_spread` | 0.28 × tile_px | 0.15–0.40 × tile_px | Maximum offset of a resource icon from the tile centre | Too small: all icons stack on top of each other regardless of min separation. Too large: icons drift visibly outside the tile bounds. |
 | `badge_min_separation` | 0.85 × icon_px | 0.5–1.2 × icon_px | Minimum centre-to-centre distance between icons on the same tile | Below 0.5: icons visually overlap. Above 1.0: at high counts the rejection sampler fails to place all icons within spread; fallback stacks them. |
 | `backdrop_opacity` | 0.30 | 0.15–0.60 | Alpha of the black per-icon backdrop circle | Too low: backdrop invisible, icons blend into terrain. Too high: backdrop dominates, icons hard to distinguish from terrain layer. |
+| `river_count` | 1 | 1–3 | Number of rivers carved per map (minimum 1 — guarantees the starting map has a river) | 0: violates the "every map has a river" rule. Above 3: too much water, fragments buildable land. |
+| `river_width` | 1 | 1–3 | River channel width in tiles | Above 2: rivers eat too much land and raise bisection risk. |
+| `river_meander_chance` | 0.35 | 0.0–0.6 | Probability of a perpendicular jog per river step | 0: dead-straight canal. Above 0.6: chaotic, self-crossing river. |
+| `lake_chance` | 0.5 | 0.0–1.0 | Probability a map rolls any lakes | 0: no lakes ever. 1.0: every map has lakes. |
+| `lake_count_max` | 2 | 0–4 | Maximum lakes per map | Above 4: water-cluttered map. |
+| `lake_size` | 8–14 | 4–30 | Tiles per lake (randomized in range) | Below 4: lakes look like puddles. Above 30: lakes swallow build space. |
+| `coast_chance` | 0.4 | 0.0–1.0 | Probability a map has a coastline | 0: no coast ever. |
+| `coast_depth` | 3 | 1–6 | Inward depth of the coastal water band | Above 6: coast claims a large share of the map. |
+| `max_water_fraction` | 0.25 | 0.1–0.4 | Hard cap on total water coverage | Above 0.4: water dominates, too little buildable land. |
+| `min_land_fraction` | 0.80 | 0.6–0.95 | Largest passable region must be ≥ this share of passable tiles | Below 0.6: maps can ship badly fragmented. Above 0.95: rejects most water layouts, excessive retries. |
+| `min_pocket_size` | 8 | 2–20 | Passable pockets smaller than this are flooded to water | Above 20: floods usable land; below 2: leaves unusable 1-tile islets. |
 
 **Cross-knob interactions:**
 - `GRID_SIZE × TILE_SIZE`: Together determine total map pixel dimensions. `GRID_SIZE × TILE_SIZE` should not exceed ~1600px per axis at default zoom (fits 1080p with UI). At 30×48 = 1440px — safe. At 50×48 (MVP) = 2400px — requires camera zoom or scrolling.
@@ -599,7 +620,8 @@ Grid → Resource System: Grid's `resource_id` strings reference the Resource Sy
 The Grid/Map System is the most prominent visual element in the game — it IS the screen the player sees. Visual requirements are divided by layer:
 
 **Terrain Layer (TileMapLayer — atlas tiles):**
-- Base ground textures: green grass, brown dirt, dark green forest floor, blue water (for IMPASSABLE tiles if any represent water)
+- Base ground textures: green grass, brown dirt, dark green forest floor
+- `WATER` tiles (rivers, lakes, coast) render in a distinct **blue** — visibly separate from `IMPASSABLE` (near-black). Water is impassable terrain, not a resource overlay.
 - Earthy, muted palette aligned with "Functional Clarity" art direction
 - High contrast between adjacent terrain types (grass vs forest vs stone)
 - Each terrain type has a distinct silhouette and color — identifiable from across the map

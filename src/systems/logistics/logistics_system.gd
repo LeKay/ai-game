@@ -112,7 +112,7 @@ func create_route(
 	if _grid_map != null:
 		var src_tile: Vector2i = _get_building_tile(source_id)
 		var dst_tile: Vector2i = _get_building_tile(destination_id)
-		var path_result: PathResult = LogisticsPathfinder.find_path(src_tile, dst_tile, _grid_map)
+		var path_result: PathResult = LogisticsPathfinder.find_route_path(src_tile, dst_tile, _grid_map)
 		if not path_result.found:
 			return _failure("No viable path between %s and %s. Check for blocking buildings." \
 				% [source_id, destination_id])
@@ -864,7 +864,7 @@ func _recalculate_invalid_paths() -> void:
 	for route in _active_routes:
 		if route.path_valid:
 			continue
-		var result: PathResult = LogisticsPathfinder.find_path(
+		var result: PathResult = LogisticsPathfinder.find_route_path(
 			_get_building_tile(route.source_building_id),
 			_get_building_tile(route.destination_building_id),
 			_grid_map

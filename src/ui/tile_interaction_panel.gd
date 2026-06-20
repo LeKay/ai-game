@@ -97,6 +97,7 @@ func close() -> void:
 func _populate(action_type: int) -> void:
 	_window.title = _action_type_to_label(action_type)
 	_output_label.visible = true  # reset; _populate_construct may hide it
+	_harvest_button.visible = true  # reset; the progression gate may hide it below
 	var pc := get_tree().get_first_node_in_group(&"player_character") as PlayerCharacter
 	if pc == null:
 		_harvest_button.disabled = true
@@ -119,6 +120,16 @@ func _populate(action_type: int) -> void:
 		_populate_construct_path(pc)
 		return
 
+	# Progression gate (UI layer): a gather action not yet unlocked in the tech tree is
+	# hidden entirely — the harvest row disappears (Clear/Search/Plant still apply).
+	if not ProgressionSystem.is_gather_unlocked(action_type):
+		_hide_harvest_action()
+		_populate_clear_section(pc)
+		_populate_plant_section(pc)
+		_populate_search_section(pc)
+		return
+
+	_harvest_button.visible = true
 	var preview: Dictionary = pc.get_cost_preview(action_type)
 	var blocked: bool = preview.get("blocked", true)
 	_harvest_button.disabled = blocked
@@ -223,8 +234,22 @@ func _on_clear_pressed() -> void:
 	close()
 
 
+## Hides the harvest row and its cost/output labels for a tech-tree-locked gather action.
+func _hide_harvest_action() -> void:
+	_harvest_button.visible = false
+	_block_reason_label.visible = false
+	_output_label.visible = false
+	_energy_cost_label.text = ""
+	_tick_cost_label.text = ""
+
+
 func _populate_clear_section(pc: PlayerCharacter) -> void:
 	if _current_clear_action_type < 0:
+		_set_clear_section_visible(false)
+		return
+	# Progression gate: clearing a tile unlocks together with harvesting that tile's
+	# resource, so hide the Clear option until its node is unlocked.
+	if not ProgressionSystem.is_gather_unlocked(_current_clear_action_type):
 		_set_clear_section_visible(false)
 		return
 	_set_clear_section_visible(true)
@@ -312,6 +337,10 @@ func _populate_plant_section(pc: PlayerCharacter) -> void:
 
 ## Shows the Search section for harvest/forage tiles and refreshes the button enabled state.
 func _populate_search_section(pc: PlayerCharacter) -> void:
+	# Progression gate: the Search action is unlocked by the Prospecting node.
+	if not ProgressionSystem.is_search_unlocked():
+		_set_search_section_visible(false)
+		return
 	_search_separator.visible = true
 	_search_button.visible = true
 	_search_button.disabled = pc.get_current_energy() < PlayerCharacter.SURVEY_ENERGY

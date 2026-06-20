@@ -7,7 +7,14 @@ unlock nodes radiating from a central start node.
 **Date**: 2026-06-19
 **Estimated Implementation**: > 1 week (full system — this spec documents the agreed
 design; implementation should be planned as a proper system, not a 4-hour change)
-**Status**: Design agreed in chat 2026-06-19; lightweight capture pending full GDD.
+**Status**: Design agreed 2026-06-19. Step 1 (graph + UI) and Step 2 (gating + Save/Load)
+both implemented in code 2026-06-19 — awaiting Godot runtime verification by the user.
+**Revised 2026-06-20**: clear-tile paired with harvest; Road/Path moved into the **Paving**
+node (after Shelter); **Spindle** moved after Weaving; new **Prospecting** node (Search +
+manual Clay mining, after Tooled Quarrying); new **Workbench** node (Crafting Bench upgrade,
+after Storage); Shelter made a structural prerequisite for all building nodes (except
+Gathering Hut); delivery-limits view filtered to unlocked resources; node tooltips added.
+Full GDD promotion + systems-index entry still pending.
 
 ---
 
@@ -55,9 +62,10 @@ Every piece of content unlocks in a consistent **two-step pattern**: first the
 
 ## Core Rules
 
-1. **From scratch.** At game start the player has only **The Hearth** (center node),
-   a free **Collection Point** (drop-off depot), and the ability to lay **Road**.
-   No gathering, crafting, or other building is possible until unlocked.
+1. **From scratch.** At game start the player has only **The Hearth** (center node)
+   and a free **Collection Point** (drop-off depot). No gathering, crafting, road-laying,
+   or other building is possible until unlocked. (Road moved off the Hearth into the
+   **Paving** node, unlocked after Shelter — see the Food table.)
 
 2. **Unlocking.** Clicking an *available* node unlocks it permanently. A node is
    *available* when **all** of its prerequisite nodes are unlocked (logical AND).
@@ -95,15 +103,25 @@ Every piece of content unlocks in a consistent **two-step pattern**: first the
 `Ring` = layout distance from center (unlock depth). `⟵` marks a cross-branch prerequisite.
 
 ### ⚙️ Settlement Core (granted by the Hearth — available turn one)
-Collection Point (depot) · Road.
+Collection Point (depot) only.
+
+> **Manual-clear pairing:** each manual-gather node now *also* unlocks the matching
+> **Clear-tile** action for that terrain (e.g. Woodcutting → Chop **and** Clear Tree),
+> so clearing a field unlocks together with harvesting it.
+
+> **Shelter is a hard prerequisite for buildings.** Every node that unlocks a building
+> requires **Shelter** (directly or transitively), **except Gathering Hut** and the
+> Hearth's Collection Point. This makes the worker dependency a structural unlock gate,
+> not only a runtime check.
 
 ### 🌾 Food
 | Ring | Node | Unlocks | Prerequisite |
 |---|---|---|---|
-| 1 | Foraging | manual gather **Berry** | Hearth |
+| 1 | Foraging | manual gather + clear **Berry** | Hearth |
 | 2 | Gathering Hut | automates Berry (Gathering Hut + berry recipe) | Foraging |
 | 3 | Shelter | **Residential House** (spawns NPCs) | Gathering Hut |
-| 4 | Agriculture | **Farm** + Wheat (+ wheat planting) | Shelter |
+| 4 | Paving | **Road** building + **lay Path** action | Shelter |
+| 4 | Agriculture | **Farm** + Wheat (gather/clear/plant) | Shelter |
 | 5 | Milling | **Mill** → Flour | Agriculture |
 | 6 | Baking | **Bakery** → Bread | Milling |
 | 4 | Hunting | **Hunting Lodge** → Meat + Hide | Shelter |
@@ -111,12 +129,15 @@ Collection Point (depot) · Road.
 ### 🪵 Materials
 | Ring | Node | Unlocks | Prerequisite |
 |---|---|---|---|
-| 1 | Woodcutting | manual gather **Wood** | Hearth |
-| 1 | Fiber Harvesting | manual gather **Fiber** | Hearth |
-| 2 | Stonecutting | manual gather **Stone** | Woodcutting |
-| 2 | Storage | **Storage Building** | Woodcutting |
-| 4 | Forestry | **Lumber Camp** (auto Wood) | Axe ⟵ |
-| 4 | Masonry | **Stone Mason** (auto Stone) | Pickaxe ⟵ |
+| 1 | Woodcutting | manual gather + clear **Wood** | Hearth |
+| 1 | Fiber Harvesting | manual gather + clear **Fiber** | Hearth |
+| 2 | Stonecutting | manual gather + clear **Stone** | Woodcutting |
+| 2 | Storage | **Storage Building** | Woodcutting + Shelter ⟵ |
+| 3 | Workbench | **Crafting Bench** upgrade (on Storage) | Storage |
+| 3 | Forestry | **Lumber Camp** (auto Wood) | Woodcutting + Shelter ⟵ |
+| 3 | Masonry | **Stone Mason** (auto Stone) | Stonecutting + Shelter ⟵ |
+| 4 | Tooled Quarrying | Stone Mason "with tool" recipe | Masonry + Pickaxe ⟵ |
+| 5 | Prospecting | **Search** action + manual mine **Clay** | Tooled Quarrying |
 | 5 | Sawmilling | **Sawmill** → Plank | Forestry + Axe |
 
 ### 🔨 Crafting / Handwerk
@@ -124,16 +145,19 @@ Collection Point (depot) · Road.
 |---|---|---|---|
 | 3 | Toolmaking: Axe | manual-craft **Axe** | Wood + Stone ⟵ |
 | 3 | Toolmaking: Pickaxe | manual-craft **Pickaxe** | Wood + Stone ⟵ |
-| 3 | Spinning Tools: Spindle | manual-craft **Spindle** | Wood + Fiber ⟵ |
-| 4 | Tool Workshop | automates Axe / Pickaxe / Spindle | Axe + Pickaxe |
+| 4 | Tool Workshop | automates Axe / Pickaxe / Spindle | Axe + Pickaxe + Shelter ⟵ |
+| 5 | Spinning Tools: Spindle | manual-craft **Spindle** | Weaving ⟵ |
 
 ### 🧵 Textiles
 | Ring | Node | Unlocks | Prerequisite |
 |---|---|---|---|
 | 3 | Spinning | manual-craft **Cloth** (4 Fiber) | Fiber Harvesting |
-| 4 | Weaving | **Weaver** (Fiber + Spindle → Cloth) | Spinning + Spindle ⟵ |
+| 4 | Weaving | **Weaver** (Fiber + Spindle → Cloth) | Spinning + Shelter ⟵ |
 | 5 | Garment-making | manual-craft **Clothing** | Spinning |
 | 6 | Tailoring | **Tailor** → Clothing | Weaving + Garment-making |
+
+> **Spindle moved after Weaving (2026-06-20).** The Spindle node is now a child of
+> **Weaving** (no longer its prerequisite). Weaving requires only Spinning (+ Shelter).
 
 **Critical-path spine (the "linear" reading):**
 Foraging → Woodcutting → Stonecutting → Axe / Pickaxe → Lumber Camp / Stone Mason →
@@ -160,10 +184,13 @@ Stored data-driven (e.g. `data/progression_tree.json`), per the data-driven cont
 ```
 
 **`unlocks[].type` values:**
-- `gather` — enables manual gathering of a resource (`id` = resource_id)
+- `gather` — enables a manual action (`id` = `PlayerCharacter.ManualActionType` enum name,
+  e.g. `CHOP_TREE`, `CLEAR_TREE`, `MINE_CLAY`, `CONSTRUCT_PATH`)
 - `manual_recipe` — enables a hand-craft recipe (`id` = CraftingRegistry recipe id)
 - `building` — enables placing a building type (`id` = BuildingType)
 - `building_recipe` — enables a specific recipe inside a building (e.g. Gathering Hut fiber)
+- `upgrade` — enables a building upgrade (`id` = upgrade id, e.g. `crafting_bench`)
+- `search` — enables the world-tile **Search** action (`id` is informational, e.g. `SEARCH`)
 
 ---
 
@@ -231,6 +258,10 @@ ProgressionSystem.is_building_unlocked(building_type: int) -> bool
 ProgressionSystem.is_recipe_unlocked(recipe_id: StringName) -> bool        # manual recipes
 ProgressionSystem.is_building_recipe_unlocked(building_type, recipe_id) -> bool
 ProgressionSystem.is_gather_unlocked(action_type: int) -> bool             # ManualActionType
+ProgressionSystem.is_upgrade_unlocked(upgrade_id: StringName) -> bool      # building upgrades
+ProgressionSystem.is_search_unlocked() -> bool                            # world-tile Search
+ProgressionSystem.is_resource_unlocked(resource_id: StringName) -> bool    # any producing node unlocked
+ProgressionSystem.get_node_unlock_description(node_id) -> String           # node tooltip text
 ProgressionSystem.unlock(node_id: StringName) -> bool                      # emits node_unlocked
 signal node_unlocked(node_id)                                             # UI re-populates on this
 ```
@@ -252,6 +283,12 @@ assembly points upstream:
 | 3 | Manual gather/forage | `player_character.gd::ManualActionType` surfaced via `tile_interaction_panel.gd` (Harvest button, reads `get_cost_preview()`) | don't offer the action when `is_gather_unlocked(action_type)` is false |
 | 4 | Building recipe selectors | `building_detail_panel.gd` (Tool Workshop 3 recipes, Weaver/Tailor fallbacks, Gathering Hut berry/fiber) | filter recipe options; Gathering Hut fiber **also** needs a production-side gate in `BuildingRegistry` |
 | 5 | Inventory item grid | `inventory_screen.gd::_to_item_list()` | **no action** — a locked resource can never be obtained, so it never appears |
+| 6 | Building upgrades | `BuildingRegistry.get_available_upgrades()` | filter out upgrades where `is_upgrade_unlocked(id)` is false (Crafting Bench gated by the **Workbench** node) |
+| 7 | World-tile Search | `tile_interaction_panel.gd::_populate_search_section()` | hide the Search section when `is_search_unlocked()` is false (gated by **Prospecting**) |
+| 8 | Clear-tile action | `tile_interaction_panel.gd::_populate_clear_section()` + `player_character` command layer | hide/reject `CLEAR_*` when its `is_gather_unlocked()` is false (pairs with the matching harvest node) |
+| 9 | Lay-Path action | `player_character.gd::_try_start_construct_path()` | reject `CONSTRUCT_PATH` when `is_gather_unlocked()` is false (gated by **Paving**) |
+| 10 | Storage delivery-limits view | `building_detail_panel.gd::_refresh_storage_config()` | skip resource rows where `is_resource_unlocked(res_id)` is false |
+| 11 | Tree node tooltips | `progression_tree_screen.gd::_build_graph()` | each node's `tooltip_text` = `get_node_unlock_description(node_id)` (lists what it unlocks) |
 
 ### Two-layer gating (defense in depth)
 
@@ -303,25 +340,29 @@ All values live in data, not hardcoded.
 
 ## Acceptance Criteria
 
-- [ ] **From scratch:** On a fresh game the player can only use the Collection Point
+> `[x]` = implemented in code 2026-06-19; runtime verification in Godot by the user is
+> still pending (no local headless run per project policy).
+
+- [x] **From scratch:** On a fresh game the player can only use the Collection Point
       and Road; all gather/craft/build actions are unavailable until their node is unlocked.
-- [ ] **Free unlock:** Clicking an available node unlocks it with no resource cost and
+- [x] **Free unlock:** Clicking an available node unlocks it with no resource cost and
       it stays unlocked permanently.
-- [ ] **Prerequisite gating:** A node is only clickable when all its prerequisite nodes
+- [x] **Prerequisite gating:** A node is only clickable when all its prerequisite nodes
       are unlocked; an attempt on a locked node is rejected with clear feedback.
-- [ ] **Cross-link fires:** After unlocking both Woodcutting and Stonecutting, the Axe
+- [x] **Cross-link fires:** After unlocking both Woodcutting and Stonecutting, the Axe
       and Pickaxe nodes become available and their cross-branch edges are drawn.
-- [ ] **Manual → automated:** Unlocking e.g. "Axe" enables only hand-crafting; the
+- [x] **Manual → automated:** Unlocking e.g. "Axe" enables only hand-crafting; the
       Lumber Camp cannot be built until "Forestry" is unlocked, which itself requires Axe.
-- [ ] **Worker gate:** No automation building can operate until "Shelter" (Residential
+- [x] **Worker gate:** No automation building can operate until "Shelter" (Residential
       House) has been unlocked and a House placed to provide an NPC.
-- [ ] **Dynamic reveal:** Newly available nodes and their edges appear/animate when their
+- [x] **Dynamic reveal:** Newly available nodes and their edges appear/animate when their
       prerequisites are met (per `reveal_mode`).
-- [ ] **Future-proofed cost:** The unlock path reads a per-node `cost` (null today) so a
+- [x] **Future-proofed cost:** The unlock path reads a per-node `cost` (null today) so a
       research currency can be required later without restructuring.
-- [ ] **Save/Load:** The set of unlocked nodes serializes and restores exactly.
-- [ ] **No regression:** Manual `CraftingRegistry` recipes and `BuildingRegistry`
-      production behave unchanged *once their gating node is unlocked*.
+- [x] **Save/Load:** The set of unlocked nodes serializes and restores exactly.
+- [x] **No regression:** Manual `CraftingRegistry` recipes and `BuildingRegistry`
+      production behave unchanged *once their gating node is unlocked* (gated integration
+      tests open the tree via `ProgressionSystem.unlock_all()` in `before_test`).
 
 ---
 

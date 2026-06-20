@@ -47,6 +47,15 @@ func before_test() -> void:
 	_registry._tick_system = null
 	_registry.init_dependencies(_grid, _player)
 
+	# Open the whole tech tree so the progression gate never blocks placement here;
+	# these tests cover failure-state mechanics, not gating.
+	ProgressionSystem.unlock_all()
+
+
+func after_test() -> void:
+	# Restore the game-start unlock state so the open tree doesn't leak into other suites.
+	ProgressionSystem.reset_to_initial()
+
 
 func _seed(resource_id: StringName, qty: int) -> void:
 	if _inventory.get_container(SUPPLY) == null:

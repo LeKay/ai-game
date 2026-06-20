@@ -96,6 +96,10 @@ After placement succeeds, the building enters the CONSTRUCTING state. Constructi
 | Farm | 8 Wood + 2 Stone | 480 ticks | ~0.3 |
 | Mill | 10 Wood + 5 Stone | 800 ticks | ~0.6 |
 | Bakery | 10 Wood + 5 Stone | 900 ticks | ~0.6 |
+| Clay Pit | 8 Wood + 3 Stone | 800 ticks | ~0.6 |
+| Pottery Kiln | 5 Wood + 8 Stone + 5 Clay | 900 ticks | ~0.6 |
+| Tannery | 8 Wood + 3 Stone | 700 ticks | ~0.5 |
+| Bowyer's Workshop | 8 Wood + 3 Fiber + 2 Stone | 700 ticks | ~0.5 |
 
 > Build times were rescaled ×8–12 in the 2026-06-11 balancing pass so construction
 > takes hours-to-days of in-game time and the day becomes a real planning unit
@@ -110,6 +114,7 @@ require at least one neighboring tile (cardinal or diagonal) of a specific terra
 | Stone Mason | STONE |
 | Gathering Hut | BERRY or GRASS |
 | Farm | WHEAT |
+| Clay Pit | CLAY |
 
 The count of satisfying neighbor tiles also drives the building's adjacency efficiency
 (Formula F6, see Efficiency System / ADR-0012) and — for the Gathering Hut — which
@@ -134,14 +139,24 @@ A building in OPERATING state is functional. Its behavior depends on building ty
 | Tool Workshop (Axe) | 3 Wood + 2 Stone | 1 Axe | 375 ticks | 10 | 10 | Yes (1) |
 | Tool Workshop (Pickaxe) | 3 Stone + 1 Wood | 1 Pickaxe | 375 ticks | 10 | 10 | Yes (1) |
 | Tool Workshop (Spindle) | 2 Wood + 2 Fiber | 1 Spindle | 375 ticks | 10 | 10 | Yes (1) |
+| Tool Workshop (Knife) | 2 Wood + 1 Stone | 1 Knife | 375 ticks | 10 | 10 | Yes (1) |
 | Weaver (main) | 3 Fiber + 1 Spindle | 2 Cloth | 250 ticks | 20 | 10 | Yes (1) |
-| Weaver (fallback) | 3 Fiber | 1 Cloth | 750 ticks | 20 | 10 | Yes (1) |
+| Weaver (fallback) | 5 Fiber | 1 Cloth | 750 ticks | 20 | 10 | Yes (1) |
 | Tailor (main) | 2 Cloth + 1 Spindle | 2 Clothing | 300 ticks | 20 | 10 | Yes (1) |
 | Tailor (fallback) | 2 Cloth | 1 Clothing | 900 ticks | 20 | 10 | Yes (1) |
+| Tailor (leather) | 2 Leather + 1 Spindle | 2 Clothing | 300 ticks | 20 | 10 | Yes (1) |
+| Tannery (main) | 2 Hide + 1 Knife | 3 Leather | 250 ticks | 20 | 10 | Yes (1) |
+| Tannery (fallback) | 2 Hide | 1 Leather | 750 ticks | 20 | 10 | Yes (1) |
+| Hunting Lodge (with bow) | 1 Hunting Bow | 3 Meat + 2 Hide | 300 ticks | 20 | 5 | Yes (1) |
+| Hunting Lodge (bare hands) | — | 2 Meat + 1 Hide | 450 ticks | 20 | 0 | Yes (1) |
+| Bowyer's Workshop | 2 Wood + 3 Fiber | 1 Hunting Bow | 375 ticks | 10 | 10 | Yes (1) |
 | Sawmill | 2 Wood + 1 Axe | 3 Plank | 250 ticks | 20 | 10 | Yes (1) |
 | Farm | — | 5 Wheat (terrain-driven, WHEAT adjacency) | 250 ticks | 20 | — | Yes (1) |
 | Mill | 2 Wheat | 3 Flour | 250 ticks | 20 | 10 | Yes (1) |
 | Bakery | 2 Flour | 4 Bread | 300 ticks | 20 | 10 | Yes (1) |
+| Clay Pit | 1 Pickaxe | 5 Clay | 250 ticks | 20 | 5 | Yes (1) |
+| Pottery Kiln (main) | 2 Clay + 1 Pickaxe | 3 Pottery | 300 ticks | 20 | 10 | Yes (1) |
+| Pottery Kiln (fallback) | 2 Clay | 1 Pottery | 900 ticks | 20 | 10 | Yes (1) |
 
 > **Tool as capital good (2026-06-11):** A delivered tool adds 1.0 charge to the
 > building's input buffer; each cycle consumes only **1/30** charge, so one tool

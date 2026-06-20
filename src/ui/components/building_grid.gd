@@ -168,4 +168,8 @@ func _building_icon(building_type: int) -> String:
 		BuildingRegistry.BuildingType.FARM:              return "🌾"
 		BuildingRegistry.BuildingType.MILL:              return "⚙️"
 		BuildingRegistry.BuildingType.BAKERY:            return "🥖"
+		BuildingRegistry.BuildingType.CLAY_PIT:          return "🧱"
+		BuildingRegistry.BuildingType.POTTERY_KILN:      return "🏺"
+		BuildingRegistry.BuildingType.TANNERY:           return "🪣"
+		BuildingRegistry.BuildingType.BOWYERS_WORKSHOP:  return "🏹"
 	return "🏛️"

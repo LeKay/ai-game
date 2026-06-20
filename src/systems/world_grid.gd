@@ -663,6 +663,8 @@ func get_tile_movement_cost(pos: Vector2i) -> float:
 		TileType.STONE:      return 4.0
 		TileType.BERRY:      return 4.0
 		TileType.GRASS:      return 4.0
+		TileType.WHEAT:      return 4.0
+		TileType.CLAY:       return 4.0
 		_:                   return 1.0  # EMPTY
 
 

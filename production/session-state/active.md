@@ -1,7 +1,7 @@
 # Active Session State
 
 **Last Updated:** 2026-06-19
-**Task:** Progression Tree (Tech Tree) — design capture + gating-prep refactor
+**Task:** Progression Tree (Tech Tree) — Step 1 (graph) + Step 2 (gating) implemented; awaiting Godot verification
 
 ## Current Focus: Progression Tree (2026-06-19)
 
@@ -30,8 +30,36 @@ Added `BuildingRegistry.BUILDABLE_TYPES` (canonical buildable list, menu order) 
 public `BuildingRegistry.get_type_display_name()`. `BuildingRegistry` is now the
 single source of truth for buildable types + names. ⚠️ Unverified in Godot (no run).
 
-**NEXT:** promote spec → full GDD (`/design-system`); author `data/progression_tree.json`;
-implement `ProgressionSystem` + ADR; wire the gate guards; UX spec for tree visuals.
+**STEP 1 — DONE 2026-06-19 (graph + UI):** `data/progression_tree.json`, `ProgressionSystem`
+autoload + `ProgressionTreeNode`, radial Node2D graph UI (`progression_tree_screen` +
+`progression_node_button`), 🌳 HUD button, auto-computed visual rings, perpendicular
+strand layout, circular emoji badges, dynamic reveal. Unverified in Godot.
+
+**STEP 2 — DONE 2026-06-19 (gating/verzahnung; awaiting Godot verification):** two-layer
+gating wired everywhere via the `ProgressionSystem` autoload (unmapped content defaults
+UNLOCKED so non-tree stuff is never blocked):
+- Buildings: `BuildingRegistry.initiate_build`/`check_build_conditions` → new
+  `PlacementResult.LOCKED` (overlay shows "Locked — unlock in the tech tree");
+  `place_starter_building` NOT gated. Build menu hides locked types in `inventory_screen`.
+- Manual craft: `CraftingRegistry.try_craft` → new `CraftResult.LOCKED`; menu hides locked
+  recipes; `_on_recipe_selected` floats a LOCKED message.
+- Manual gather: `player_character.try_start_action` → new `StartResult.PROGRESSION_LOCKED`
+  (rejected before queueing). `tile_interaction_panel` HIDES the harvest row entirely for a
+  locked gather (`_hide_harvest_action`); Clear/Search/Plant still shown.
+- Building-recipe selectors: `building_detail_panel._rebuild_recipe_view` marks tech-locked
+  recipes unavailable.
+- Refresh-on-unlock: `inventory_screen` connects `ProgressionSystem.node_unlocked` →
+  re-`_refresh_zone3()` while open.
+- Save/Load: `WorldSaveManager` SAVE_SYSTEMS + LOAD_ORDER both begin with `"ProgressionSystem"`.
+  'From scratch' start via `reset_to_initial()` (hearth-only).
+- Tests: added `ProgressionSystem.unlock_all()` helper + `before_test`/`after_test`
+  (unlock_all / reset_to_initial) to the 5 suites exercising gated build/gather content
+  (building_system: placement/production/failed_states; player_character: action_dispatch,
+  tile_harvest_interaction, depletion_food).
+
+**NEXT:** user verifies in Godot (gating + Save/Load round-trip + tree UI); then promote
+spec → full GDD (`/design-system`) + add to `design/gdd/systems-index.md`; ADR for
+ProgressionSystem.
 
 ---
 

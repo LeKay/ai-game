@@ -60,8 +60,14 @@ theme_override_constants/separation = 6
 layout_mode = 2
 text = "Daily Consumption"
 
-[node name="HungerList" type="VBoxContainer" parent="PanelContainer/MarginContainer/VBoxContainer/SectionsRow/LeftSection"]
+[node name="HungerScroll" type="ScrollContainer" parent="PanelContainer/MarginContainer/VBoxContainer/SectionsRow/LeftSection"]
+custom_minimum_size = Vector2(0, 176)
 layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="HungerList" type="VBoxContainer" parent="PanelContainer/MarginContainer/VBoxContainer/SectionsRow/LeftSection/HungerScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
 [node name="VSeparator" type="VSeparator" parent="PanelContainer/MarginContainer/VBoxContainer/SectionsRow"]
@@ -76,8 +82,14 @@ theme_override_constants/separation = 6
 layout_mode = 2
 text = "Daily Balance"
 
-[node name="DeltaList" type="VBoxContainer" parent="PanelContainer/MarginContainer/VBoxContainer/SectionsRow/RightSection"]
+[node name="DeltaScroll" type="ScrollContainer" parent="PanelContainer/MarginContainer/VBoxContainer/SectionsRow/RightSection"]
+custom_minimum_size = Vector2(0, 176)
 layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="DeltaList" type="VBoxContainer" parent="PanelContainer/MarginContainer/VBoxContainer/SectionsRow/RightSection/DeltaScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
 [node name="HSeparatorNpc" type="HSeparator" parent="PanelContainer/MarginContainer/VBoxContainer"]

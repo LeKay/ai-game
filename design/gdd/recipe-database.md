@@ -25,7 +25,26 @@
 >   **Sawmill** (2 Wood + 1 Axe → 3 Plank, 250 ticks),
 >   **Farm** (WHEAT-adjacent gathering → 5 Wheat, 250 ticks; efficiency scales with adjacent WHEAT count),
 >   **Mill** (2 Wheat → 3 Flour, 250 ticks), **Bakery** (2 Flour → 4 Bread, 300 ticks).
+>   **Clay Pit** (1 Pickaxe → 5 Clay, 250 ticks; requires adjacent CLAY terrain),
+>   **Pottery Kiln** with_tool (2 Clay + 1 Pickaxe → 3 Pottery, 300 ticks) /
+>   bare_hands fallback (2 Clay → 1 Pottery, 900 ticks).
+>   **Tannery** with_knife (2 Hide + 1 Knife → 3 Leather, 250 ticks) /
+>   bare_hands fallback (2 Hide → 1 Leather, 750 ticks). Gated behind `tannery`
+>   progression node (prereqs: tailoring + hunting + knife).
+>   **Tailor** gains 3rd recipe leather_garments (2 Leather + 1 Spindle → 2 Clothing, 300 ticks).
+>   **Tool Workshop** gains craft_knife (2 Wood + 1 Stone → 1 Knife, 375 ticks).
+>   New tool resource: `knife` (wood ×2 + stone ×1; manual craft 90 ticks).
+>   New intermediate resource: `leather` (production_good / intermediate).
+>   New trade_good resource: `pottery` (perk_eligible; NPC comfort good like clothing).
 >   New intermediate resource: `flour` (production_good / intermediate).
+>   **Hunting Bow chain (2026-06-20):** New tool resource `hunting_bow` (wood ×2 + fiber ×3).
+>   Manual craft: `hunting_bow` (120 ticks, 20 energy). New building **Bowyer's Workshop**
+>   (`BOWYERS_WORKSHOP`): `craft_bow` (wood ×2 + fiber ×3 → hunting_bow ×1, 375 ticks, NPC).
+>   Hunting Lodge recipe split: `hunt_with_bow` (primary, hunting_bow ×1 → meat ×3 + hide ×2,
+>   300 ticks) and `hunt` (bare hands fallback, no inputs → meat ×2 + hide ×1, 450 ticks).
+>   Progression: `bowyer` node (crafting branch, prereqs: woodcutting + fiber_harvesting) unlocks
+>   BOWYERS_WORKSHOP + manual hunting_bow recipe; `bow_hunting` node (food branch, prereqs:
+>   hunting + bowyer) unlocks `HUNTING_LODGE:hunt_with_bow`.
 > Migrating both tables into the JSON registry below remains the design goal
 > (data-driven content rule); treat the rest of this document as the target design,
 > not the implemented state.

@@ -104,6 +104,15 @@ static func input_processing_types() -> Array[int]:
 		BuildingRegistry.BuildingType.SAWMILL,
 	]
 
+## Production building types whose Progression-Tree node is already unlocked — the only valid
+## Calling/profession targets (an NPC may not specialise in a building the colony cannot build yet).
+static func unlocked_production_types() -> Array[int]:
+	var out: Array[int] = []
+	for t: int in production_types():
+		if ProgressionSystem.is_building_unlocked(t):
+			out.append(t)
+	return out
+
 # ---- Accessors ----------------------------------------------------------------
 
 ## Display name for a production building type (uses real enum values, not hardcoded ints).
@@ -135,6 +144,15 @@ static func get_def(perk_id: StringName) -> Dictionary:
 ## Returns fewer than `count` cards only if the candidate or good pools are too small.
 static func generate_choices(npc: Object, count: int = 3) -> Array:
 	var has_profession: bool = npc != null and int(npc.profession) != -1
+
+	# First perk choice (normally the level-2 level-up): force the profession decision. Offer ONLY
+	# Calling cards — up to `count`, each bound to a DIFFERENT already-unlocked production building.
+	# Falls through to the normal mix only if no production building is unlocked yet, so the choice
+	# is never empty.
+	if npc != null and not has_profession and (npc.perks as Array).is_empty():
+		var calling_cards: Array = _calling_cards(count)
+		if not calling_cards.is_empty():
+			return calling_cards
 
 	# 1) Candidate perk definitions, filtered by the profession gate.
 	var candidates: Array[Dictionary] = []
@@ -169,8 +187,10 @@ static func generate_choices(npc: Object, count: int = 3) -> Array:
 		var building_type: int = -1
 		if p["building_bound"]:
 			if p["is_profession"]:
-				var pool: Array[int] = production_types()
-				building_type = pool[randi() % pool.size()] if not pool.is_empty() else -1
+				var pool: Array[int] = unlocked_production_types()
+				if pool.is_empty():
+					continue  # no unlocked profession to offer — skip this Calling card
+				building_type = pool[randi() % pool.size()]
 			else:
 				building_type = int(npc.profession)  # applies to the NPC's profession type
 		cards.append({
@@ -181,5 +201,39 @@ static func generate_choices(npc: Object, count: int = 3) -> Array:
 			&"magnitude": p["magnitude"],
 			&"good": good,
 			&"building_type": building_type,
+		})
+	return cards
+
+
+## Builds up to `count` Calling (profession) cards, each bound to a DISTINCT already-unlocked
+## production building and a distinct perk-eligible good. Empty if no production building is
+## unlocked yet. Used for the first level-up's forced profession choice.
+static func _calling_cards(count: int) -> Array:
+	var def: Dictionary = get_def(&"berufung")
+	if def.is_empty():
+		return []
+	var pros: Array[int] = unlocked_production_types()
+	pros.shuffle()
+	var goods: Array[StringName] = ResourceRegistry.get_perk_eligible_ids()
+	goods.shuffle()
+	var cards: Array = []
+	var good_idx: int = 0
+	for t: int in pros:
+		if cards.size() >= count:
+			break
+		var good: StringName = &""
+		if def["good_bound"]:
+			if good_idx >= goods.size():
+				break  # ran out of distinct goods
+			good = goods[good_idx]
+			good_idx += 1
+		cards.append({
+			&"perk_id": def["id"],
+			&"name": def["name"],
+			&"desc": def["desc"],
+			&"effect": def["effect"],
+			&"magnitude": def["magnitude"],
+			&"good": good,
+			&"building_type": t,
 		})
 	return cards

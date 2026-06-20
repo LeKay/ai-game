@@ -25,6 +25,9 @@ var _header: Label
 var _card_row: HBoxContainer
 
 var _current_npc: StringName = &""
+## When true, only ONE choice (for the NPC passed to begin_for_npc) is resolved and the panel
+## closes — it does not chain into other NPCs' (or further) pending choices. Set by begin_for_npc.
+var _single_mode: bool = false
 
 
 func _ready() -> void:
@@ -34,10 +37,32 @@ func _ready() -> void:
 	_root.visible = false
 
 
-## Starts resolving all pending perk choices. Call from the Day Overview gate.
+## Starts resolving all pending perk choices, chaining across every NPC until none remain.
 func begin() -> void:
+	_single_mode = false
 	_root.visible = true
 	_show_next()
+
+
+## Resolves exactly ONE pending perk choice for a single NPC (the ⬆️ level-up button path) and then
+## closes — it never chains into other NPCs' or further pending choices. No-op if none pending.
+func begin_for_npc(npc_id: StringName) -> void:
+	if NPCSystem.get_pending_perk_choices(npc_id) <= 0:
+		return
+	_single_mode = true
+	_root.visible = true
+	_current_npc = npc_id
+	var npc: Object = NPCSystem.get_npc_instance(npc_id)
+	if npc == null:
+		_finish()
+		return
+	var cards: Array = PerkRegistry.generate_choices(npc, 3)
+	if cards.is_empty():
+		# No valid cards (e.g. no perk-eligible goods yet) — clear the choice so it cannot soft-lock.
+		NPCSystem.skip_perk_choice(npc_id)
+		_finish()
+		return
+	_render(NPCSystem.get_npc_display_name(npc_id), npc.level, cards)
 
 
 func _show_next() -> void:
@@ -72,7 +97,10 @@ func _render(npc_name: String, level: int, cards: Array) -> void:
 
 func _on_card_chosen(card: Dictionary) -> void:
 	NPCSystem.apply_perk_choice(_current_npc, card)
-	_show_next()
+	if _single_mode:
+		_finish()  # one choice per button press — never auto-open the next
+	else:
+		_show_next()
 
 
 func _finish() -> void:

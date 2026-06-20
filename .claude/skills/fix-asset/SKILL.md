@@ -81,11 +81,15 @@ Zeige den vollständigen neuen Prompt und **frage:** „Darf ich diesen Prompt i
 ## Phase 3: Kontostand prüfen
 
 ```python
-import urllib.request, json
+import urllib.request, json, os
+from pathlib import Path
+
+# API-Key NIEMALS hardcoden — aus Env oder ~/.pixellab_key lesen
+key = os.environ.get('PIXELLAB_API_KEY') or (Path.home() / '.pixellab_key').read_text().strip()
 
 req = urllib.request.Request(
     'https://api.pixellab.ai/v2/balance',
-    headers={'Authorization': 'Bearer REDACTED-PIXELLAB-KEY'},
+    headers={'Authorization': f'Bearer {key}'},
 )
 with urllib.request.urlopen(req) as resp:
     print(json.load(resp))
@@ -113,7 +117,11 @@ neuen Prompt (Edit-Tool). Kommentar am Anfang der Sektion:
 - `no_background`: `true`
 
 ```python
-import urllib.request, json, base64
+import urllib.request, json, base64, os
+from pathlib import Path
+
+# API-Key NIEMALS hardcoden — aus Env oder ~/.pixellab_key lesen
+key = os.environ.get('PIXELLAB_API_KEY') or (Path.home() / '.pixellab_key').read_text().strip()
 
 payload = {
     'description': '<vollständiger verbesserter Prompt inkl. Farbpalette>',
@@ -129,7 +137,7 @@ req = urllib.request.Request(
     'https://api.pixellab.ai/v2/create-image-pixen',
     data=data,
     headers={
-        'Authorization': 'Bearer REDACTED-PIXELLAB-KEY',
+        'Authorization': f'Bearer {key}',
         'Content-Type': 'application/json',
     },
     method='POST',

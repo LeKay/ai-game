@@ -140,6 +140,8 @@ func _process(_delta: float) -> void:
 			_label.text = "Not enough energy"
 		BuildingRegistry.PlacementResult.BLOCKED_BY_ADJACENCY:
 			_label.text = _adjacency_hint_label(_building_type)
+		BuildingRegistry.PlacementResult.LOCKED:
+			_label.text = "Locked — unlock in the tech tree"
 		_:
 			_label.text = "Cannot place here"
 

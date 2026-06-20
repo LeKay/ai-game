@@ -391,6 +391,7 @@ func _terrain_to_action(terrain: WorldGrid.TileType) -> int:
 		WorldGrid.TileType.BERRY:       return PlayerCharacter.ManualActionType.PICK_BERRIES
 		WorldGrid.TileType.GRASS:       return PlayerCharacter.ManualActionType.HARVEST_FIBER
 		WorldGrid.TileType.WHEAT:       return PlayerCharacter.ManualActionType.HARVEST_WHEAT
+		WorldGrid.TileType.CLAY:        return PlayerCharacter.ManualActionType.MINE_CLAY
 		WorldGrid.TileType.EMPTY:       return PlayerCharacter.ManualActionType.FORAGE
 		WorldGrid.TileType.IMPASSABLE:  return -1
 		_:                              return -1

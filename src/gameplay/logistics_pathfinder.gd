@@ -93,6 +93,43 @@ static func find_path(start: Vector2i, goal: Vector2i, grid) -> PathResult:
 	return PathResult.failure()
 
 
+## Finds a route path that always traverses at least one non-building (passable) tile.
+##
+## A plain find_path() between two orthogonally adjacent buildings returns the 2-tile
+## path [start, goal] — both building tiles, no open ground between them. The carrier
+## then has no visible travel segment, so the route animation never plays. Logistics
+## routes use this wrapper instead: when the direct path is a bare adjacent hop, it
+## forces an L-shaped detour through a passable neighbour of the source so the carrier
+## always steps out onto open ground.
+##
+## Returns the detour PathResult when one exists, otherwise the direct path unchanged
+## (e.g. when the source is fully boxed in and only the goal hop is possible).
+static func find_route_path(start: Vector2i, goal: Vector2i, grid) -> PathResult:
+	var direct: PathResult = find_path(start, goal, grid)
+	# Already passes through an intermediate tile (size >= 3 means start, mid..., goal),
+	# or no path at all — nothing to reroute.
+	if not direct.found or direct.path.size() >= 3:
+		return direct
+
+	# Direct path is [start, goal]: the buildings are adjacent. Detour via the cheapest
+	# passable neighbour of start (which by definition is a non-building tile).
+	var best: PathResult = null
+	for dir: Vector2i in _DIRECTIONS:
+		var neighbor: Vector2i = start + dir
+		if neighbor == goal or not grid.is_tile_passable(neighbor):
+			continue
+		var sub: PathResult = find_path(neighbor, goal, grid)
+		if not sub.found:
+			continue
+		var detour: Array[Vector2i] = [start]
+		detour.append_array(sub.path)
+		var detour_cost: float = grid.get_tile_movement_cost(neighbor) + sub.cost
+		if best == null or detour_cost < best.cost:
+			best = PathResult.success(detour, detour_cost)
+
+	return best if best != null else direct
+
+
 ## Minimum tile movement cost in the grid — must match the cheapest passable tile
 ## (road tile = 0.5, defined in WorldGrid.get_tile_movement_cost).
 ## Scaling the heuristic by this value keeps it admissible when tile costs < 1.0.

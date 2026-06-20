@@ -1,7 +1,7 @@
 ---
 name: add-production-chain
 model: claude-sonnet-4-6
-description: "End-to-end-Implementierung einer neuen Produktionskette (z. B. wheat → flour → bread oder fiber → cloth): legt Rezepte und neue Ressourcen fest, bestimmt die nötigen Assets und schreibt deren AI-Prompts in eine neue Datei, definiert das Tick-Balancing, implementiert Code (building_registry / crafting_registry) und UI, aktualisiert die Design-Docs und verifiziert in Godot. Tabellengetrieben — der Skill kennt jede Stelle, die synchron gehalten werden muss."
+description: "End-to-end-Implementierung einer neuen Produktionskette (z. B. wheat → flour → bread oder fiber → cloth): legt Rezepte und neue Ressourcen fest, bestimmt die nötigen Assets und schreibt deren AI-Prompts in eine neue Datei, definiert das Tick-Balancing, implementiert Code (building_registry / crafting_registry) und UI, verzahnt die Kette mit dem Progression-/Tech-Tree (Gating), aktualisiert die Design-Docs und verifiziert in Godot. Tabellengetrieben — der Skill kennt jede Stelle, die synchron gehalten werden muss."
 argument-hint: "[kurze Beschreibung der Kette, z. B. 'wheat to flour to bread']"
 user-invocable: true
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash, AskUserQuestion
@@ -55,6 +55,16 @@ Teilmenge davon.** Prüfe am Ende jede Zeile explizit.
 | 18 | `assets/ui/icons/resources/<id>.png` + `.import` | Raster-Icon für Transport-Animation + UI | wenn Icon-PNG vorhanden |
 | 19 | `src/systems/world_grid.gd` → `TileType` enum | Neuer Boden-/Terrain-Typ | nur bei neuem Terrain-Typ (z. B. Weizenfeld, Lehmgrube) |
 | 20 | `src/scenes/map_root/terrain_renderer.gd` → `_TERRAIN_PNG_VARIANTS` + `_TERRAIN_FALLBACK_COLORS` | **Alle** Tile-Varianten + Fallback-Farbe für neuen Terrain-Typ | nur bei neuem Terrain-Typ |
+| 21 | `data/progression_tree.json` → `nodes[]` | Tech-Tree-Knoten, der das neue Gebäude/Rezept/Gathering **gated** | wenn die Kette ins Tech-Tree soll (Default: **ja**) |
+| 22 | `data/progression_tree.json` → `config.branch_angles_deg` (+ `branch_count`) | Winkel für einen **neuen** Branch | nur bei neuem Branch |
+
+> **⚠️ PROGRESSION-GATE IST DEFAULT-OFFEN, NICHT GESPERRT.** Inhalte, die in
+> `data/progression_tree.json` **nicht** gemappt sind, gelten als **freigeschaltet**
+> (`ProgressionSystem.is_*_unlocked` → `true` bei unbekanntem Content). Eine neu
+> hinzugefügte Kette ist also **sofort verfügbar und NICHT gated**, solange du sie nicht
+> in den Tree einträgst. Das ist Absicht (nichts blockiert still), heißt aber: du musst
+> **bewusst entscheiden**, ob/wie die Kette ins Tech-Tree gehört — siehe Phase 7. Für
+> gameplay-relevante Ketten lautet die Antwort fast immer „ja".
 
 > **`INPUT_RESOURCES` existiert nicht mehr** — Inputs sind seit dem Multi-Rezept-System
 > direkt in jedem Rezept-Dict unter `"inputs"` eingebettet (→ `RECIPES[type][i]["inputs"]`).
@@ -116,6 +126,12 @@ Lege dann für **jede Stufe** der Kette unmissverständlich fest und kläre per
    - Das Fallback-Rezept läuft als zweites Element in `RECIPES[type]` (Index 1+).
    - Typisches Verhältnis: Fallback produziert ~40 % des Outputs in ~3× der Zykluszeit
      (→ ~8× schlechtere Ressourcen-/Zeit-Rate).
+7. **Progression-Gating?** — Soll die Kette hinter dem Tech-Tree liegen (Default: **ja**
+   für jede gameplay-relevante Kette)? Falls ja, ist die **Einbettung eine echte
+   Designentscheidung, die du in Phase 7 explizit mit dem Nutzer klärst** (an welchen
+   vorhandenen Knoten/Branch hängt die Kette, welche Stufen bekommen eigene Knoten, welche
+   Voraussetzungen). Hier in Phase 1 nur grob vormerken (gated: ja/nein, grober Branch);
+   die genauen `prerequisites` werden in Phase 7 per `AskUserQuestion` festgelegt.
 
 **Output dieser Phase — ein Ketten-Spec** (im Chat zeigen, bestätigen lassen):
 
@@ -128,6 +144,7 @@ Stufe 3: Bakery (Gebäude, NPC, Input flour ×2 + tool ×1) → bread
          Kein Fallback (Mehl ist immer ausreichend verfügbar, Tool ist nicht knapp genug)
 Neue Ressourcen: wheat, flour   (bread existiert bereits)
 Neue Gebäude: Wheat Field, Mill, Bakery
+Progression: gated, food-Branch (genaue Prereqs in Phase 7 mit Nutzer klären)
 ```
 
 ---
@@ -244,14 +261,37 @@ im Editor gegen Art Bible prüfen).
 Nutzer nötig. Wir nutzen `POST /v2/create-image-pixen` direkt via Python `urllib` —
 **kein MCP**, kein Polling, synchron, ein Bild pro Call.
 
+#### API-Key-Handling — PFLICHT
+
+> **NIEMALS** den API-Key als Literal in einem Bash-Befehl oder Script hardcoden —
+> der Sandbox-Classifier blockt den Call bei "credential leakage" (Key sichtbar im
+> Shell-Argument). Stattdessen:
+>
+> 1. Key liegt in `~/.pixellab_key` (plain text, eine Zeile). Er ist im Memory unter
+>    `reference_pixellab_api.md` gespeichert.
+> 2. Scripts lesen den Key immer per `Path.home() / ".pixellab_key"` oder
+>    `os.environ.get("PIXELLAB_API_KEY")`.
+> 3. Bash-Calls rufen nur `python3 <script>` auf — kein Key im Command.
+>
+> Wenn `~/.pixellab_key` fehlt: erst per `python3 -c "from pathlib import Path;
+> Path.home().joinpath('.pixellab_key').write_text('<key>')"` schreiben
+> (Key kommt aus Memory), dann Script aufrufen.
+
+**Empfohlenes Vorgehen:** Für jede Kette ein dediziertes Generator-Script anlegen
+(`assets/art/ai-prompts/generate_<slug>_assets.py`), das den Key aus der Datei liest.
+So ist das Script commitbar (kein Geheimnis drin) und direkt per Bash aufrufbar.
+
 #### Vorbereitung: Kontostand prüfen und Freigabe einholen
 
 ```python
+# balance_check.py — Key kommt aus ~/.pixellab_key
 import urllib.request, json
+from pathlib import Path
 
+key = Path.home().joinpath('.pixellab_key').read_text().strip()
 req = urllib.request.Request(
     'https://api.pixellab.ai/v2/balance',
-    headers={'Authorization': 'Bearer REDACTED-PIXELLAB-KEY'},
+    headers={'Authorization': f'Bearer {key}'},
 )
 with urllib.request.urlopen(req) as resp:
     print(json.load(resp))
@@ -280,7 +320,18 @@ Generierungen verbrauchen Credits und sind nicht umkehrbar.
 #### API-Call-Vorlage (für alle Asset-Typen)
 
 ```python
-import urllib.request, json, base64
+# generate_<slug>_assets.py — commitbar, kein Key im Code
+import urllib.request, json, base64, os
+from pathlib import Path
+
+def _load_key():
+    key = os.environ.get('PIXELLAB_API_KEY', '')
+    if not key:
+        key = (Path.home() / '.pixellab_key').read_text().strip()
+    return key
+
+KEY = _load_key()
+HEADERS = {'Authorization': f'Bearer {KEY}', 'Content-Type': 'application/json'}
 
 payload = {
     'description': (
@@ -297,17 +348,15 @@ payload = {
 data = json.dumps(payload).encode('utf-8')
 req = urllib.request.Request(
     'https://api.pixellab.ai/v2/create-image-pixen',
-    data=data,
-    headers={
-        'Authorization': 'Bearer REDACTED-PIXELLAB-KEY',
-        'Content-Type': 'application/json',
-    },
-    method='POST',
+    data=data, headers=HEADERS, method='POST',
 )
 with urllib.request.urlopen(req) as resp:
     d = json.load(resp)
 
-png = base64.b64decode(d['image']['base64'])
+img = d['image']['base64']
+if ',' in img:
+    img = img.split(',', 1)[1]
+png = base64.b64decode(img)
 with open('assets/art/tiles/bld_tile_<name>.png', 'wb') as f:
     f.write(png)
 print(f'Saved ({len(png)} bytes)')
@@ -584,7 +633,118 @@ dynamisch aus dem aktiven Rezept gelesen.
 
 ---
 
-## Phase 7: Design-Docs aktualisieren
+## Phase 7: Progression-Tree-Verzahnung (Gating)
+
+Der `ProgressionSystem`-Autoload (`data/progression_tree.json`) gated **Gebäude, manuelle
+Rezepte, Gebäude-Rezepte und Gathering-Aktionen**. Eine neue Kette muss bewusst eingebettet
+werden — sonst ist sie ungated sofort verfügbar (siehe ⚠️-Hinweis bei der Touch-Liste).
+
+### 7a. Einbettung mit dem Nutzer klären — PFLICHT, vor jedem JSON-Schreiben
+
+**Bevor** du auch nur einen Knoten entwirfst, stelle fest, *wie* die neuen Inhalte im
+Tech-Tree hängen — das ist eine Designentscheidung, keine Ableitung. Lies zuerst den
+Ist-Zustand (`data/progression_tree.json` — vorhandene `node_id`s, Branches, Strähnen),
+und kläre dann **per `AskUserQuestion`**:
+
+1. **Gaten oder offen lassen?** Soll die Kette hinter dem Tree liegen (Default: ja) oder
+   bewusst ungated (sofort verfügbar) bleiben? Bei „offen" → Phase 7 überspringen, im
+   Spec/Zusammenfassung als bewusste Entscheidung vermerken.
+2. **An welchen vorhandenen Knoten/Branch?** Welcher existierende `node_id` ist die
+   Voraussetzung der ersten neuen Stufe (z. B. `agriculture` für eine Nahrungskette,
+   `forestry` für eine Holzkette)? Eigener neuer Branch nur, wenn die Kette ein eigenes
+   Themenfeld eröffnet.
+3. **Knoten-Granularität:** Bekommt **jede Stufe** einen eigenen Knoten (übliche
+   lineare Strähne `stufe1 → stufe2 → stufe3`), oder werden Stufen zu einem Knoten
+   gebündelt?
+4. **Werkzeug-Rezepte:** Falls ein Gebäude `with_tool`/`bare_hands` hat — soll das
+   `with_tool`-Rezept einen **separaten, tool-gegateten Knoten** bekommen (Prereq = der
+   Tool-Knoten wie `axe`/`pickaxe`)? (Projekt-Standardmuster, fast immer ja.)
+5. **Cross-Branch-Voraussetzungen:** Braucht eine Stufe ein Tool/Zwischenprodukt aus einem
+   anderen Branch als Prereq (z. B. „Mühle braucht zusätzlich `axe`")?
+
+Zeige dem Nutzer den vorgeschlagenen **Knoten-Plan** (Knoten, je `prerequisites`, je
+`unlocks`) als kurze Tabelle und hole Freigabe, **bevor** du `data/progression_tree.json`
+editierst. Erst dann 7b/7c.
+
+### 7b. Pro freischaltbarem Element einen `unlocks`-Eintrag
+
+Jeder Tree-Knoten ist ein Objekt in `nodes[]` mit einem `unlocks: []`-Array. Pro Inhaltstyp
+ein Eintrag — die `id`-Strings werden beim Laden gegen die echten Enums/Registries
+aufgelöst (`_build_reverse_lookups`):
+
+| Inhalt | `unlocks`-Eintrag | `id`-Format (MUSS exakt matchen) |
+|--------|-------------------|----------------------------------|
+| Gebäude | `{ "type": "building", "id": "MILL" }` | `BuildingType`-Enum-Name (`building_registry.gd`) |
+| Manuelles Rezept | `{ "type": "manual_recipe", "id": "axe" }` | recipe-`id` aus `crafting_registry` (`RECIPE_*`-Keys) |
+| Gebäude-Rezept | `{ "type": "building_recipe", "id": "MILL:with_tool" }` | `BuildingType`-Name `:` recipe-`id` aus `RECIPES[type][i]["id"]` |
+| Gathering-Aktion | `{ "type": "gather", "id": "HARVEST_WHEAT" }` | `PlayerCharacter.ManualActionType`-Enum-Name |
+
+> **Tippfehler werden NICHT laut.** Eine unbekannte `id` → `push_warning` beim Laden, und
+> der Inhalt bleibt **ungemappt = offen** (still nicht gated). Darum: Enum-Namen 1:1 aus dem
+> Code kopieren, nicht erfinden; recipe-`id`s sind die echten Keys aus
+> `RECIPES`/`crafting_registry` (z. B. `bare_hands`, `with_tool`, `gather_berry`) — keine
+> Phantasienamen.
+
+### 7c. Knoten-Schema und Platzierungs-Regeln
+
+```json
+{
+  "node_id": "milling",                // eindeutig, snake_case
+  "display_name": "Milling",
+  "icon": "🌀",                         // Emoji (es gibt keine Icon-Assets für abstrakte Knoten)
+  "branch": "food",                    // MUSS einen Eintrag in config.branch_angles_deg haben
+  "ring": 5,                           // NUR Autoren-Hinweis — Layout-Ring wird auto-berechnet
+  "prerequisites": ["agriculture"],    // existierende node_ids; treibt Reveal + Unlock-Reihenfolge
+  "unlocks": [ { "type": "building", "id": "MILL" } ],
+  "cost": null
+}
+```
+
+- **`prerequisites` = der Lehrpfad** und müssen auf **existierende** `node_id`s zeigen,
+  sonst schlägt das Laden fehl (fail-fast).
+- **`ring` ist nur ein Hinweis** — der echte Layout-Ring ist die Länge der längsten
+  same-branch-Prereq-Kette (`_compute_visual_rings`). Layout nicht über `ring` erzwingen.
+- **Werkzeug-Rezept-Muster:** Gebäude-Knoten schaltet Gebäude + `bare_hands`-Rezept früh
+  frei; ein separater, tool-gegateter Knoten (Prereq = Tool-Knoten) schaltet `with_tool`
+  frei. Vorbild: `forestry` (→ LUMBER_CAMP + `LUMBER_CAMP:bare_hands`) + `tooled_logging`
+  (Prereq `forestry`+`axe` → `LUMBER_CAMP:with_tool`).
+- **Neuer Branch?** In `config.branch_angles_deg` einen Winkel ergänzen (vorhanden:
+  core 0°, food 270°, materials 180°, crafting 90°, textiles 0°) und `config.branch_count`
+  prüfen.
+
+### 7d. Was NICHT angefasst werden muss
+
+- **Kein Code-Change zum Gaten.** Die Gates (`BuildingRegistry.initiate_build`,
+  `CraftingRegistry.try_craft`, `player_character.try_start_action`,
+  `building_detail_panel`, `inventory_screen`) lesen die Capability-API live; die
+  Reverse-Lookups werden beim Laden gebaut. JSON ergänzen reicht.
+- **Kein Save/Load-Change.** `WorldSaveManager` serialisiert `ProgressionSystem` bereits
+  (als `node_id`-Liste) — neue Knoten landen automatisch im Save.
+
+### 7e. Tests anpassen (falls neuer Content gated wird)
+
+Wird ein **Gathering** oder **Gebäude** neu gated, schlagen Integrationstests fehl, die es
+ungated erwarten — der globale `ProgressionSystem`-Autoload startet hearth-only. Muster
+(vgl. bestehende Suites in `tests/integration/building_system/*` und
+`tests/integration/player_character/*`):
+
+```gdscript
+func before_test() -> void:
+    ProgressionSystem.unlock_all()         # ganzen Baum öffnen — Test prüft Mechanik, nicht Gating
+
+func after_test() -> void:
+    ProgressionSystem.reset_to_initial()   # offenen Baum nicht in andere Suites lecken lassen
+```
+
+Betroffen sind nur Suites, die das neu gegatete Gebäude bauen oder die neue
+Gathering-Aktion starten. Manuelle Rezepte (`try_craft`) werden derzeit von keinem Test
+berührt.
+
+Jede JSON-/Test-Änderung als Diff zeigen und freigeben lassen.
+
+---
+
+## Phase 8: Design-Docs aktualisieren
 
 - **`design/gdd/recipe-database.md`**: neue Rezepte in die Implementation-Note / Beispiele
   aufnehmen (es ist die Single Source of Truth für Rezepte). Bei Gebäuden mit Fallback
@@ -592,6 +752,9 @@ dynamisch aus dem aktiven Rezept gelesen.
 - **`design/gdd/building-system.md`**: neue Gebäudetypen + ihre `RECIPES`-Einträge
   dokumentieren. Fallback-Rezepte explizit als Design-Absicht vermerken.
 - Aktualisiere ggf. `design/gdd/systems-index.md` und `data/resources.json`-bezogene Docs.
+- **Progression:** Wurden in Phase 7 Tree-Knoten ergänzt (oder die Kette bewusst ungated
+  gelassen), vermerke das in der Progression-Spec (`design/quick-specs/progression-tree-*.md`
+  bzw. der späteren GDD) — neue `node_id`s, ihre Prereqs und welche Inhalte sie freischalten.
 - **Neues, eigenständiges Mechanik-Verhalten?** Dann via `/architecture-decision` einen ADR
   in `docs/architecture/` erwägen. Reine Daten-/Tabellen-Erweiterung einer bestehenden
   Mechanik braucht keinen neuen ADR.
@@ -600,7 +763,7 @@ Jede Doc-Änderung als Diff zeigen und freigeben lassen.
 
 ---
 
-## Phase 8: Verifikation in Godot
+## Phase 9: Verifikation in Godot
 
 Es gibt **kein garantiert lokales Godot-Binary** — Verifikation ist ein expliziter Schritt,
 nicht „läuft schon".
@@ -608,7 +771,8 @@ nicht „läuft schon".
 1. **Statische Prüfung:** Alle berührten Tabellen gegen die Touch-Liste durchgehen — pro
    neuem Gebäude müssen #2–#6, #9, #10, #12, #13, #14 einen Eintrag haben (plus #7/#8 je
    nach Typ). Pro neuer Ressource ohne `world_icon_path` muss #17+#18 erfüllt sein (UI-Icon
-   für Carrier-Animation). Fehlt einer, nachtragen.
+   für Carrier-Animation). Ist die Kette gated, muss #21 (Tree-Knoten) vorhanden sein und
+   jede `unlocks`-`id` exakt einem Enum-/recipe-Namen entsprechen. Fehlt einer, nachtragen.
 2. **Rezept-Selector prüfen (bei Fallback-Gebäuden):** Im Godot-Editor Gebäude platzieren
    und das BuildingDetailPanel öffnen — der OptionButton muss sichtbar sein und alle
    Rezept-Labels korrekt anzeigen. Wechsel zwischen Rezepten testen:
@@ -621,9 +785,14 @@ nicht „läuft schon".
 4. **Screenshot** des Baumenüs + Detail-Panels gegen die Erwartung (richtiges Emoji,
    richtiger Rezept-Selector, korrekte Inputs/Outputs, Tick-Fortschritt). Visuelle
    Korrektheit wird per Screenshot belegt, nicht headless.
-5. Falls eine Test-Suite gewünscht wird (in diesem Skill bewusst nicht erzwungen): die
+5. **Gating prüfen (falls gated):** 🌳-Button öffnen → der/die neue(n) Knoten erscheinen
+   an der erwarteten Stelle der Strähne mit korrekten Prereq-Kanten. Vor dem Unlock darf
+   das neue Gebäude **nicht** im Baumenü und die neue Gathering-Aktion nicht im
+   Tile-Panel erscheinen; nach dem Unlock schon. Save/Load-Round-Trip: Knoten freischalten
+   → speichern → laden → Unlock-Status bleibt erhalten.
+6. Falls eine Test-Suite gewünscht wird (in diesem Skill bewusst nicht erzwungen): die
    Integrationstests in `tests/integration/building_system/production_cycles_test.gd`
-   spiegeln das Muster — dort ansetzen.
+   spiegeln das Muster — dort ansetzen (inkl. `unlock_all()`/`reset_to_initial()` aus 7e).
 
 ---
 
@@ -642,10 +811,11 @@ Balancing:            <base_cycle_ticks je Rezept>, ~<n> Zyklen/Tag
 AI-Prompts:           assets/art/ai-prompts/<slug>-prompts.md (<n> Assets dokumentiert)
 Assets generiert:     <n> PNGs via PixelLab API (pixen, 64×64) — bld_tile_*.png + ui/icons/resources/*.png
 UI:                   Baumenü + Icon + Logistik-Emoji ✓
-Design-Docs:          recipe-database.md, building-system.md ✓
+Progression-Tree:     <node_ids + Prereqs> in data/progression_tree.json [oder "ungated (bewusst offen)"]
+Design-Docs:          recipe-database.md, building-system.md [, progression-tree-spec] ✓
 
-Touch-Liste-Check: <jede berührte Zeile #x ✓>
-Offen:             Godot-Verifikation (Screenshot) · ggf. erneute Generierung bei Stil-Abweichung
+Touch-Liste-Check: <jede berührte Zeile #x ✓ — inkl. #21/#22 falls gated>
+Offen:             Godot-Verifikation (Screenshot + Gating/Save-Load) · ggf. erneute Generierung bei Stil-Abweichung
 ```
 
 ## Kollaborationsprotokoll
@@ -654,7 +824,9 @@ Offen:             Godot-Verifikation (Screenshot) · ggf. erneute Generierung b
   schreiben?". Das gesamte Mehrdateien-Changeset braucht Freigabe.
 - **Nichts hardcoden** — alle Gameplay-Werte in Daten/Tabellen, nie inline (Gameplay-Code-Rule).
 - **Reihenfolge respektieren** — erst Kette+Ressourcen klären (Phase 1–2), dann Assets/Balancing,
-  dann Code, dann UI, dann Docs, dann Verifikation. Code vor geklärter Kette = Drift.
+  dann Code, dann UI, dann Progression-Gating, dann Docs, dann Verifikation. Code vor geklärter
+  Kette = Drift; Progression-Knoten erst, wenn die Enum-/recipe-Namen im Code feststehen
+  (die `unlocks`-`id`s müssen exakt matchen).
 - **Sync-Tabellen sind ein Vertrag** — wird eine Tabelle ergänzt, müssen alle korrespondierenden
   ergänzt werden. Die Touch-Liste am Ende Zeile für Zeile abhaken.
 - **Kein `INPUT_RESOURCES`-Eintrag** — Inputs gehören ins Rezept-Dict, nicht in eine separate Tabelle.

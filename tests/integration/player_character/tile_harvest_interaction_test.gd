@@ -22,6 +22,17 @@ func _make_map_root() -> MapRoot:
 	return MapRoot.new()
 
 
+func before_test() -> void:
+	# Open the whole tech tree so the progression gate never blocks gather actions
+	# (HARVEST_FIBER/PICK_BERRIES are gated); these tests cover dispatch, not gating.
+	ProgressionSystem.unlock_all()
+
+
+func after_test() -> void:
+	# Restore the game-start unlock state so the open tree doesn't leak into other suites.
+	ProgressionSystem.reset_to_initial()
+
+
 # ---- Terrain → action mapping (AC1–AC6) -------------------------------------
 
 ## AC1: TREE tile maps to CHOP_TREE.

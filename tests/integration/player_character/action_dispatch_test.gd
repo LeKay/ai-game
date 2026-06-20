@@ -28,6 +28,17 @@ func _set_energy(pc: PlayerCharacter, value: int) -> void:
 		pc._energy_pool.spend_unchecked(pc.get_current_energy() - value)
 
 
+func before_test() -> void:
+	# Open the whole tech tree so the progression gate never blocks gather actions
+	# (CHOP_TREE/PICK_BERRIES/MINE_STONE are gated); these tests cover dispatch, not gating.
+	ProgressionSystem.unlock_all()
+
+
+func after_test() -> void:
+	# Restore the game-start unlock state so the open tree doesn't leak into other suites.
+	ProgressionSystem.reset_to_initial()
+
+
 # ---- AC1: Action starts and energy is deducted ------------------------------
 
 func test_ac1_chop_tree_starts_and_deducts_energy() -> void:

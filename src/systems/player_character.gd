@@ -39,6 +39,7 @@ enum ManualActionType {
 	PLANT_SEED,  ## Plants a seed on an EMPTY tile; terrain grows after SEED_GROWTH_TICKS ticks.
 	HARVEST_WHEAT,  ## Harvests a WHEAT field tile → wheat (+ chance of wheat_seed byproduct).
 	CLEAR_WHEAT,    ## Clears a WHEAT field tile for building → wheat (+ wheat_seed byproduct).
+	MINE_CLAY,      ## Mines a revealed CLAY pit tile → clay. Unlocked by the Prospecting node.
 }
 
 enum StartResult {
@@ -48,6 +49,7 @@ enum StartResult {
 	INSUFFICIENT_ENERGY,
 	ARCHITECT_LOCKED,
 	TOOL_REQUIRED,
+	PROGRESSION_LOCKED,  ## gather action not yet unlocked in the Progression Tree
 }
 
 enum RelocationResult {
@@ -285,6 +287,7 @@ func _ready() -> void:
 		ManualActionType.PLANT_SEED:    ManualActionConfig.new(ManualActionType.PLANT_SEED,    30,  8, 0, &"",     false),
 		ManualActionType.HARVEST_WHEAT: ManualActionConfig.new(ManualActionType.HARVEST_WHEAT, 45,  6, 2, &"wheat", false),
 		ManualActionType.CLEAR_WHEAT:   ManualActionConfig.new(ManualActionType.CLEAR_WHEAT,  400, 40, 20, &"wheat", false),
+		ManualActionType.MINE_CLAY:     ManualActionConfig.new(ManualActionType.MINE_CLAY,    60, 10, 3, &"clay",  false),
 	}
 
 
@@ -402,6 +405,13 @@ func try_start_action(action_type: int, tile: Vector2i = Vector2i(-1, -1)) -> in
 	if config == null:
 		return StartResult.BLOCKED_SLOT
 
+	# Progression gate (command layer): reject gather actions not yet unlocked in the
+	# tech tree. Unmapped actions (clear/forage) default to unlocked. Rejected before
+	# queueing so a locked action can never enter the queue.
+	if not ProgressionSystem.is_gather_unlocked(action_type):
+		action_failed.emit(action_type, _start_result_to_reason(StartResult.PROGRESSION_LOCKED))
+		return StartResult.PROGRESSION_LOCKED
+
 	if _action_slot.state != ActionSlot.State.FREE:
 		if _action_queue.size() >= MAX_QUEUE_SIZE:
 			action_failed.emit(action_type, _start_result_to_reason(StartResult.BLOCKED_SLOT))
@@ -482,6 +492,10 @@ func _try_start_construct(tile: Vector2i) -> int:
 
 
 func _try_start_construct_path(tile: Vector2i) -> int:
+	# Progression gate (command layer): laying paths is unlocked by the Paving node.
+	if not ProgressionSystem.is_gather_unlocked(ManualActionType.CONSTRUCT_PATH):
+		action_failed.emit(ManualActionType.CONSTRUCT_PATH, _start_result_to_reason(StartResult.PROGRESSION_LOCKED))
+		return StartResult.PROGRESSION_LOCKED
 	if _action_slot.state != ActionSlot.State.FREE:
 		if _action_queue.size() >= MAX_QUEUE_SIZE:
 			action_failed.emit(ManualActionType.CONSTRUCT_PATH, _start_result_to_reason(StartResult.BLOCKED_SLOT))
@@ -942,6 +956,7 @@ func _start_result_to_reason(result: int) -> String:
 		StartResult.INSUFFICIENT_ENERGY:  return "Not enough energy"
 		StartResult.ARCHITECT_LOCKED:     return "Architect mode — manual gathering locked"
 		StartResult.TOOL_REQUIRED:        return "No tool available — craft one first"
+		StartResult.PROGRESSION_LOCKED:   return "Locked — unlock in the tech tree"
 	return "Unknown"
 
 
@@ -963,4 +978,15 @@ func get_action_label(action_type: int) -> String:
 		ManualActionType.PLANT_SEED:         return "Plant"
 		ManualActionType.HARVEST_WHEAT:      return "Harvest"
 		ManualActionType.CLEAR_WHEAT:        return "Clear"
+		ManualActionType.MINE_CLAY:          return "Mine"
 	return "Action"
+
+
+## Returns the primary output resource id of a manual action, or &"" if it has none
+## (forage rolls a random resource; construct/plant produce nothing direct). Used by the
+## Progression Tree to map gather unlocks back to the resources they make available.
+func get_action_output_resource(action_type: int) -> StringName:
+	var config: ManualActionConfig = _action_configs.get(action_type, null)
+	if config == null:
+		return &""
+	return config.output_resource

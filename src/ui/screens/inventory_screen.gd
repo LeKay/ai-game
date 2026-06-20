@@ -82,6 +82,8 @@ func _exit_tree() -> void:
 		BuildingRegistry.upgrade_installed.disconnect(_on_upgrade_changed_iv)
 	if BuildingRegistry.upgrade_removed.is_connected(_on_upgrade_changed_iv):
 		BuildingRegistry.upgrade_removed.disconnect(_on_upgrade_changed_iv)
+	if ProgressionSystem.node_unlocked.is_connected(_on_progression_unlocked):
+		ProgressionSystem.node_unlocked.disconnect(_on_progression_unlocked)
 	var npc_sys: Node = NPCSystem
 	if npc_sys != null:
 		if npc_sys.npc_recruited.is_connected(_on_npc_recruited_iv):
@@ -342,6 +344,7 @@ func _connect_signals() -> void:
 	CraftingRegistry.recipe_crafted.connect(_on_crafting_completed)
 	BuildingRegistry.upgrade_installed.connect(_on_upgrade_changed_iv)
 	BuildingRegistry.upgrade_removed.connect(_on_upgrade_changed_iv)
+	ProgressionSystem.node_unlocked.connect(_on_progression_unlocked)
 	var npc_sys: Node = NPCSystem
 	if npc_sys != null:
 		npc_sys.npc_recruited.connect(_on_npc_recruited_iv)
@@ -641,17 +644,22 @@ func _building_list() -> Array[Dictionary]:
 	})
 
 	# Path entry — free to place, no resource cost.
-	result.append({
-		&"building_type":  PathSystem.PATH_SENTINEL,
-		&"display_name":   "Path",
-		&"cost":           {},
-		&"available":      {},
-		&"can_afford":     true,
-		&"energy_cost":    0,
-		&"current_energy": current_energy,
-	})
+	# Progression gate (UI layer): hidden until the Paving node unlocks path-laying.
+	if ProgressionSystem.is_gather_unlocked(PlayerCharacter.ManualActionType.CONSTRUCT_PATH):
+		result.append({
+			&"building_type":  PathSystem.PATH_SENTINEL,
+			&"display_name":   "Path",
+			&"cost":           {},
+			&"available":      {},
+			&"can_afford":     true,
+			&"energy_cost":    0,
+			&"current_energy": current_energy,
+		})
 
 	for btype: int in BuildingRegistry.BUILDABLE_TYPES:
+		# Progression gate (UI layer): hide building types not yet unlocked.
+		if not ProgressionSystem.is_building_unlocked(btype):
+			continue
 		var cost: Dictionary = BuildingRegistry.BUILD_COST.get(btype, {})
 		var available: Dictionary = {}
 		var can_afford: bool = true
@@ -699,6 +707,9 @@ func _crafting_list() -> Array[Dictionary]:
 	var current_energy: int = player.get_current_energy() if player != null else 0
 	var result: Array[Dictionary] = []
 	for recipe_id: StringName in CraftingRegistry.RECIPE_ORDER:
+		# Progression gate (UI layer): hide hand-craft recipes not yet unlocked.
+		if not ProgressionSystem.is_recipe_unlocked(recipe_id):
+			continue
 		var cost: Dictionary        = CraftingRegistry.RECIPE_COST.get(recipe_id, {})
 		var energy_cost: int        = CraftingRegistry.RECIPE_ENERGY_COST.get(recipe_id, 0)
 		var display_name: String    = CraftingRegistry.RECIPE_DISPLAY_NAME.get(recipe_id, str(recipe_id))
@@ -733,6 +744,9 @@ func _on_recipe_selected(recipe_id: StringName) -> void:
 	var result: int = CraftingRegistry.try_craft(recipe_id)
 	if result == CraftingRegistry.CraftResult.NO_STORAGE:
 		_spawn_craft_float("No storage available!", Color("#E05050"))
+		return
+	if result == CraftingRegistry.CraftResult.LOCKED:
+		_spawn_craft_float("Locked — unlock in the tech tree", Color("#E05050"))
 		return
 	if result != CraftingRegistry.CraftResult.SUCCESS:
 		return
@@ -787,6 +801,13 @@ func _on_crafting_bench_selected(index: int) -> void:
 
 func _on_upgrade_changed_iv(_building_id: String, _upgrade_id: StringName) -> void:
 	if _is_open and _active_tab == 1:
+		_refresh_zone3()
+
+
+## A tech-tree node was unlocked — rebuild the active tab so newly-unlocked
+## buildings/recipes appear immediately (the build & craft tabs are gated lists).
+func _on_progression_unlocked(_node_id: StringName) -> void:
+	if _is_open:
 		_refresh_zone3()
 
 

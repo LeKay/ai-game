@@ -44,6 +44,15 @@ func before_test() -> void:
 	_registry._tick_system = null  # tick system not needed for placement tests
 	_registry.init_dependencies(_grid, _player)
 
+	# Open the whole tech tree so the progression gate never blocks placement here;
+	# these tests cover placement/construction mechanics, not gating.
+	ProgressionSystem.unlock_all()
+
+
+func after_test() -> void:
+	# Restore the game-start unlock state so the open tree doesn't leak into other suites.
+	ProgressionSystem.reset_to_initial()
+
 
 # ---- Helper: seed a container with resources --------------------------------
 

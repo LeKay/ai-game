@@ -42,6 +42,7 @@ var _rename_input:    LineEdit
 var _npc_state_lbl:     Label
 var _npc_efficiency_lbl: Label
 var _npc_level_lbl:     Label
+var _levelup_btn:       Button
 var _xp_bar_outer:      Control
 var _xp_bar_fill:       ColorRect
 var _xp_label:          Label
@@ -108,6 +109,8 @@ func open_for_npc(npc_id: StringName, npc_state: int) -> void:
 		NPCSystem.npc_leveled_up.connect(_on_npc_leveled_up)
 	if not NPCSystem.npc_perk_chosen.is_connected(_on_npc_perk_chosen):
 		NPCSystem.npc_perk_chosen.connect(_on_npc_perk_chosen)
+	if not ProgressionSystem.npc_level_cap_changed.is_connected(_on_npc_level_cap_changed):
+		ProgressionSystem.npc_level_cap_changed.connect(_on_npc_level_cap_changed)
 	_animate_in()
 
 
@@ -122,6 +125,8 @@ func close() -> void:
 		NPCSystem.npc_leveled_up.disconnect(_on_npc_leveled_up)
 	if NPCSystem.npc_perk_chosen.is_connected(_on_npc_perk_chosen):
 		NPCSystem.npc_perk_chosen.disconnect(_on_npc_perk_chosen)
+	if ProgressionSystem.npc_level_cap_changed.is_connected(_on_npc_level_cap_changed):
+		ProgressionSystem.npc_level_cap_changed.disconnect(_on_npc_level_cap_changed)
 	_animate_out()
 	panel_closed.emit()
 
@@ -164,6 +169,31 @@ func _refresh_xp() -> void:
 		_xp_bar_fill.anchor_right = clampf(float(into) / float(span), 0.0, 1.0)
 		_xp_bar_fill.color        = COLOR_XP_BAR_FILL
 		_xp_label.text            = "%d / %d XP" % [into, span]
+	_refresh_levelup_btn()
+
+
+## Shows the header ⬆️ button when this NPC can be levelled now (cap raised, bar full) or still owes
+## a perk choice. Tapping it raises the level and opens the shared Perk Choice panel.
+func _refresh_levelup_btn() -> void:
+	if _levelup_btn == null:
+		return
+	_levelup_btn.visible = NPCSystem.can_level_up(_npc_id) \
+			or NPCSystem.get_pending_perk_choices(_npc_id) > 0
+
+
+func _on_levelup_pressed() -> void:
+	if NPCSystem.can_level_up(_npc_id):
+		NPCSystem.level_up(_npc_id)
+	var panel: Node = get_tree().get_first_node_in_group(&"perk_choice_panel")
+	if panel != null:
+		panel.begin_for_npc(_npc_id)  # resolve only this NPC's one choice, no chaining
+	_refresh_xp()
+
+
+## A cap node was unlocked in the progression tree — an open panel may now allow a level-up.
+func _on_npc_level_cap_changed(_cap: int) -> void:
+	if visible:
+		_refresh_levelup_btn()
 
 
 func _on_npc_xp_gained(npc_id: StringName, _total: int, _into: int, _span: int) -> void:
@@ -179,6 +209,7 @@ func _on_npc_leveled_up(npc_id: StringName, _new_level: int) -> void:
 func _on_npc_perk_chosen(npc_id: StringName, _perk_id: StringName) -> void:
 	if npc_id == _npc_id and visible:
 		_refresh_supply()
+		_refresh_levelup_btn()
 
 # ── Supply grid (Daily Food + perks, uniform cells) ─────────────────────────────
 
@@ -563,6 +594,7 @@ func _build_ui() -> void:
 	add_child(_panel)
 
 	var body_margin := MarginContainer.new()
+	body_margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body_margin.add_theme_constant_override("margin_left", 14)
 	body_margin.add_theme_constant_override("margin_right", 14)
 	body_margin.add_theme_constant_override("margin_top", 12)
@@ -602,6 +634,17 @@ func _build_ui() -> void:
 	_npc_level_lbl.add_theme_font_size_override("font_size", 12)
 	_npc_level_lbl.add_theme_color_override("font_color", COLOR_XP_BAR_MAX)
 	level_row.add_child(_npc_level_lbl)
+
+	# ⬆️ level-up button — appears when a newly raised cap lets this NPC level up while it already
+	# holds a full bar, or when a perk choice from an auto-level is still unresolved. See _refresh_levelup_btn().
+	_levelup_btn = Button.new()
+	_levelup_btn.text         = "⬆"
+	_levelup_btn.tooltip_text = "Level up"
+	_levelup_btn.focus_mode   = Control.FOCUS_NONE
+	_levelup_btn.visible      = false
+	_levelup_btn.add_theme_font_size_override("font_size", 12)
+	_levelup_btn.pressed.connect(_on_levelup_pressed)
+	level_row.add_child(_levelup_btn)
 
 	_xp_label = Label.new()
 	_xp_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL

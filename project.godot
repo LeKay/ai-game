@@ -42,10 +42,6 @@ window/size/viewport_height=1080
 window/stretch/mode="canvas_items"
 window/handheld/layout="horizontal"
 
-[gui]
-
-theme/custom="res://assets/ui/ui_theme.tres"
-
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/gdUnit4/plugin.cfg")
@@ -53,6 +49,10 @@ enabled=PackedStringArray("res://addons/gdUnit4/plugin.cfg")
 [gdunit4]
 
 settings/test/test_timeout_seconds=10
+
+[gui]
+
+theme/custom="res://assets/ui/ui_theme.tres"
 
 [input]
 

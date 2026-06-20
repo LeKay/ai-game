@@ -415,6 +415,73 @@
 	  "glyph": "🫙",
 	  "description": "Ground wheat flour, ready for baking.",
 	  "tags": []
+	},
+	{
+	  "id": "pottery",
+	  "display_name": "Pottery",
+	  "perk_eligible": true,
+	  "category": "production_good",
+	  "subcategory": "trade_good",
+	  "stack_limit": 50,
+	  "weight": 0.8,
+	  "base_value": 15,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/pottery.png",
+	  "glyph": "🏺",
+	  "description": "Fired clay vessels. Used by settlers as everyday household goods.",
+	  "tags": [
+		"trade_good"
+	  ]
+	},
+	{
+	  "id": "knife",
+	  "display_name": "Knife",
+	  "category": "production_good",
+	  "subcategory": "tool",
+	  "stack_limit": 10,
+	  "weight": 0.8,
+	  "base_value": 15,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/knife.png",
+	  "glyph": "🔪",
+	  "description": "A sharp blade for processing hides in the tannery.",
+	  "tags": [
+		"tool"
+	  ]
+	},
+	{
+	  "id": "leather",
+	  "display_name": "Leather",
+	  "category": "production_good",
+	  "subcategory": "intermediate",
+	  "stack_limit": 99,
+	  "weight": 1.2,
+	  "base_value": 10,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/leather.png",
+	  "glyph": "🟫",
+	  "description": "Tanned hide. Soft and durable, used to craft leather garments.",
+	  "tags": []
+	},
+	{
+	  "id": "hunting_bow",
+	  "display_name": "Hunting Bow",
+	  "category": "production_good",
+	  "subcategory": "tool",
+	  "stack_limit": 10,
+	  "weight": 1.5,
+	  "base_value": 20,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/hunting_bow.png",
+	  "glyph": "🏹",
+	  "description": "A simple wooden bow strung with plant fiber. Required by the Hunting Lodge for efficient hunts.",
+	  "tags": [
+		"tool"
+	  ]
 	}
   ]
 }

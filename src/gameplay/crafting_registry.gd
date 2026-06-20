@@ -11,57 +11,68 @@ enum CraftResult {
 	INSUFFICIENT_ENERGY,
 	NO_STORAGE,
 	ALREADY_CRAFTING,
+	LOCKED,  ## recipe not yet unlocked in the Progression Tree
 }
 
 # ---- Recipe tables ----------------------------------------------------------
 
 ## recipe_id → material cost { resource_id: quantity }
 const RECIPE_COST: Dictionary = {
-	&"axe":      {&"wood": 3, &"stone": 2},
-	&"pickaxe":  {&"stone": 3, &"wood": 1},
-	&"spindle":  {&"wood": 2, &"fiber": 2},
-	&"cloth":    {&"fiber": 4},
-	&"clothing": {&"cloth": 3, &"fiber": 2},
+	&"axe":         {&"wood": 3, &"stone": 2},
+	&"pickaxe":     {&"stone": 3, &"wood": 1},
+	&"knife":       {&"wood": 2, &"stone": 1},
+	&"spindle":     {&"wood": 2, &"fiber": 2},
+	&"cloth":       {&"fiber": 4},
+	&"clothing":    {&"cloth": 3, &"fiber": 2},
+	&"hunting_bow": {&"wood": 2, &"fiber": 3},
 }
 
 ## recipe_id → flat energy cost
 const RECIPE_ENERGY_COST: Dictionary = {
-	&"axe":      20,
-	&"pickaxe":  20,
-	&"spindle":  15,
-	&"cloth":    20,
-	&"clothing": 25,
+	&"axe":         20,
+	&"pickaxe":     20,
+	&"knife":       20,
+	&"spindle":     15,
+	&"cloth":       20,
+	&"clothing":    25,
+	&"hunting_bow": 20,
 }
 
 ## recipe_id → tick cost (1 tick ≈ 1 minute game-time).
 const RECIPE_TICKS: Dictionary = {
-	&"axe":      120,
-	&"pickaxe":  120,
-	&"spindle":  90,
-	&"cloth":    180,
-	&"clothing": 240,
+	&"axe":         120,
+	&"pickaxe":     120,
+	&"knife":       90,
+	&"spindle":     90,
+	&"cloth":       180,
+	&"clothing":    240,
+	&"hunting_bow": 120,
 }
 
 ## recipe_id → output { resource_id: StringName, quantity: int }
 const RECIPE_OUTPUT: Dictionary = {
-	&"axe":      {&"resource_id": &"axe",      &"quantity": 1},
-	&"pickaxe":  {&"resource_id": &"pickaxe",  &"quantity": 1},
-	&"spindle":  {&"resource_id": &"spindle",  &"quantity": 1},
-	&"cloth":    {&"resource_id": &"cloth",    &"quantity": 1},
-	&"clothing": {&"resource_id": &"clothing", &"quantity": 1},
+	&"axe":         {&"resource_id": &"axe",         &"quantity": 1},
+	&"pickaxe":     {&"resource_id": &"pickaxe",     &"quantity": 1},
+	&"knife":       {&"resource_id": &"knife",       &"quantity": 1},
+	&"spindle":     {&"resource_id": &"spindle",     &"quantity": 1},
+	&"cloth":       {&"resource_id": &"cloth",       &"quantity": 1},
+	&"clothing":    {&"resource_id": &"clothing",    &"quantity": 1},
+	&"hunting_bow": {&"resource_id": &"hunting_bow", &"quantity": 1},
 }
 
 ## recipe_id → display name (shown in CraftingGrid)
 const RECIPE_DISPLAY_NAME: Dictionary = {
-	&"axe":      "Craft Axe",
-	&"pickaxe":  "Craft Pickaxe",
-	&"spindle":  "Craft Spindle",
-	&"cloth":    "Weave Cloth",
-	&"clothing": "Sew Clothing",
+	&"axe":         "Craft Axe",
+	&"pickaxe":     "Craft Pickaxe",
+	&"knife":       "Craft Knife",
+	&"spindle":     "Craft Spindle",
+	&"cloth":       "Weave Cloth",
+	&"clothing":    "Sew Clothing",
+	&"hunting_bow": "Craft Hunting Bow",
 }
 
 ## Ordered list for display in CraftingGrid
-const RECIPE_ORDER: Array[StringName] = [&"axe", &"pickaxe", &"spindle", &"cloth", &"clothing"]
+const RECIPE_ORDER: Array[StringName] = [&"axe", &"pickaxe", &"knife", &"spindle", &"cloth", &"clothing", &"hunting_bow"]
 
 # ---- Signals ----------------------------------------------------------------
 
@@ -109,6 +120,10 @@ func _exit_tree() -> void:
 func try_craft(recipe_id: StringName) -> int:
 	if _is_crafting:
 		return CraftResult.ALREADY_CRAFTING
+
+	# Progression gate (command layer): reject recipes not yet unlocked in the tech tree.
+	if not ProgressionSystem.is_recipe_unlocked(recipe_id):
+		return CraftResult.LOCKED
 
 	var cost: Dictionary   = RECIPE_COST.get(recipe_id, {})
 	var energy_cost: int   = RECIPE_ENERGY_COST.get(recipe_id, 0)
