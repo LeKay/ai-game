@@ -44,11 +44,16 @@ jobs:
       - name: Import resources
         run: godot --headless --import || true
 
+      # Godot 4.6 headless tends to crash (signal 11) on shutdown *after* the
+      # export pack is written. Tolerate the non-zero exit, then verify the
+      # actual web output exists — that, not the exit code, decides success.
       - name: Web export
         run: |
           mkdir -v -p build/web
-          godot --headless --verbose --export-release "Web" build/web/index.html
-          test -f build/web/index.html  # fail loudly if the export produced nothing
+          godot --headless --verbose --export-release "Web" build/web/index.html || echo "godot exited $? (continuing — verifying output)"
+          echo "=== build/web contents ==="
+          ls -la build/web || true
+          test -f build/web/index.html && test -f build/web/index.wasm && test -f build/web/index.pck
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
