@@ -167,7 +167,10 @@ const _ORTHO_OFFSETS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector
 ## Locks TerrainLayer on completion — assert fires on any subsequent call.
 ## fertility_override: pass a fixed fertility set (e.g. STARTING_FERTILITY) to skip the
 ## random roll; an empty array rolls FERTILITY_COUNT entries from FERTILITY_POOL.
-func generate(world_seed: int, fertility_override: Array = []) -> void:
+## coast_edge: forces a coastline on a specific edge (0 top, 1 bottom, 2 left, 3 right),
+## bypassing the random _COAST_CHANCE roll. Used by the Overworld so a coast tile's tactical
+## map faces the ocean the same way it does on the world map. -1 keeps the default random coast.
+func generate(world_seed: int, fertility_override: Array = [], coast_edge: int = -1) -> void:
 	assert(not _generation_done, "generate() called after terrain was locked")
 
 	var terrain: Array
@@ -176,7 +179,7 @@ func generate(world_seed: int, fertility_override: Array = []) -> void:
 		terrain = _sample_noise(world_seed + attempt)
 		terrain = _smooth_terrain(terrain, world_seed + attempt)
 		terrain = _cleanup_clusters(terrain)
-		terrain = _carve_water(terrain, world_seed + attempt)
+		terrain = _carve_water(terrain, world_seed + attempt, coast_edge)
 		if _meets_minimums(terrain) and _meets_water_constraints(terrain):
 			succeeded = true
 			break
@@ -447,9 +450,9 @@ func _blocks_occupation(type: int) -> bool:
 ## Step 4.5: carves WATER into the working terrain array. Order is coast → lakes → river
 ## so the river (mandatory) is laid last and can flow into earlier features. Each feature
 ## uses a dedicated seed-offset RNG for determinism (same seed → identical water layout).
-func _carve_water(terrain: Array, water_seed: int) -> Array:
+func _carve_water(terrain: Array, water_seed: int, coast_edge: int = -1) -> Array:
 	var result := _copy_terrain(terrain)
-	_carve_coast(result, water_seed)
+	_carve_coast(result, water_seed, coast_edge)
 	_carve_lakes(result, water_seed)
 	_carve_river(result, water_seed)
 	return result
@@ -457,12 +460,18 @@ func _carve_water(terrain: Array, water_seed: int) -> Array:
 
 ## Optional coastline: with prob _COAST_CHANCE, floods a band of depth _COAST_DEPTH inward
 ## from one random edge. The inner boundary jitters by ±1 per row/column so it isn't straight.
-func _carve_coast(terrain: Array, water_seed: int) -> void:
+## forced_edge >= 0 (0 top, 1 bottom, 2 left, 3 right) overrides both the probability roll and
+## the random edge pick — used by the Overworld to align a coast tile's ocean direction.
+func _carve_coast(terrain: Array, water_seed: int, forced_edge: int = -1) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = water_seed + _COAST_SEED_OFFSET
-	if rng.randf() >= _COAST_CHANCE:
-		return
-	var edge: int = rng.randi_range(0, 3)  # 0 top, 1 bottom, 2 left, 3 right
+	var edge: int
+	if forced_edge >= 0:
+		edge = forced_edge
+	else:
+		if rng.randf() >= _COAST_CHANCE:
+			return
+		edge = rng.randi_range(0, 3)  # 0 top, 1 bottom, 2 left, 3 right
 	# Iterate along the edge; `i` runs across the chosen edge, `d` inward to a jittered depth.
 	for i in range(GRID_SIZE):
 		var depth: int = maxi(0, _COAST_DEPTH + rng.randi_range(-1, 1))

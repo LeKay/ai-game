@@ -34,6 +34,7 @@ LogisticsSystem="*res://src/systems/logistics/logistics_system.gd"
 WildSystem="*res://src/systems/wild_system.gd"
 ProgressionSystem="*res://src/systems/progression_system.gd"
 TaskSystem="*res://src/systems/task_system.gd"
+OverworldSystem="*res://src/systems/overworld_system.gd"
 
 [display]
 
