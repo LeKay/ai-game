@@ -45,6 +45,8 @@ var _hud: HUD = null
 var _map_select_highlight: Sprite2D = null
 var _route_lines: RouteLines = null
 var _npc_overlay: NpcOverlay = null
+## Top-right fertility icons; re-initialized after the overworld start tile generates the map.
+var _fertility_indicator: FertilityIndicator = null
 
 
 
@@ -89,14 +91,15 @@ func _ready() -> void:
 	grid.terrain_tile_changed.connect(_on_terrain_tile_changed)
 	if WorldSaveManager.has_pending_load():
 		WorldSaveManager.apply_pending_load()
+		_terrain_renderer.sync(grid, background_layer, terrain_layer)
+		_resource_badges._spawn_resource_badges()
 	else:
-		grid.generate(randi(), WorldGrid.STARTING_FERTILITY)
-		# Keep the starter building off water/impassable tiles after water carving.
-		var starter_tile: Vector2i = grid.find_nearest_passable_tile(Vector2i(12, 12))
-		_registry.place_starter_building(BuildingRegistry.BuildingType.COLLECTION_POINT, starter_tile)
-		WildSystem.initialize_for_new_map()
-	_terrain_renderer.sync(grid, background_layer, terrain_layer)
-	_resource_badges._spawn_resource_badges()
+		# New game: the player picks a start tile on the overworld first. The tactical map is
+		# generated from that tile in _on_new_game_start_selected (deferred so every node's
+		# _ready — including the overworld view — has run before the picker opens).
+		OverworldSystem.generate(randi())
+		OverworldSystem.start_selected.connect(_on_new_game_start_selected, CONNECT_ONE_SHOT)
+		call_deferred(&"_begin_new_game_start_pick")
 	_player.action_started.connect(_action_feedback._on_action_started)
 	_player.action_queued.connect(_action_feedback._on_action_queued)
 	_player.action_completed.connect(_action_feedback._on_action_completed)
@@ -119,12 +122,38 @@ func _ready() -> void:
 	wild_overlay.name = "WildOverlay"
 	add_child(wild_overlay)
 	wild_overlay.init_dependencies(grid)
-	var fertility_indicator := FertilityIndicator.new()
-	fertility_indicator.name = "FertilityIndicator"
-	add_child(fertility_indicator)
-	fertility_indicator.init_dependencies(grid)
+	_fertility_indicator = FertilityIndicator.new()
+	_fertility_indicator.name = "FertilityIndicator"
+	add_child(_fertility_indicator)
+	_fertility_indicator.init_dependencies(grid)
 	call_deferred(&"_wire_building_detail")
 	call_deferred(&"_wire_inventory_hud")
+
+
+## Opens the overworld as a blocking start picker on a new game. Deferred from _ready so the
+## overworld view node is fully ready. Falls back to the center land tile if the view is absent.
+func _begin_new_game_start_pick() -> void:
+	var ow_view := get_node_or_null("../OverworldLayer/OverworldView")
+	if ow_view != null and ow_view.has_method("open_for_pick"):
+		ow_view.open_for_pick()
+	else:
+		var center := Vector2i(OverworldSystem.OVERWORLD_SIZE / 2, OverworldSystem.OVERWORLD_SIZE / 2)
+		OverworldSystem.select_start(center)
+
+
+## Generates the tactical map from the chosen overworld start tile and finishes new-game setup.
+func _on_new_game_start_selected(coord: Vector2i) -> void:
+	OverworldSystem.generate_tactical_map(grid, coord)
+	# Keep the starter building off water/impassable tiles after water carving.
+	var starter_tile: Vector2i = grid.find_nearest_passable_tile(Vector2i(12, 12))
+	_registry.place_starter_building(BuildingRegistry.BuildingType.COLLECTION_POINT, starter_tile)
+	WildSystem.initialize_for_new_map()
+	_terrain_renderer.sync(grid, background_layer, terrain_layer)
+	_resource_badges._spawn_resource_badges()
+	# FertilityIndicator snapshots get_fertility() at init; the grid was empty then, so
+	# re-snapshot now that the chosen tile's map (and its fertilities) exists.
+	if _fertility_indicator != null:
+		_fertility_indicator.init_dependencies(grid)
 
 
 ## Animates all resource icons with a sine-wave vertical float (period: 2.5s, amplitude: 4px).
