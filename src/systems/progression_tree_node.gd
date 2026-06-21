@@ -12,6 +12,12 @@ var branch: StringName
 ## chain in ProgressionSystem so edges never skip a ring. See _compute_visual_rings().
 var ring: int
 var prerequisites: Array[StringName] = []
+## Invisible prerequisites: node ids that must ALSO be unlocked before this node becomes
+## available, but which are deliberately NOT drawn as edges and do NOT influence the radial
+## layout. Used to gate a node behind the ability to actually obtain the resources its unlock
+## costs (e.g. the house needs Stone, so Shelter hides a dependency on Stonecutting) without
+## cluttering the strand graph with cross-branch lines. See ProgressionSystem.is_available().
+var hidden_prerequisites: Array[StringName] = []
 ## Minimum number of unlocked buildings required before this node becomes available (0 = no
 ## building gate). Used by the Leadership branch so each NPC level-cap node opens only after the
 ## colony has unlocked enough buildings. See ProgressionSystem.is_available().

@@ -543,7 +543,7 @@ func _building_efficiency_tooltip(instance: BuildingRegistry.BuildingInstance) -
 		if w != null:
 			worker_eff = w.efficiency
 			worker_name = NPCSystem.get_npc_display_name(instance.assigned_npc_id)
-	var raw: float = base + tile_bonus + worker_eff + instance.upgrade_bonus
+	var raw: float = base + tile_bonus + worker_eff + instance.upgrade_bonus + instance.water_bonus
 
 	var lines: PackedStringArray = PackedStringArray()
 	lines.append("Efficiency breakdown")
@@ -554,6 +554,8 @@ func _building_efficiency_tooltip(instance: BuildingRegistry.BuildingInstance) -
 		lines.append("Worker (%s): +%d%%" % [worker_name, roundi(worker_eff * 100.0)])
 	else:
 		lines.append("Worker: none (+0%)")
+	if instance.water_bonus > 0.0:
+		lines.append("Adjacent water: +%d%%" % roundi(instance.water_bonus * 100.0))
 	if instance.upgrade_bonus > 0.0:
 		lines.append("Upgrades: +%d%%" % roundi(instance.upgrade_bonus * 100.0))
 	var cap: float = EfficiencyFormulas.BUILDING_EFFICIENCY_MAX

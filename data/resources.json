@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-06-18",
+  "last_updated": "2026-06-21",
   "resources": [
 	{
 	  "id": "wood",
@@ -306,13 +306,13 @@
 	  "glyph": "🧱",
 	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_clay.png",
 	  "fallback_color": [
-		0.70,
+		0.7,
 		0.45,
 		0.25
 	  ],
 	  "description": "A deposit of raw clay. Hidden at map generation — must be located by searching.",
 	  "tags": [
-		"construction_material"
+        "construction_material"
 	  ]
 	},
 	{
@@ -331,12 +331,12 @@
 	  "fallback_color": [
 		0.85,
 		0.72,
-		0.30
+		0.3
 	  ],
 	  "description": "Golden wheat. Grows only on land with wheat fertility.",
 	  "nutrition": 0.5,
 	  "tags": [
-		"food"
+        "food"
 	  ]
 	},
 	{
@@ -353,13 +353,13 @@
 	  "glyph": "🌱",
 	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_wheat_seed.png",
 	  "fallback_color": [
-		0.80,
-		0.70,
+		0.8,
+		0.7,
 		0.35
 	  ],
 	  "description": "Wheat seeds. Plantable only on land with wheat fertility.",
 	  "tags": [
-		"plantable"
+        "plantable"
 	  ]
 	},
 	{
@@ -377,7 +377,7 @@
 	  "description": "Fresh meat from a hunting lodge. Nutritious food.",
 	  "nutrition": 4,
 	  "tags": [
-		"food"
+        "food"
 	  ]
 	},
 	{
@@ -395,7 +395,7 @@
 	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_hide.png",
 	  "fallback_color": [
 		0.55,
-		0.40,
+		0.4,
 		0.25
 	  ],
 	  "description": "Raw animal hide from a hunting lodge. Can be processed into leather goods.",
@@ -431,7 +431,7 @@
 	  "glyph": "🏺",
 	  "description": "Fired clay vessels. Used by settlers as everyday household goods.",
 	  "tags": [
-		"trade_good"
+        "trade_good"
 	  ]
 	},
 	{
@@ -448,7 +448,7 @@
 	  "glyph": "🔪",
 	  "description": "A sharp blade for processing hides in the tannery.",
 	  "tags": [
-		"tool"
+        "tool"
 	  ]
 	},
 	{
@@ -467,6 +467,21 @@
 	  "tags": []
 	},
 	{
+	  "id": "furniture",
+	  "display_name": "Furniture",
+	  "category": "production_good",
+	  "subcategory": "intermediate",
+	  "stack_limit": 20,
+	  "weight": 3.0,
+	  "base_value": 14,
+	  "max_charge": 100.0,
+	  "movement_cost": 6.0,
+	  "icon_path": "assets/ui/icons/resources/furniture.png",
+	  "glyph": "🪑",
+	  "description": "Crafted furniture for homes and settlements.",
+	  "tags": []
+	},
+	{
 	  "id": "hunting_bow",
 	  "display_name": "Hunting Bow",
 	  "category": "production_good",
@@ -480,7 +495,112 @@
 	  "glyph": "🏹",
 	  "description": "A simple wooden bow strung with plant fiber. Required by the Hunting Lodge for efficient hunts.",
 	  "tags": [
-		"tool"
+        "tool"
+	  ]
+	},
+	{
+	  "id": "fishing_net",
+	  "display_name": "Fishing Net",
+	  "category": "production_good",
+	  "subcategory": "tool",
+	  "stack_limit": 10,
+	  "weight": 1.0,
+	  "base_value": 12,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/fishing_net.png",
+	  "glyph": "🕸️",
+	  "description": "A woven fiber net for catching fish. Required by the Fishing Hut for efficient catches.",
+	  "tags": [
+        "tool"
+	  ]
+	},
+	{
+	  "id": "fish",
+	  "display_name": "Fish",
+	  "category": "consumable",
+	  "subcategory": "food",
+	  "stack_limit": 50,
+	  "weight": 0.4,
+	  "base_value": 3,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/fish.png",
+	  "glyph": "🐟",
+	  "description": "Fresh fish from a nearby river or lake. Good mid-tier food.",
+	  "nutrition": 3,
+	  "tags": [
+        "food"
+	  ]
+	},
+	{
+	  "id": "brick",
+	  "display_name": "Brick",
+	  "category": "production_good",
+	  "subcategory": "intermediate",
+	  "stack_limit": 99,
+	  "weight": 2.0,
+	  "base_value": 6,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/brick.png",
+	  "glyph": "🔥",
+	  "description": "Fired clay bricks. A durable construction material.",
+	  "tags": [
+        "construction_material"
+	  ]
+	},
+	{
+	  "id": "charcoal",
+	  "display_name": "Charcoal",
+	  "category": "production_good",
+	  "subcategory": "intermediate",
+	  "stack_limit": 99,
+	  "weight": 1.0,
+	  "base_value": 6,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/charcoal.png",
+	  "glyph": "⬛",
+	  "description": "Slow-burned charcoal. Burns hotter than wood — essential fuel for advanced kilns.",
+	  "tags": [
+		"burnable",
+        "fuel"
+	  ]
+	},
+	{
+	  "id": "salt",
+	  "display_name": "Salt",
+	  "perk_eligible": true,
+	  "category": "production_good",
+	  "subcategory": "trade_good",
+	  "stack_limit": 99,
+	  "weight": 0.8,
+	  "base_value": 18,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/salt.png",
+	  "glyph": "🧂",
+	  "description": "Crystallised sea salt from coastal evaporation pans. A valuable trade good and food preservative.",
+	  "tags": [
+        "trade_good"
+	  ]
+	},
+	{
+	  "id": "preserved_food",
+	  "display_name": "Preserved Food",
+	  "category": "production_good",
+	  "subcategory": "trade_good",
+	  "stack_limit": 50,
+	  "weight": 0.5,
+	  "base_value": 35,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/preserved_food.png",
+	  "glyph": "🥫",
+	  "description": "Salted meat or fish sealed in pottery vessels. A premium trade commodity.",
+	  "tags": [
+        "trade_good"
 	  ]
 	}
   ]

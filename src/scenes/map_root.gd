@@ -91,7 +91,9 @@ func _ready() -> void:
 		WorldSaveManager.apply_pending_load()
 	else:
 		grid.generate(randi(), WorldGrid.STARTING_FERTILITY)
-		_registry.place_starter_building(BuildingRegistry.BuildingType.COLLECTION_POINT, Vector2i(12, 12))
+		# Keep the starter building off water/impassable tiles after water carving.
+		var starter_tile: Vector2i = grid.find_nearest_passable_tile(Vector2i(12, 12))
+		_registry.place_starter_building(BuildingRegistry.BuildingType.COLLECTION_POINT, starter_tile)
 		WildSystem.initialize_for_new_map()
 	_terrain_renderer.sync(grid, background_layer, terrain_layer)
 	_resource_badges._spawn_resource_badges()

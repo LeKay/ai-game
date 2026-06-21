@@ -13,7 +13,12 @@ const RESOURCE_LAYER: int = 2
 
 ## WHEAT and CLAY are appended last so existing TileType integer values are unchanged.
 ## They are placed post-generation (wheat fields / revealed clay pits), never by noise.
-enum TileType { EMPTY, TREE, STONE, BERRY, GRASS, IMPASSABLE, WHEAT, CLAY }
+## WATER (ordinal 8) is carved in a dedicated generation step; impassable and non-buildable.
+## Rivers may split the map — crossing water is done by building a Bridge (a BuildingType
+## placed on a WATER tile), not by a terrain type.
+## COAST (ordinal 9) is carved in the same pass as WATER but marks ocean coastline
+## specifically — distinguishable from river/lake WATER, required by SALT_WORKS.
+enum TileType { EMPTY, TREE, STONE, BERRY, GRASS, IMPASSABLE, WHEAT, CLAY, WATER, COAST }
 
 enum PlacementResult {
 	SUCCESS,
@@ -136,6 +141,27 @@ const CLAY_SEARCH_MAX_RADIUS: int = 58
 const _HIDDEN_SEED_OFFSET: int = 300000
 const _WHEAT_SEED_OFFSET: int = 400000
 
+## --- Water carving (Step 4.5: coast → lakes → river) ---
+## All values are named constants per coding standards (no inline magic numbers).
+const _RIVER_COUNT: int = 1             ## Mandatory minimum: every map gets ≥1 river.
+const _RIVER_WIDTH: int = 1             ## Tiles carved per river step (odd-centered band).
+const _RIVER_MEANDER_CHANCE: float = 0.35  ## Probability of a perpendicular jog per step.
+const _LAKE_CHANCE: float = 0.5         ## Probability a map rolls any lakes.
+const _LAKE_COUNT_MAX: int = 2          ## Upper bound on lakes per map.
+const _LAKE_SIZE_MIN: int = 8           ## Min tiles per lake (randomized in range).
+const _LAKE_SIZE_MAX: int = 14          ## Max tiles per lake.
+const _COAST_CHANCE: float = 0.4        ## Probability a map has a coastline.
+const _COAST_DEPTH: int = 3             ## Inward depth of the coastal water band.
+const _MAX_WATER_FRACTION: float = 0.25  ## Hard cap: water never dominates the map.
+const _MIN_LAND_FRACTION: float = 0.80   ## Largest passable region must be ≥ this share.
+const _MIN_POCKET_SIZE: int = 8         ## Passable pockets smaller than this are flooded.
+## Distinct large RNG offsets so water never aligns with terrain / fertility seeds.
+const _RIVER_SEED_OFFSET: int = 500000
+const _LAKE_SEED_OFFSET: int = 600000
+const _COAST_SEED_OFFSET: int = 700000
+## Orthogonal neighbor offsets, shared by water carving / connectivity / adjacency.
+const _ORTHO_OFFSETS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+
 ## Generates terrain and resource layers via 5-step Perlin noise pipeline.
 ## Deterministic: same seed always produces identical terrain, resources and fertility.
 ## Locks TerrainLayer on completion — assert fires on any subsequent call.
@@ -150,7 +176,8 @@ func generate(world_seed: int, fertility_override: Array = []) -> void:
 		terrain = _sample_noise(world_seed + attempt)
 		terrain = _smooth_terrain(terrain, world_seed + attempt)
 		terrain = _cleanup_clusters(terrain)
-		if _meets_minimums(terrain):
+		terrain = _carve_water(terrain, world_seed + attempt)
+		if _meets_minimums(terrain) and _meets_water_constraints(terrain):
 			succeeded = true
 			break
 
@@ -159,6 +186,7 @@ func generate(world_seed: int, fertility_override: Array = []) -> void:
 	if not succeeded:
 		push_warning("Map generation forced-fix on attempt 5")
 		_force_fix_minimums()
+		_flood_tiny_pockets()
 
 	_roll_fertility(world_seed, fertility_override)
 	if has_fertility(&"wheat"):
@@ -409,6 +437,222 @@ func _meets_minimums(terrain: Array) -> bool:
 		and grass_count >= _MIN_GRASS)
 
 
+## Returns true for terrain types that block both movement and occupation.
+## Routing the three occupation checks (placement / drop / move) and passability through
+## this single predicate keeps IMPASSABLE and WATER from ever drifting apart.
+func _blocks_occupation(type: int) -> bool:
+	return type == TileType.IMPASSABLE or type == TileType.WATER or type == TileType.COAST
+
+
+## Step 4.5: carves WATER into the working terrain array. Order is coast → lakes → river
+## so the river (mandatory) is laid last and can flow into earlier features. Each feature
+## uses a dedicated seed-offset RNG for determinism (same seed → identical water layout).
+func _carve_water(terrain: Array, water_seed: int) -> Array:
+	var result := _copy_terrain(terrain)
+	_carve_coast(result, water_seed)
+	_carve_lakes(result, water_seed)
+	_carve_river(result, water_seed)
+	return result
+
+
+## Optional coastline: with prob _COAST_CHANCE, floods a band of depth _COAST_DEPTH inward
+## from one random edge. The inner boundary jitters by ±1 per row/column so it isn't straight.
+func _carve_coast(terrain: Array, water_seed: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = water_seed + _COAST_SEED_OFFSET
+	if rng.randf() >= _COAST_CHANCE:
+		return
+	var edge: int = rng.randi_range(0, 3)  # 0 top, 1 bottom, 2 left, 3 right
+	# Iterate along the edge; `i` runs across the chosen edge, `d` inward to a jittered depth.
+	for i in range(GRID_SIZE):
+		var depth: int = maxi(0, _COAST_DEPTH + rng.randi_range(-1, 1))
+		for d in range(depth):
+			var tile: Vector2i
+			match edge:
+				0: tile = Vector2i(i, d)
+				1: tile = Vector2i(i, GRID_SIZE - 1 - d)
+				2: tile = Vector2i(d, i)
+				_: tile = Vector2i(GRID_SIZE - 1 - d, i)
+			if is_in_bounds(tile):
+				terrain[tile.x][tile.y] = TileType.COAST
+
+
+## Optional lakes: with prob _LAKE_CHANCE, grows 1.._LAKE_COUNT_MAX blobby water regions
+## via randomized frontier flood from random interior seed points.
+func _carve_lakes(terrain: Array, water_seed: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = water_seed + _LAKE_SEED_OFFSET
+	if rng.randf() >= _LAKE_CHANCE:
+		return
+	var lake_count: int = rng.randi_range(1, _LAKE_COUNT_MAX)
+	for _i in range(lake_count):
+		var start := Vector2i(rng.randi_range(3, GRID_SIZE - 4), rng.randi_range(3, GRID_SIZE - 4))
+		var target_size: int = rng.randi_range(_LAKE_SIZE_MIN, _LAKE_SIZE_MAX)
+		_region_grow_water(terrain, start, target_size, rng)
+
+
+## Randomized region-grow: floods up to target_size tiles starting at start, picking a
+## random frontier tile each step for an irregular, blobby shape.
+func _region_grow_water(terrain: Array, start: Vector2i, target_size: int, rng: RandomNumberGenerator) -> void:
+	var carved: Dictionary = {}
+	var frontier: Array[Vector2i] = [start]
+	while not frontier.is_empty() and carved.size() < target_size:
+		var idx: int = rng.randi_range(0, frontier.size() - 1)
+		var tile: Vector2i = frontier[idx]
+		frontier.remove_at(idx)
+		if carved.has(tile) or not is_in_bounds(tile):
+			continue
+		terrain[tile.x][tile.y] = TileType.WATER
+		carved[tile] = true
+		for offset: Vector2i in _ORTHO_OFFSETS:
+			var n := tile + offset
+			if is_in_bounds(n) and not carved.has(n):
+				frontier.append(n)
+
+
+## Mandatory river(s): traces a meandering walk from one edge to a different edge, carving
+## a band of width _RIVER_WIDTH. The walk steps toward the target, with _RIVER_MEANDER_CHANCE
+## probability of a perpendicular jog, and ends when it reaches the goal (flows off-map).
+func _carve_river(terrain: Array, water_seed: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = water_seed + _RIVER_SEED_OFFSET
+	for _i in range(_RIVER_COUNT):
+		var start_edge: int = rng.randi_range(0, 3)
+		var end_edge: int = (start_edge + rng.randi_range(1, 3)) % 4
+		var start := _edge_point(start_edge, rng)
+		var goal := _edge_point(end_edge, rng)
+		_trace_river(terrain, start, goal, rng)
+
+
+## Returns a random tile on the given edge (0 top, 1 bottom, 2 left, 3 right).
+func _edge_point(edge: int, rng: RandomNumberGenerator) -> Vector2i:
+	match edge:
+		0: return Vector2i(rng.randi_range(0, GRID_SIZE - 1), 0)
+		1: return Vector2i(rng.randi_range(0, GRID_SIZE - 1), GRID_SIZE - 1)
+		2: return Vector2i(0, rng.randi_range(0, GRID_SIZE - 1))
+		_: return Vector2i(GRID_SIZE - 1, rng.randi_range(0, GRID_SIZE - 1))
+
+
+func _trace_river(terrain: Array, start: Vector2i, goal: Vector2i, rng: RandomNumberGenerator) -> void:
+	var pos := start
+	var max_steps: int = GRID_SIZE * 4  # bound: non-meander steps always close distance
+	for _step in range(max_steps):
+		_carve_river_tile(terrain, pos)
+		if pos == goal:
+			return
+		var toward := _step_toward(pos, goal)
+		var dir := toward
+		if rng.randf() < _RIVER_MEANDER_CHANCE:
+			dir = Vector2i(toward.y, toward.x)  # perpendicular to the toward-step axis
+			if rng.randf() < 0.5:
+				dir = -dir
+		var next := pos + dir
+		next.x = clampi(next.x, 0, GRID_SIZE - 1)
+		next.y = clampi(next.y, 0, GRID_SIZE - 1)
+		pos = next
+
+
+## Carves a _RIVER_WIDTH-wide band centered on tile (width 1 → just the center tile).
+func _carve_river_tile(terrain: Array, center: Vector2i) -> void:
+	var half: int = _RIVER_WIDTH / 2
+	for ox in range(-half, _RIVER_WIDTH - half):
+		for oy in range(-half, _RIVER_WIDTH - half):
+			var t := center + Vector2i(ox, oy)
+			if is_in_bounds(t):
+				terrain[t.x][t.y] = TileType.WATER
+
+
+## Returns a single-axis unit step from `from` toward `to` (the dominant axis wins).
+func _step_toward(from: Vector2i, to: Vector2i) -> Vector2i:
+	var dx: int = to.x - from.x
+	var dy: int = to.y - from.y
+	if abs(dx) >= abs(dy):
+		return Vector2i(signi(dx), 0)
+	return Vector2i(0, signi(dy))
+
+
+## Verification guard (run alongside the minimum-count check). Passes only when total water
+## is within _MAX_WATER_FRACTION and the largest passable component covers ≥ _MIN_LAND_FRACTION
+## of all passable tiles — i.e. the map is effectively connected and not water-dominated.
+func _meets_water_constraints(terrain: Array) -> bool:
+	var water := 0
+	for x in range(GRID_SIZE):
+		for y in range(GRID_SIZE):
+			if terrain[x][y] == TileType.WATER:
+				water += 1
+	if float(water) / float(GRID_SIZE * GRID_SIZE) > _MAX_WATER_FRACTION:
+		return false
+	var components := _passable_components(terrain)
+	if components.is_empty():
+		return false
+	var passable_total := 0
+	var largest := 0
+	for comp: Array in components:
+		passable_total += comp.size()
+		largest = maxi(largest, comp.size())
+	if passable_total == 0:
+		return false
+	return float(largest) / float(passable_total) >= _MIN_LAND_FRACTION
+
+
+## Returns the connected components (4-way) of passable (non-blocking) tiles in terrain.
+## Each component is an Array[Vector2i]. Used by the connectivity guard and force-fix.
+func _passable_components(terrain: Array) -> Array:
+	var visited: Array = []
+	for x in range(GRID_SIZE):
+		var row: Array = []
+		for _y in range(GRID_SIZE):
+			row.append(false)
+		visited.append(row)
+
+	var components: Array = []
+	for start_x in range(GRID_SIZE):
+		for start_y in range(GRID_SIZE):
+			if visited[start_x][start_y]:
+				continue
+			if _blocks_occupation(terrain[start_x][start_y]):
+				visited[start_x][start_y] = true
+				continue
+			var component: Array[Vector2i] = []
+			var queue: Array[Vector2i] = [Vector2i(start_x, start_y)]
+			visited[start_x][start_y] = true
+			while not queue.is_empty():
+				var tile: Vector2i = queue.pop_back()
+				component.append(tile)
+				for offset: Vector2i in _ORTHO_OFFSETS:
+					var nx: int = tile.x + offset.x
+					var ny: int = tile.y + offset.y
+					if nx < 0 or nx >= GRID_SIZE or ny < 0 or ny >= GRID_SIZE:
+						continue
+					if visited[nx][ny] or _blocks_occupation(terrain[nx][ny]):
+						continue
+					visited[nx][ny] = true
+					queue.append(Vector2i(nx, ny))
+			components.append(component)
+	return components
+
+
+## Worst-case cleanup (all 5 attempts failed the connectivity preference). Rivers are allowed
+## to split the map — the player crosses by building a Bridge — so this does NOT force a land
+## connection; it only floods tiny passable pockets (< _MIN_POCKET_SIZE) to WATER as cosmetic
+## islets, leaving the larger regions intact (reachable via a player-built bridge).
+func _flood_tiny_pockets() -> void:
+	var components := _passable_components(_terrain)
+	if components.size() <= 1:
+		return
+	var largest_idx := 0
+	for i in range(components.size()):
+		if components[i].size() > components[largest_idx].size():
+			largest_idx = i
+	for i in range(components.size()):
+		if i == largest_idx:
+			continue
+		var comp: Array = components[i]
+		if comp.size() < _MIN_POCKET_SIZE:
+			for tile: Vector2i in comp:
+				_terrain[tile.x][tile.y] = TileType.WATER
+
+
 func _apply_terrain(terrain: Array) -> void:
 	assert(not _generation_done, "TerrainLayer is immutable after generation")
 	for x in range(GRID_SIZE):
@@ -570,7 +814,7 @@ func _get_type_tiles_in_terrain(tile_type: int) -> Array[Vector2i]:
 func validate_placement(tile: Vector2i, _building_type: int) -> PlacementResult:
 	if not is_in_bounds(tile):
 		return PlacementResult.BLOCKED_BY_BOUNDS
-	if _terrain[tile.x][tile.y] == TileType.IMPASSABLE:
+	if _blocks_occupation(_terrain[tile.x][tile.y]):
 		return PlacementResult.BLOCKED_BY_IMPASSABLE
 	if _terrain[tile.x][tile.y] != TileType.EMPTY:
 		return PlacementResult.BLOCKED_BY_RESOURCE_TILE
@@ -592,6 +836,31 @@ func place_building(tile: Vector2i, building_id: String) -> PlacementResult:
 	_buildings[tile.x][tile.y] = building_id
 	if not _resources[tile.x][tile.y].is_empty():
 		_resources[tile.x][tile.y] = []
+	terrain_changed.emit(tile, BUILDING_LAYER)
+	return PlacementResult.SUCCESS
+
+
+## Validates placement of a water-only building (the Bridge) without mutating state.
+## Mirrors validate_placement but inverts the terrain rule: the tile MUST be WATER and free
+## of any existing building. Non-water tiles return BLOCKED_BY_IMPASSABLE (invalid bridge spot).
+func validate_water_placement(tile: Vector2i) -> PlacementResult:
+	if not is_in_bounds(tile):
+		return PlacementResult.BLOCKED_BY_BOUNDS
+	if _terrain[tile.x][tile.y] != TileType.WATER:
+		return PlacementResult.BLOCKED_BY_IMPASSABLE
+	if _buildings[tile.x][tile.y] != null:
+		return PlacementResult.BLOCKED_BY_BUILDING
+	return PlacementResult.SUCCESS
+
+
+## Places a water-only building (the Bridge) on a WATER tile. The terrain stays WATER; the
+## building on the layer makes the tile passable via get_tile_movement_cost (building wins).
+## Use for the Bridge BuildingType; demolish clears it back to impassable water.
+func place_building_on_water(tile: Vector2i, building_id: String) -> PlacementResult:
+	var result: PlacementResult = validate_water_placement(tile)
+	if result != PlacementResult.SUCCESS:
+		return result
+	_buildings[tile.x][tile.y] = building_id
 	terrain_changed.emit(tile, BUILDING_LAYER)
 	return PlacementResult.SUCCESS
 
@@ -640,10 +909,10 @@ func get_tile_view(tile: Vector2i) -> TileView:
 	)
 
 
-## Returns false only for IMPASSABLE tiles. Asserts on out-of-bounds access.
+## Returns false for blocking tiles (IMPASSABLE or WATER). Asserts on out-of-bounds access.
 func is_passable(tile: Vector2i) -> bool:
 	assert(is_in_bounds(tile), "is_passable: tile %s is out of bounds" % str(tile))
-	return _terrain[tile.x][tile.y] != TileType.IMPASSABLE
+	return not _blocks_occupation(_terrain[tile.x][tile.y])
 
 
 ## Returns the movement cost for a tile used by the A* pathfinder (ADR-0013).
@@ -659,6 +928,7 @@ func get_tile_movement_cost(pos: Vector2i) -> float:
 		return 0.5
 	match _terrain[pos.x][pos.y]:
 		TileType.IMPASSABLE: return INF
+		TileType.WATER:      return INF
 		TileType.TREE:       return 4.0
 		TileType.STONE:      return 4.0
 		TileType.BERRY:      return 4.0
@@ -830,6 +1100,54 @@ func get_neighbors(tile: Vector2i, diagonals: bool = false) -> Array[Vector2i]:
 	return result
 
 
+## Returns the nearest passable, building-free tile to `preferred` (expanding Manhattan
+## radius), or `preferred` itself if it already qualifies. Used to keep the starting
+## building off water/impassable tiles after water carving. Falls back to `preferred`
+## when nothing is found within max_radius (caller handles the unlikely failure).
+func find_nearest_passable_tile(preferred: Vector2i, max_radius: int = GRID_SIZE) -> Vector2i:
+	for r in range(max_radius + 1):
+		for dx in range(-r, r + 1):
+			var dy_abs: int = r - abs(dx)
+			var dy_values := [dy_abs] if dy_abs == 0 else [dy_abs, -dy_abs]
+			for dy: int in dy_values:
+				var candidate := preferred + Vector2i(dx, dy)
+				if not is_in_bounds(candidate):
+					continue
+				if _blocks_occupation(_terrain[candidate.x][candidate.y]):
+					continue
+				if _buildings[candidate.x][candidate.y] != null:
+					continue
+				return candidate
+	return preferred
+
+
+## Returns true if tile is a passable land tile orthogonally adjacent to ≥1 WATER tile.
+## Reserved economy hook (fishing / water-needing buildings) — no gameplay reads this yet.
+func is_water_adjacent(tile: Vector2i) -> bool:
+	if not is_in_bounds(tile):
+		return false
+	if _blocks_occupation(_terrain[tile.x][tile.y]):
+		return false
+	for offset: Vector2i in _ORTHO_OFFSETS:
+		var n := tile + offset
+		if is_in_bounds(n) and _terrain[n.x][n.y] == TileType.WATER:
+			return true
+	return false
+
+
+## Returns all passable land tiles orthogonally adjacent to ≥1 WATER tile.
+## RESERVED: future &"fish" fertility / fishing-hut hook. FERTILITY_POOL is intentionally
+## left unchanged this pass so existing balance and saves stay untouched.
+func get_water_adjacent_tiles() -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for x in range(GRID_SIZE):
+		for y in range(GRID_SIZE):
+			var tile := Vector2i(x, y)
+			if is_water_adjacent(tile):
+				result.append(tile)
+	return result
+
+
 ## Expanding Manhattan-radius search. Returns Vector2i of nearest tile containing resource_id,
 ## or null if no match is found within max_radius.
 func find_nearest(tile: Vector2i, resource_id: StringName, max_radius: int) -> Variant:
@@ -882,11 +1200,11 @@ func remove_one_resource(tile: Vector2i, resource_idx: int) -> bool:
 
 
 ## Places a new resource on the given tile.
-## Returns false if: out-of-bounds or IMPASSABLE. No per-tile cap.
+## Returns false if: out-of-bounds or a blocking tile (IMPASSABLE / WATER). No per-tile cap.
 func add_resource_to_tile(tile: Vector2i, resource_id: StringName, clearable: bool = true) -> bool:
 	if not is_in_bounds(tile):
 		return false
-	if _terrain[tile.x][tile.y] == TileType.IMPASSABLE:
+	if _blocks_occupation(_terrain[tile.x][tile.y]):
 		return false
 	_resources[tile.x][tile.y].append(ResourceTileData.new(resource_id, clearable))
 	terrain_changed.emit(tile, RESOURCE_LAYER)
@@ -896,7 +1214,7 @@ func add_resource_to_tile(tile: Vector2i, resource_id: StringName, clearable: bo
 func move_one_resource(source: Vector2i, source_idx: int, target: Vector2i) -> bool:
 	if not is_in_bounds(source) or not is_in_bounds(target):
 		return false
-	if _terrain[target.x][target.y] == TileType.IMPASSABLE:
+	if _blocks_occupation(_terrain[target.x][target.y]):
 		return false
 	var src_arr: Array = _resources[source.x][source.y]
 	if source_idx < 0 or source_idx >= src_arr.size():

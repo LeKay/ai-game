@@ -202,6 +202,8 @@ func _update_hint_tiles(tile: Vector2i, zoom: Vector2) -> void:
 
 
 func _adjacency_hint_label(building_type: int) -> String:
+	if building_type == BuildingRegistry.BuildingType.BRIDGE:
+		return "Must bridge two shores across the water"
 	var required: Array = BuildingRegistry.ADJACENCY_REQUIREMENTS.get(building_type, [])
 	if required.is_empty():
 		return "Cannot place here"

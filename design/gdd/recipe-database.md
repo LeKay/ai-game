@@ -45,6 +45,78 @@
 >   Progression: `bowyer` node (crafting branch, prereqs: woodcutting + fiber_harvesting) unlocks
 >   BOWYERS_WORKSHOP + manual hunting_bow recipe; `bow_hunting` node (food branch, prereqs:
 >   hunting + bowyer) unlocks `HUNTING_LODGE:hunt_with_bow`.
+>   **Furniture chain (2026-06-21):** New production_good resource `furniture` (🪑, base_value 14).
+>   New building **Carpenter's Workshop** (`CARPENTER`): two recipes —
+>   `with_leather` (primary, plank ×2 + leather ×1 → furniture ×3, 350 ticks, NPC) and
+>   `bare_planks` (fallback, plank ×2 → furniture ×1, 500 ticks, NPC).
+>   Progression: `carpenter` node (materials branch, prereq: sawmilling) unlocks CARPENTER +
+>   `CARPENTER:bare_planks`; `leather_furniture` node (materials branch, prereqs: carpenter +
+>   tannery) unlocks `CARPENTER:with_leather`. Furniture is ungated as production_good for now;
+>   use in housing/comfort system TBD.
+>   **Fishing chain (2026-06-21):** New tool resource `fishing_net` (🕸️, fiber ×4 at Weaver, 300
+>   ticks). New food resource `fish` (🐟, nutrition 3, base_value 3). New building
+>   **Fishing Hut** (`FISHING_HUT`): single recipe `with_net` (fishing_net ×1 → fish ×5, 250
+>   ticks, NPC required). Mandatory adjacency requirement: ≥1 adjacent WATER tile (BLOCKED_BY_ADJACENCY
+>   without it). Efficiency scales with adjacent water tile count via standard F2 adjacency formula
+>   (+5% per tile) — placed on a peninsula with 3 water neighbours runs at +15% above base.
+>   No bare-hands fallback by design: the fishing hut is a net-only operation.
+>   Progression: `net_weaving` node (textiles branch, prereq: weaving) unlocks
+>   `WEAVER:craft_fishing_net`; `fishing` node (food branch, prereqs: shelter + net_weaving)
+>   unlocks FISHING_HUT + `FISHING_HUT:with_net`. Cross-branch dependency (textiles → food)
+>   ensures player has established a fiber supply before fishing is available.
+>   **Brick chain (2026-06-21):** New construction resource `brick` (🔥, base_value 6,
+>   construction_material tag). New building **Brick Kiln** (`BRICK_KILN`): single recipe
+>   `fire_bricks` (clay ×2 + fiber ×1 → brick ×3, 375 ticks, NPC required, no tool).
+>   No fallback recipe by design: both inputs (clay, fiber) are readily available without tools.
+>   No terrain adjacency requirement — processes delivered clay.
+>   Build cost: wood ×8 + stone ×8 + clay ×5. Build time: 900 ticks (~0.6 days).
+>   Balancing: ~3.8 cycles/day at base efficiency; 2 Clay Pits comfortably supply 1 Kiln.
+>   Progression: `brickmaking` node (materials branch, prereq: clay_extraction, ring 7)
+>   unlocks BRICK_KILN. Placed parallel to `pottery` node — both are clay-processing branches.
+>   **BRICK_KILN gains second recipe (2026-06-21):** `fire_bricks_charcoal`
+>   (clay ×2 + charcoal ×1 → brick ×4, 300 ticks) — unlocked via `charcoal_brickmaking`
+>   progression node (prereqs: charcoal_burning + brickmaking). Charcoal recipe is ~67%
+>   more efficient than the fiber recipe (4/300 vs. 3/375 brick/tick).
+>   **Charcoal chain (2026-06-21):** New intermediate resource `charcoal` (⬛, base_value 6,
+>   tags: burnable + fuel). New building **Charcoal Kiln** (`CHARCOAL_KILN`): single recipe
+>   `burn_charcoal` (wood ×3 → charcoal ×3, 375 ticks, NPC required, no tool).
+>   Mandatory placement constraint: ≥1 adjacent WATER tile (BLOCKED_BY_ADJACENCY without it) —
+>   thematic/placement only, does NOT grant an efficiency bonus (ADJACENCY_PLACEMENT_ONLY).
+>   No fallback recipe: wood is readily available, no tools needed.
+>   Build cost: wood ×10 + stone ×8. Build time: 800 ticks (~0.55 days).
+>   Balancing: ~3.8 cycles/day at base efficiency; one Lumber Camp (~29 wood/day)
+>   comfortably supplies 2 Charcoal Kilns (~11.5 charcoal/day each).
+>   Charcoal is a future-proof fuel resource — primarily consumed by the upgraded Brick Kiln
+>   recipe; reserved for smithy, glassworks, and other high-heat buildings in later content.
+>   Progression: `charcoal_burning` node (materials branch, prereq: forestry, ring 4)
+>   unlocks CHARCOAL_KILN; `charcoal_brickmaking` node (materials branch, prereqs:
+>   charcoal_burning + brickmaking, ring 8) unlocks `BRICK_KILN:fire_bricks_charcoal`.
+>   **Coastal Salt chain (2026-06-21):** New trade_good resource `salt` (🧂, base_value 18,
+>   perk_eligible). New building **Salt Works** (`SALT_WORKS`): single recipe `evaporate`
+>   (no material inputs → salt ×2, 700 base_cycle_ticks, NPC required). The building
+>   requires at least one adjacent COAST tile (new TileType.COAST, distinct from river/lake
+>   WATER); adjacency count contributes to efficiency via F3 (+5% per tile, same as FISHING_HUT
+>   with water). No fallback recipe by design — evaporation is inherently bare-hands and slow.
+>   Build cost: wood ×12 + stone ×8. Build time: 900 ticks (~0.6 days). Energy: 28.
+>   Balancing: base_cycle_ticks=700; at efficiency 0.80 (1 COAST + lv1 worker) → effective
+>   ~875 ticks/cycle → ~1.6 cycles/day → ~3.3 salt/day. Salt is intentionally scarce and
+>   slow — thematic: natural solar evaporation of seawater takes days. Salt's primary use
+>   is as a trade good and food preservative (see Preserved Food chain below, 2026-06-21).
+>   TileType change: coastal water is now tagged as COAST (ordinal 9) by `_carve_coast()`;
+>   rivers and lakes remain WATER. COAST is impassable/non-buildable like WATER.
+>   Progression: `salt_works` node (materials branch, prereq: prospecting, ring 6) unlocks
+>   SALT_WORKS + `SALT_WORKS:evaporate`.
+>   **Preserved Food chain (2026-06-21):** New trade_good resource `preserved_food` (🥫,
+>   base_value 35, no nutrition). New building **Preservation House** (`PRESERVATION_HOUSE`):
+>   two recipes — `preserve_meat` (meat ×2 + salt ×1 + pottery ×1 → preserved_food ×3,
+>   375 ticks) and `preserve_fish` (fish ×2 + salt ×1 + pottery ×1 → preserved_food ×2,
+>   375 ticks). Pottery is consumed per cycle (not a durable tool). No fallback recipe — the
+>   pottery-demand is intentional design. Build cost: wood ×10 + stone ×6. Build time: 900
+>   ticks (~0.6 days). Energy: 25. Balancing: 375 ticks → ~3.8 cycles/day at efficiency 1.0;
+>   preserve_meat rate: 3/375 = 0.008/tick; preserve_fish: 2/375 = 0.005/tick. Input value
+>   vs output value: meat recipe 2.56× margin, fish recipe 1.79× margin. Progression:
+>   `food_preservation` node (food branch, prereqs: hunting + fishing, hidden prereqs:
+>   pottery + salt_works) unlocks PRESERVATION_HOUSE + both recipes.
 > Migrating both tables into the JSON registry below remains the design goal
 > (data-driven content rule); treat the rest of this document as the target design,
 > not the implemented state.

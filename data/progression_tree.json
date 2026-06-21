@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-06-20",
+  "last_updated": "2026-06-21",
   "config": {
     "node_cost_enabled": true,
     "starting_points": 1,
@@ -53,6 +53,7 @@
       "branch": "food",
       "ring": 2,
       "prerequisites": ["foraging"],
+      "hidden_prerequisites": ["woodcutting", "stonecutting"],
       "unlocks": [
         { "type": "building", "id": "GATHERING_HUT" },
         { "type": "building_recipe", "id": "GATHERING_HUT:gather_berry" }
@@ -81,6 +82,18 @@
       "unlocks": [
         { "type": "building", "id": "ROAD" },
         { "type": "gather", "id": "CONSTRUCT_PATH" }
+      ],
+      "cost": null
+    },
+    {
+      "node_id": "bridge_building",
+      "display_name": "Bridge Building",
+      "icon": "🌉",
+      "branch": "food",
+      "ring": 5,
+      "prerequisites": ["paving"],
+      "unlocks": [
+        { "type": "building", "id": "BRIDGE" }
       ],
       "cost": null
     },
@@ -301,6 +314,18 @@
       "cost": null
     },
     {
+      "node_id": "brickmaking",
+      "display_name": "Brickmaking",
+      "icon": "🔥",
+      "branch": "materials",
+      "ring": 7,
+      "prerequisites": ["clay_extraction"],
+      "unlocks": [
+        { "type": "building", "id": "BRICK_KILN" }
+      ],
+      "cost": null
+    },
+    {
       "node_id": "tooled_pottery",
       "display_name": "Pottery with Tools",
       "icon": "⛏️",
@@ -309,6 +334,30 @@
       "prerequisites": ["pottery", "pickaxe"],
       "unlocks": [
         { "type": "building_recipe", "id": "POTTERY_KILN:with_tool" }
+      ],
+      "cost": null
+    },
+    {
+      "node_id": "charcoal_burning",
+      "display_name": "Charcoal Burning",
+      "icon": "⬛",
+      "branch": "materials",
+      "ring": 4,
+      "prerequisites": ["forestry"],
+      "unlocks": [
+        { "type": "building", "id": "CHARCOAL_KILN" }
+      ],
+      "cost": null
+    },
+    {
+      "node_id": "charcoal_brickmaking",
+      "display_name": "Charcoal Brickmaking",
+      "icon": "🔥",
+      "branch": "materials",
+      "ring": 8,
+      "prerequisites": ["charcoal_burning", "brickmaking"],
+      "unlocks": [
+        { "type": "building_recipe", "id": "BRICK_KILN:fire_bricks_charcoal" }
       ],
       "cost": null
     },
@@ -322,6 +371,42 @@
       "unlocks": [
         { "type": "building", "id": "SAWMILL" }
       ],
+      "cost": null
+    },
+    {
+      "node_id": "carpenter",
+      "display_name": "Carpentry",
+      "icon": "🪑",
+      "branch": "materials",
+      "ring": 6,
+      "prerequisites": ["sawmilling"],
+      "unlocks": [
+        { "type": "building", "id": "CARPENTER" },
+        { "type": "building_recipe", "id": "CARPENTER:bare_planks" }
+      ],
+      "cost": null
+    },
+    {
+      "node_id": "leather_furniture",
+      "display_name": "Upholstered Furniture",
+      "icon": "🛋️",
+      "branch": "materials",
+      "ring": 7,
+      "prerequisites": ["carpenter", "tannery"],
+      "unlocks": [
+        { "type": "building_recipe", "id": "CARPENTER:with_leather" }
+      ],
+      "cost": null
+    },
+
+    {
+      "node_id": "toolmaking",
+      "display_name": "Toolmaking",
+      "icon": "🔧",
+      "branch": "crafting",
+      "ring": 2,
+      "prerequisites": ["woodcutting", "stonecutting"],
+      "unlocks": [],
       "cost": null
     },
 
@@ -343,7 +428,7 @@
       "icon": "🔪",
       "branch": "crafting",
       "ring": 3,
-      "prerequisites": ["woodcutting", "stonecutting"],
+      "prerequisites": ["toolmaking"],
       "unlocks": [
         { "type": "manual_recipe", "id": "knife" },
         { "type": "building_recipe", "id": "TOOL_WORKSHOP:craft_knife" }
@@ -392,7 +477,7 @@
       "icon": "🏹",
       "branch": "crafting",
       "ring": 3,
-      "prerequisites": ["woodcutting", "fiber_harvesting"],
+      "prerequisites": ["toolmaking", "fiber_harvesting"],
       "unlocks": [
         { "type": "building", "id": "BOWYERS_WORKSHOP" },
         { "type": "manual_recipe", "id": "hunting_bow" }
@@ -588,6 +673,62 @@
       "requires_buildings": 27,
       "unlocks": [
         { "type": "npc_level_cap", "id": "10" }
+      ],
+      "cost": null
+    },
+
+    {
+      "node_id": "net_weaving",
+      "display_name": "Net Weaving",
+      "icon": "🕸️",
+      "branch": "textiles",
+      "ring": 5,
+      "prerequisites": ["weaving"],
+      "unlocks": [
+        { "type": "building_recipe", "id": "WEAVER:craft_fishing_net" }
+      ],
+      "cost": null
+    },
+    {
+      "node_id": "fishing",
+      "display_name": "Fishing",
+      "icon": "🎣",
+      "branch": "food",
+      "ring": 5,
+      "prerequisites": ["shelter", "net_weaving"],
+      "unlocks": [
+        { "type": "building", "id": "FISHING_HUT" },
+        { "type": "building_recipe", "id": "FISHING_HUT:with_net" }
+      ],
+      "cost": null
+    },
+
+    {
+      "node_id": "salt_works",
+      "display_name": "Salt Works",
+      "icon": "🧂",
+      "branch": "materials",
+      "ring": 6,
+      "prerequisites": ["prospecting"],
+      "unlocks": [
+        { "type": "building", "id": "SALT_WORKS" },
+        { "type": "building_recipe", "id": "SALT_WORKS:evaporate" }
+      ],
+      "cost": null
+    },
+
+    {
+      "node_id": "food_preservation",
+      "display_name": "Food Preservation",
+      "icon": "🥫",
+      "branch": "food",
+      "ring": 6,
+      "prerequisites": ["hunting", "fishing"],
+      "hidden_prerequisites": ["pottery", "salt_works"],
+      "unlocks": [
+        { "type": "building", "id": "PRESERVATION_HOUSE" },
+        { "type": "building_recipe", "id": "PRESERVATION_HOUSE:preserve_meat" },
+        { "type": "building_recipe", "id": "PRESERVATION_HOUSE:preserve_fish" }
       ],
       "cost": null
     }

@@ -171,6 +171,11 @@ func _parse_nodes(entries: Variant) -> bool:
 				push_error("ProgressionSystem: Node '%s' references unknown prerequisite '%s'" % [
 						node_id, prereq])
 				return false
+		for hidden: StringName in node.hidden_prerequisites:
+			if not new_nodes.has(hidden):
+				push_error("ProgressionSystem: Node '%s' references unknown hidden_prerequisite '%s'" % [
+						node_id, hidden])
+				return false
 
 	_nodes = new_nodes
 	return true
@@ -196,6 +201,11 @@ func _build_node(entry: Dictionary, index: int) -> ProgressionTreeNode:
 	if raw_prereqs is Array:
 		for p: Variant in raw_prereqs:
 			node.prerequisites.append(StringName(str(p)))
+
+	var raw_hidden: Variant = entry.get("hidden_prerequisites", [])
+	if raw_hidden is Array:
+		for h: Variant in raw_hidden:
+			node.hidden_prerequisites.append(StringName(str(h)))
 
 	var raw_unlocks: Variant = entry.get("unlocks", [])
 	if raw_unlocks is Array:
@@ -425,14 +435,18 @@ func is_unlocked(node_id: StringName) -> bool:
 	return _unlocked.has(node_id)
 
 
-## True when every prerequisite is unlocked, any building-count gate is satisfied, and the node
-## itself is not yet unlocked.
+## True when every prerequisite (visible AND hidden) is unlocked, any building-count gate is
+## satisfied, and the node itself is not yet unlocked. Hidden prerequisites gate reveal/unlock
+## exactly like visible ones but are not drawn — see ProgressionTreeNode.hidden_prerequisites.
 func is_available(node_id: StringName) -> bool:
 	var node: ProgressionTreeNode = _nodes.get(node_id, null)
 	if node == null or is_unlocked(node_id):
 		return false
 	for prereq: StringName in node.prerequisites:
 		if not is_unlocked(prereq):
+			return false
+	for hidden: StringName in node.hidden_prerequisites:
+		if not is_unlocked(hidden):
 			return false
 	if node.requires_buildings > 0 and get_unlocked_building_count() < node.requires_buildings:
 		return false

@@ -746,7 +746,7 @@ func try_commit_relocation(target_tile: Vector2i, grid: Node, deferred: bool = f
 		relocation_cancelled.emit(source)
 		return RelocationResult.SNAP_BACK_INVALID
 
-	if grid.get_terrain(target_tile) == WorldGrid.TileType.IMPASSABLE:
+	if not grid.is_passable(target_tile):  # IMPASSABLE or WATER — cannot drop resources here
 		_relocation_drag.state = RelocationDrag.DragState.IDLE
 		relocation_cancelled.emit(source)
 		return RelocationResult.SNAP_BACK_INVALID

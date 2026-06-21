@@ -257,6 +257,13 @@ im Editor gegen Art Bible prüfen).
 
 ### 3c. Assets via PixelLab API generieren (direkt)
 
+> **⛔ PFLICHTSCHRITT — DARF NICHT ÜBERSPRUNGEN WERDEN.**
+> Phase 3c ist kein optionaler Schritt. Die PNGs MÜSSEN in derselben Session generiert
+> werden, in der Phase 3b die Prompts anlegt. Ohne PNGs rendert das Gebäude im Spiel
+> mit dem Storage-Fallback-Tile und der Carrier zeigt einen grauen Kreis statt eines Icons.
+> Nach dem Schreiben der Prompts (3b) direkt in 3c weitermachen — kein Commit, kein
+> Abschluss-Summary ohne generierte Assets.
+
 **Dieser Schritt generiert die PNGs direkt** — kein manueller Pixellab-Aufruf durch den
 Nutzer nötig. Wir nutzen `POST /v2/create-image-pixen` direkt via Python `urllib` —
 **kein MCP**, kein Polling, synchron, ein Bild pro Call.
@@ -809,7 +816,7 @@ Rezepte je Gebäude:   <Gebäude>: <Hauptrezept-id> [+ <Fallback-id> falls vorha
 Manuelle Rezepte:     <ids oder "keine"> (crafting_registry.gd)
 Balancing:            <base_cycle_ticks je Rezept>, ~<n> Zyklen/Tag
 AI-Prompts:           assets/art/ai-prompts/<slug>-prompts.md (<n> Assets dokumentiert)
-Assets generiert:     <n> PNGs via PixelLab API (pixen, 64×64) — bld_tile_*.png + ui/icons/resources/*.png
+Assets generiert:     <n> PNGs via PixelLab API (pixen, 64×64) — bld_tile_*.png + ui/icons/resources/*.png  ← PFLICHT, nicht weglassen
 UI:                   Baumenü + Icon + Logistik-Emoji ✓
 Progression-Tree:     <node_ids + Prereqs> in data/progression_tree.json [oder "ungated (bewusst offen)"]
 Design-Docs:          recipe-database.md, building-system.md [, progression-tree-spec] ✓

@@ -140,6 +140,8 @@ const _TERRAIN_PNG_VARIANTS: Array = [
 		"res://assets/art/tiles/env_tile_clay_15.png",
 		"res://assets/art/tiles/env_tile_clay_16.png",
 	],  # CLAY
+	[],  # WATER — no assets yet, falls back to solid blue (tileset follow-up via PixelLab)
+	[],  # COAST — no assets yet, falls back to lighter blue (tileset follow-up via PixelLab)
 ]
 
 ## Fallback solid colors, one per TileType (EMPTY=0 … IMPASSABLE=5).
@@ -152,6 +154,8 @@ const _TERRAIN_FALLBACK_COLORS: Array[Color] = [
 	Color(0.08, 0.08, 0.14),  # IMPASSABLE — near-black
 	Color(0.83, 0.66, 0.20),  # WHEAT — golden amber
 	Color(0.66, 0.40, 0.22),  # CLAY — reddish earthen brown
+	Color(0.18, 0.45, 0.70),  # WATER — blue
+	Color(0.25, 0.62, 0.88),  # COAST — lighter ocean blue
 ]
 
 ## Atlas column where each TileType starts (populated by build_and_assign).

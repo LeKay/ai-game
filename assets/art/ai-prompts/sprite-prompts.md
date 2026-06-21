@@ -65,7 +65,40 @@ gradual, not sharp. No flowers, no dirt patches, no pebbles, no bare ground visi
 
 ---
 
-### 1b. Sand / Boden — `env_tile_sand.png` *(Assets vorhanden: env_tile_sand_01–16.png)*
+### 1b. Wasser / Water — `env_tile_water.png` *(Assets vorhanden: env_tile_water_01–16.png)*
+
+Dunkles Flusswasser. Generiert via `create-tiles-pro` (16 Variationen in einem Call).
+
+<!-- v1 — 2026-06-21: Erstgenerierung Wasser-Terrain-Tiles -->
+
+**Prompt (description-Feld für create-tiles-pro):**
+```
+Pixel art water terrain tiles for a top-down RPG game, seen from directly above. Each tile is deep muted river water covering the entire tile from edge to edge with no gaps, no transparency, opaque in every corner. Light source upper-left, earthy muted palette, 2-3 shading tones per color, no outline around the tile. Color palette: deep shadow #1A4D7A, mid blue #2E73B3, ripple highlight #6AAAD9, bright glint #A8D0F0.
+
+1) Calm still water — 4 subtle horizontal ripple arcs scattered across the interior, faint glint upper-left
+2) Calm still water — 5 ripple arcs leaning slightly diagonal top-right to bottom-left, glint near center
+3) Gentle current — 6 short curved ripple marks flowing left to right, two bright glints upper-left area
+4) Gentle current — 5 ripple marks flowing upper-left to lower-right, darker shadow patch lower-right corner area
+5) Slight surface disturbance — small circular ripple ring near upper-center, 3 short arcs nearby
+6) Slight surface disturbance — small circular ripple ring near lower-center, 4 short arcs scattered around it
+7) Deep still water — only 2 very faint ripple marks, surface mostly dark and smooth, single glint upper-left
+8) Deep still water — 3 faint marks near center, dark blue dominates, subtle shadow gradient lower-right
+9) Active surface — 8 small ripple arcs densely scattered across tile interior, multiple glints
+10) Active surface — 7 ripple arcs in two loose clusters left and right of center
+11) Moving water with flow lines — 4 thin parallel arcs running left-to-right suggesting gentle current
+12) Moving water with flow lines — 4 thin parallel arcs running diagonally upper-left to lower-right
+13) Calm water with tiny foam cluster — 3 ripple arcs plus a small 3-pixel cluster of white foam dots near center
+14) Calm water with tiny foam cluster — 4 ripple arcs plus small foam dot cluster offset toward upper-right
+15) Light-catching surface — 5 ripple arcs, 4 bright glint marks scattered, light blue tone dominant
+16) Shadow-pooled water — 5 ripple arcs, large dark shadow area occupying lower-right third, deep blue dominant
+```
+
+**Parameter:** `tile_type: square_topdown` · `tile_size: 64`
+**Zielfarben:** Tief `#1A4D7A` · Basis `#2E73B3` · Ripple `#6AAAD9` · Glint `#A8D0F0`
+
+---
+
+### 1c. Sand / Boden — `env_tile_sand.png` *(Assets vorhanden: env_tile_sand_01–16.png)*
 
 Warmer, sandiger Erdboden. Bereits generiert und gesplittet — Prompt zur Referenz.
 

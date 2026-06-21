@@ -86,7 +86,7 @@ func validate_placement(tile: Vector2i) -> PathPlacementResult:
 		return PathPlacementResult.BLOCKED_BY_BOUNDS
 	if not _grid.is_in_bounds(tile):
 		return PathPlacementResult.BLOCKED_BY_BOUNDS
-	if _grid.get_terrain(tile) == WorldGrid.TileType.IMPASSABLE:
+	if not _grid.is_passable(tile):  # IMPASSABLE or WATER
 		return PathPlacementResult.BLOCKED_BY_IMPASSABLE
 	if _grid.get_terrain(tile) != WorldGrid.TileType.EMPTY:
 		return PathPlacementResult.BLOCKED_BY_RESOURCE

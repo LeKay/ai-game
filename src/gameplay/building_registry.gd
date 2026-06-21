@@ -30,6 +30,13 @@ enum BuildingType {
 	POTTERY_KILN,        ## fires Clay → Pottery vessels; with_tool uses Pickaxe
 	TANNERY,             ## processes Hide → Leather; with_knife uses Knife
 	BOWYERS_WORKSHOP,    ## crafts Hunting Bow from Wood + Fiber; supplies Hunting Lodge
+	BRIDGE,              ## placed on a WATER tile; makes it passable (river crossing)
+	CARPENTER,           ## processes Plank → Furniture; with_leather adds Leather for higher output
+	FISHING_HUT,         ## catches Fish; requires ≥1 adjacent WATER tile; efficiency scales with water tile count
+	BRICK_KILN,          ## fires Clay + Fiber → Brick; no terrain requirement
+	CHARCOAL_KILN,       ## burns Wood → Charcoal; must border a WATER tile (no efficiency bonus)
+	SALT_WORKS,          ## evaporates seawater → Salt; requires adjacent COAST tile; efficiency scales with coast count
+	PRESERVATION_HOUSE,  ## preserves Meat/Fish with Salt + Pottery → Preserved Food (trade good)
 }
 
 ## Building operational status codes — exposed for cross-system API use (e.g. LogisticsSystem).
@@ -107,6 +114,9 @@ class BuildingInstance:
 	var output_carrier_id: StringName = &""
 	## Efficiency fields (ADR-0012). upgrade_bonus is 0.0 at VS scope.
 	var upgrade_bonus: float = 0.0
+	## Optional flat efficiency bonus from terrain adjacency (e.g. Mill +0.20 next to water).
+	## Set by BuildingRegistry._refresh_water_bonus; not a placement requirement, does not stack.
+	var water_bonus: float = 0.0
 	var efficiency: float = 1.0
 	## Utilization tracking — fraction of the day the building was actively producing.
 	## Accumulates while a cycle is advancing; snapshotted into *_last_day each day rollover.
@@ -146,9 +156,9 @@ class BuildingInstance:
 		var worker_eff: float = 0.0
 		for worker in assigned_workers:
 			worker_eff += worker.efficiency
-		var resource_tiles: int = adjacency_tile_count if ADJACENCY_REQUIREMENTS.has(type) else 0
+		var resource_tiles: int = adjacency_tile_count if (ADJACENCY_REQUIREMENTS.has(type) and not ADJACENCY_PLACEMENT_ONLY.has(type)) else 0
 		efficiency = EfficiencyFormulas.calculate_building_efficiency(
-				resource_tiles, worker_eff, upgrade_bonus)
+				resource_tiles, worker_eff, upgrade_bonus, water_bonus)
 
 	func _init(p_id: String, p_type: int, p_tile: Vector2i) -> void:
 		building_id = p_id
@@ -182,6 +192,13 @@ const BUILD_COST: Dictionary = {
 	BuildingType.POTTERY_KILN:       {&"wood": 5,  &"stone": 8, &"clay": 5},
 	BuildingType.TANNERY:            {&"wood": 8,  &"stone": 3},
 	BuildingType.BOWYERS_WORKSHOP:   {&"wood": 8,  &"fiber": 3, &"stone": 2},
+	BuildingType.BRIDGE:             {&"wood": 8},
+	BuildingType.CARPENTER:          {&"wood": 10, &"stone": 5},
+	BuildingType.FISHING_HUT:        {&"wood": 8,  &"stone": 2, &"fiber": 4},
+	BuildingType.BRICK_KILN:         {&"wood": 8,  &"stone": 8, &"clay": 5},
+	BuildingType.CHARCOAL_KILN:      {&"wood": 10, &"stone": 8},
+	BuildingType.SALT_WORKS:         {&"wood": 12, &"stone": 8},
+	BuildingType.PRESERVATION_HOUSE: {&"wood": 10, &"stone": 6},
 }
 
 ## Canonical list of player-buildable types, in build-menu display order.
@@ -206,6 +223,13 @@ const BUILDABLE_TYPES: Array[int] = [
 	BuildingType.POTTERY_KILN,
 	BuildingType.TANNERY,
 	BuildingType.BOWYERS_WORKSHOP,
+	BuildingType.BRIDGE,
+	BuildingType.CARPENTER,
+	BuildingType.FISHING_HUT,
+	BuildingType.BRICK_KILN,
+	BuildingType.CHARCOAL_KILN,
+	BuildingType.SALT_WORKS,
+	BuildingType.PRESERVATION_HOUSE,
 ]
 
 ## Build times rescaled for pacing (balancing 2026-06-11): anchor 1 tick ≈ 1 minute,
@@ -231,6 +255,13 @@ const BUILD_TIME: Dictionary = {
 	BuildingType.POTTERY_KILN:       900,
 	BuildingType.TANNERY:            700,
 	BuildingType.BOWYERS_WORKSHOP:   700,
+	BuildingType.BRIDGE:            400,
+	BuildingType.CARPENTER:         800,
+	BuildingType.FISHING_HUT:       480,
+	BuildingType.BRICK_KILN:        900,
+	BuildingType.CHARCOAL_KILN:     800,
+	BuildingType.SALT_WORKS:        900,
+	BuildingType.PRESERVATION_HOUSE: 900,
 }
 
 ## Energy cost the player spends to manually construct a building (ManualActionType.CONSTRUCT_BUILDING).
@@ -254,12 +285,20 @@ const BUILD_ENERGY: Dictionary = {
 	BuildingType.POTTERY_KILN:       25,
 	BuildingType.TANNERY:            22,
 	BuildingType.BOWYERS_WORKSHOP:   22,
+	BuildingType.BRIDGE:            18,
+	BuildingType.CARPENTER:         25,
+	BuildingType.FISHING_HUT:       18,
+	BuildingType.BRICK_KILN:        25,
+	BuildingType.CHARCOAL_KILN:     22,
+	BuildingType.SALT_WORKS:        28,
+	BuildingType.PRESERVATION_HOUSE: 25,
 }
 
 ## Movement cost for buildings that NPCs and carriers can traverse.
 ## Types absent from this table are impassable (cost = INF).
 const MOVEMENT_EFFICIENCY: Dictionary = {
 	BuildingType.ROAD: 0.5,
+	BuildingType.BRIDGE: 0.5,  ## passable river crossing
 }
 
 const STORAGE_CAPACITY: Dictionary = {
@@ -301,6 +340,13 @@ const BUILDING_TEXTURES: Dictionary = {
 	BuildingType.POTTERY_KILN:       "res://assets/art/tiles/bld_tile_pottery_kiln.png",
 	BuildingType.TANNERY:            "res://assets/art/tiles/bld_tile_tannery.png",
 	BuildingType.BOWYERS_WORKSHOP:   "res://assets/art/tiles/bld_tile_bowyers_workshop.png",
+	BuildingType.BRIDGE:             "res://assets/art/tiles/env_tile_bridge_h_01.png",
+	BuildingType.CARPENTER:          "res://assets/art/tiles/bld_tile_carpenter.png",
+	BuildingType.FISHING_HUT:        "res://assets/art/tiles/bld_tile_fishing_hut.png",
+	BuildingType.BRICK_KILN:         "res://assets/art/tiles/bld_tile_brick_kiln.png",
+	BuildingType.CHARCOAL_KILN:      "res://assets/art/tiles/bld_tile_charcoal_kiln.png",
+	BuildingType.SALT_WORKS:         "res://assets/art/tiles/bld_tile_salt_works.png",
+	BuildingType.PRESERVATION_HOUSE: "res://assets/art/tiles/bld_tile_preservation_house.png",
 }
 
 ## Maps BuildingType → the job/profession label of a worker employed there.
@@ -322,6 +368,12 @@ const BUILDING_JOB_NAMES: Dictionary = {
 	BuildingType.POTTERY_KILN:       "Potter",
 	BuildingType.TANNERY:            "Tanner",
 	BuildingType.BOWYERS_WORKSHOP:   "Bowyer",
+	BuildingType.CARPENTER:          "Carpenter",
+	BuildingType.FISHING_HUT:        "Fisher",
+	BuildingType.BRICK_KILN:         "Brick Maker",
+	BuildingType.CHARCOAL_KILN:      "Charcoal Burner",
+	BuildingType.SALT_WORKS:         "Salt Worker",
+	BuildingType.PRESERVATION_HOUSE: "Preserver",
 }
 
 ## Multi-recipe table: BuildingType → Array of recipe dicts (index 0 = default recipe).
@@ -471,6 +523,18 @@ const RECIPES: Dictionary = {
 			"output_capacity": 20,
 			"input_capacity": 10,
 			"base_cycle_ticks": 750,
+			"npc_required": true,
+		},
+		{
+			"id": &"craft_fishing_net",
+			"label": "Craft Fishing Net",
+			"inputs": [
+				{"resource_id": &"fiber", "quantity": 4},
+			],
+			"output": {&"fishing_net": 1},
+			"output_capacity": 10,
+			"input_capacity": 10,
+			"base_cycle_ticks": 300,
 			"npc_required": true,
 		},
 	],
@@ -672,6 +736,129 @@ const RECIPES: Dictionary = {
 			"npc_required": true,
 		},
 	],
+	BuildingType.CARPENTER: [
+		{
+			"id": &"with_leather",
+			"label": "Craft Furniture (Upholstered)",
+			"inputs": [
+				{"resource_id": &"plank",   "quantity": 2},
+				{"resource_id": &"leather", "quantity": 1},
+			],
+			"output": {&"furniture": 3},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 350,
+			"npc_required": true,
+		},
+		{
+			"id": &"bare_planks",
+			"label": "Craft Furniture (Basic)",
+			"inputs": [
+				{"resource_id": &"plank", "quantity": 2},
+			],
+			"output": {&"furniture": 1},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 500,
+			"npc_required": true,
+		},
+	],
+	BuildingType.FISHING_HUT: [
+		{
+			"id": &"with_net",
+			"label": "Fish with Net",
+			"inputs": [{"resource_id": &"fishing_net", "quantity": 1}],
+			"output": {&"fish": 5},
+			"output_capacity": 20,
+			"input_capacity": 5,
+			"base_cycle_ticks": 250,
+			"npc_required": true,
+		},
+	],
+	BuildingType.BRICK_KILN: [
+		{
+			"id": &"fire_bricks",
+			"label": "Fire Bricks",
+			"inputs": [
+				{"resource_id": &"clay",  "quantity": 2},
+				{"resource_id": &"fiber", "quantity": 1},
+			],
+			"output": {&"brick": 3},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 375,
+			"npc_required": true,
+		},
+		{
+			"id": &"fire_bricks_charcoal",
+			"label": "Fire Bricks (Charcoal)",
+			"inputs": [
+				{"resource_id": &"clay",     "quantity": 2},
+				{"resource_id": &"charcoal", "quantity": 1},
+			],
+			"output": {&"brick": 4},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 300,
+			"npc_required": true,
+		},
+	],
+	BuildingType.CHARCOAL_KILN: [
+		{
+			"id": &"burn_charcoal",
+			"label": "Burn Charcoal",
+			"inputs": [
+				{"resource_id": &"wood", "quantity": 3},
+			],
+			"output": {&"charcoal": 3},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 375,
+			"npc_required": true,
+		},
+	],
+	BuildingType.SALT_WORKS: [
+		{
+			"id": &"evaporate",
+			"label": "Evaporate Salt",
+			"inputs": [],
+			"output": {&"salt": 2},
+			"output_capacity": 20,
+			"input_capacity": 0,
+			"base_cycle_ticks": 700,
+			"npc_required": true,
+		},
+	],
+	BuildingType.PRESERVATION_HOUSE: [
+		{
+			"id": &"preserve_meat",
+			"label": "Preserve Meat",
+			"inputs": [
+				{"resource_id": &"meat",    "quantity": 2},
+				{"resource_id": &"salt",    "quantity": 1},
+				{"resource_id": &"pottery", "quantity": 1},
+			],
+			"output": {&"preserved_food": 3},
+			"output_capacity": 20,
+			"input_capacity": 5,
+			"base_cycle_ticks": 375,
+			"npc_required": true,
+		},
+		{
+			"id": &"preserve_fish",
+			"label": "Preserve Fish",
+			"inputs": [
+				{"resource_id": &"fish",    "quantity": 2},
+				{"resource_id": &"salt",    "quantity": 1},
+				{"resource_id": &"pottery", "quantity": 1},
+			],
+			"output": {&"preserved_food": 2},
+			"output_capacity": 20,
+			"input_capacity": 5,
+			"base_cycle_ticks": 375,
+			"npc_required": true,
+		},
+	],
 }
 
 ## Terrain types required in at least one cardinal neighbor for a building to be placeable.
@@ -685,6 +872,24 @@ const ADJACENCY_REQUIREMENTS: Dictionary = {
 	BuildingType.HUNTING_LODGE:  [WorldGrid.TileType.TREE],
 	BuildingType.FARM:           [WorldGrid.TileType.WHEAT],
 	BuildingType.CLAY_PIT:       [WorldGrid.TileType.CLAY],
+	BuildingType.FISHING_HUT:    [WorldGrid.TileType.WATER],
+	BuildingType.CHARCOAL_KILN:  [WorldGrid.TileType.WATER],
+	BuildingType.SALT_WORKS:     [WorldGrid.TileType.COAST],
+}
+
+## Optional flat efficiency bonus granted when the building has ≥1 adjacent WATER tile.
+## NOT a placement requirement and NOT stacking — any amount of adjacent water grants the
+## single flat bonus once (e.g. the Mill: +0.20 / +20% next to water).
+const WATER_ADJACENCY_BONUS: Dictionary = {
+	BuildingType.MILL: 0.20,
+}
+
+## Buildings in ADJACENCY_REQUIREMENTS whose adjacent tile count does NOT contribute to
+## the resource_tiles efficiency bonus. The adjacency is a placement-only constraint.
+## (Normal case: FISHING_HUT scales efficiency with water tile count — that is intentional.
+##  Exception: CHARCOAL_KILN requires water for thematic/placement reasons only.)
+const ADJACENCY_PLACEMENT_ONLY: Dictionary = {
+	BuildingType.CHARCOAL_KILN: true,
 }
 
 ## Maps WorldGrid.TileType → resource output produced per cycle by GATHERING_HUT.
@@ -730,6 +935,12 @@ const PRODUCTION_TABLE: Dictionary = {
 	BuildingType.POTTERY_KILN:        true,
 	BuildingType.TANNERY:             true,
 	BuildingType.BOWYERS_WORKSHOP:    true,
+	BuildingType.CARPENTER:           true,
+	BuildingType.FISHING_HUT:         true,
+	BuildingType.BRICK_KILN:          true,
+	BuildingType.CHARCOAL_KILN:       true,
+	BuildingType.SALT_WORKS:          true,
+	BuildingType.PRESERVATION_HOUSE:  true,
 }
 
 # ---- Signals ----------------------------------------------------------------
@@ -810,7 +1021,7 @@ func initiate_build(building_type: int, tile: Vector2i) -> int:
 	# Unknown/ungated types default to unlocked (see ProgressionSystem.is_building_unlocked).
 	if not ProgressionSystem.is_building_unlocked(building_type):
 		return PlacementResult.LOCKED
-	var grid_result: int = _grid.validate_placement(tile, building_type)
+	var grid_result: int = _validate_grid_placement(tile, building_type)
 	if grid_result != 0:  # WorldGrid.PlacementResult.SUCCESS == 0
 		return grid_result
 	var adj_result: int = _check_adjacency(building_type, tile)
@@ -821,16 +1032,32 @@ func initiate_build(building_type: int, tile: Vector2i) -> int:
 		return afford_result
 	var building_id: String = str(_build_counter)
 	_build_counter += 1
-	var place_result: int = _grid.place_building(tile, building_id)
+	var place_result: int = _place_building_on_grid(building_type, tile, building_id)
 	if place_result != 0:
 		_build_counter -= 1
 		return place_result
 	_deduct_build_cost(building_type)
 	var instance: BuildingInstance = _create_instance(building_id, building_type, tile)
+	_refresh_water_bonus(instance)
 	_spawn_visual(instance)
 	_insert_sorted(instance)
 	building_placed.emit(building_id, building_type, tile)
 	return PlacementResult.SUCCESS
+
+
+## Grid placement validity, routed by domain: the Bridge is the only water-placed building
+## (terrain MUST be WATER); every other type uses the standard land validation (terrain EMPTY).
+func _validate_grid_placement(tile: Vector2i, building_type: int) -> int:
+	if building_type == BuildingType.BRIDGE:
+		return _grid.validate_water_placement(tile)
+	return _grid.validate_placement(tile, building_type)
+
+
+## Commits a building to the grid layer, routing the Bridge onto its water-placement path.
+func _place_building_on_grid(building_type: int, tile: Vector2i, building_id: String) -> int:
+	if building_type == BuildingType.BRIDGE:
+		return _grid.place_building_on_water(tile, building_id)
+	return _grid.place_building(tile, building_id)
 
 
 ## Places a starter building bypassing resource and energy checks.
@@ -1038,7 +1265,7 @@ func _find_container_with(resource_id: StringName) -> StringName:
 func get_placement_validity(tile: Vector2i, building_type: int) -> int:
 	if _grid == null:
 		return PlacementResult.BLOCKED_BY_BOUNDS
-	return _grid.validate_placement(tile, building_type)
+	return _validate_grid_placement(tile, building_type)
 
 
 ## Full pre-flight check: grid + adjacency + resource affordability + energy. No side effects.
@@ -1047,7 +1274,7 @@ func check_build_conditions(building_type: int, tile: Vector2i) -> int:
 		return PlacementResult.BLOCKED_BY_BOUNDS
 	if not ProgressionSystem.is_building_unlocked(building_type):
 		return PlacementResult.LOCKED
-	var grid_result: int = _grid.validate_placement(tile, building_type)
+	var grid_result: int = _validate_grid_placement(tile, building_type)
 	if grid_result != 0:
 		return grid_result
 	var adj_result: int = _check_adjacency(building_type, tile)
@@ -1266,6 +1493,9 @@ func _advance_production_cycle(instance: BuildingInstance, delta: int) -> void:
 ## Returns BLOCKED_BY_ADJACENCY when building_type has adjacency requirements and no
 ## neighbor (cardinal or diagonal) of tile satisfies them. Returns SUCCESS when met or absent.
 func _check_adjacency(building_type: int, tile: Vector2i) -> int:
+	# Bridge: must span between two opposite passable tiles (a real crossing).
+	if building_type == BuildingType.BRIDGE:
+		return _check_bridge_connects(tile)
 	if not ADJACENCY_REQUIREMENTS.has(building_type):
 		return PlacementResult.SUCCESS
 	# Hunting Lodge: must border a forest that currently contains wild (not just any tree).
@@ -1277,6 +1507,19 @@ func _check_adjacency(building_type: int, tile: Vector2i) -> int:
 	for neighbor: Vector2i in _grid.get_neighbors(tile, true):
 		if _grid.get_terrain(neighbor) in required_types:
 			return PlacementResult.SUCCESS
+	return PlacementResult.BLOCKED_BY_ADJACENCY
+
+
+## A bridge must directly connect two opposite passable tiles (left+right OR up+down) — a real
+## crossing, not a tile floating in open water. is_tile_passable counts existing bridges/roads
+## as shore, so the player can chain bridges across wider water one tile at a time.
+func _check_bridge_connects(tile: Vector2i) -> int:
+	var horizontal: bool = _grid.is_tile_passable(tile + Vector2i(-1, 0)) \
+			and _grid.is_tile_passable(tile + Vector2i(1, 0))
+	var vertical: bool = _grid.is_tile_passable(tile + Vector2i(0, -1)) \
+			and _grid.is_tile_passable(tile + Vector2i(0, 1))
+	if horizontal or vertical:
+		return PlacementResult.SUCCESS
 	return PlacementResult.BLOCKED_BY_ADJACENCY
 
 
@@ -1603,6 +1846,33 @@ func _update_adjacency_efficiency(instance: BuildingInstance) -> void:
 	instance.recalculate_efficiency(_get_assigned_workers(instance))
 
 
+## Sets the optional water-adjacency efficiency bonus (WATER_ADJACENCY_BONUS) on the instance.
+## Grants the flat bonus when ≥1 neighbour (8-way, the project's adjacency convention) is WATER;
+## 0.0 otherwise or for types without a water bonus. Water terrain is static, so this only needs
+## to run once at placement (and on load). Recalculates efficiency so the bonus takes effect.
+func _refresh_water_bonus(instance: BuildingInstance) -> void:
+	instance.water_bonus = _compute_water_bonus(instance.type, instance.tile)
+	instance.recalculate_efficiency(_get_assigned_workers(instance))
+
+
+## Returns the flat water-adjacency bonus for a building type at tile (0.0 if it has none or
+## has no adjacent water). Pure read — used on load to restore water_bonus without recomputing
+## efficiency (the saved efficiency value already accounts for it).
+func _compute_water_bonus(building_type: int, tile: Vector2i) -> float:
+	var bonus: float = WATER_ADJACENCY_BONUS.get(building_type, 0.0)
+	if bonus <= 0.0 or _grid == null:
+		return 0.0
+	return bonus if _has_adjacent_water(tile) else 0.0
+
+
+## Returns true if any 8-way neighbour of tile is a WATER terrain tile.
+func _has_adjacent_water(tile: Vector2i) -> bool:
+	for neighbor: Vector2i in _grid.get_neighbors(tile, true):
+		if _grid.get_terrain(neighbor) == WorldGrid.TileType.WATER:
+			return true
+	return false
+
+
 ## Recomputes gathering_output for a GATHERING_HUT based on which harvestable terrain
 ## types are currently adjacent. One output entry per distinct terrain type found;
 ## quantity comes from TERRAIN_HARVEST_OUTPUT regardless of how many tiles of that type exist.
@@ -1689,6 +1959,13 @@ func _building_type_name(building_type: int) -> String:
 		BuildingType.POTTERY_KILN:       return "Pottery Kiln"
 		BuildingType.TANNERY:            return "Tannery"
 		BuildingType.BOWYERS_WORKSHOP:   return "Bowyer's Workshop"
+		BuildingType.BRIDGE:             return "Bridge"
+		BuildingType.CARPENTER:          return "Carpenter's Workshop"
+		BuildingType.FISHING_HUT:        return "Fishing Hut"
+		BuildingType.BRICK_KILN:         return "Brick Kiln"
+		BuildingType.CHARCOAL_KILN:      return "Charcoal Kiln"
+		BuildingType.SALT_WORKS:         return "Salt Works"
+		BuildingType.PRESERVATION_HOUSE: return "Preservation House"
 	return "Unknown"
 
 # ---- Stub methods (future stories) -----------------------------------------
@@ -2016,8 +2293,9 @@ func deserialize(data: Dictionary) -> void:
 		var type: int = bd.get("type", 0)
 		var tile := Vector2i(bd.get("tile_x", 0), bd.get("tile_y", 0))
 		if _grid != null:
-			_grid.place_building(tile, building_id)
+			_place_building_on_grid(type, tile, building_id)
 		var instance := BuildingInstance.new(building_id, type, tile)
+		instance.water_bonus = _compute_water_bonus(type, tile)
 		instance.state = bd.get("state", BuildingInstance.State.OPERATING)
 		instance.accumulated_ticks = bd.get("accumulated_ticks", 0)
 		instance.build_time = bd.get("build_time", 0)

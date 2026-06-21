@@ -54,17 +54,20 @@ static func calculate_npc_efficiency(
 ## resource_tiles: adjacent resource terrain tiles (0 for buildings without an adjacency requirement).
 ## worker_efficiency: the assigned worker's npc.efficiency (sum if several workers; 0.0 if unstaffed).
 ## upgrade_bonus: 0.0 at VS scope (future UpgradeSystem sets this).
+## flat_bonus: additional flat additive bonus (e.g. the Mill's +0.20 water-adjacency bonus).
 ## Example: 3 tiles, worker at 0.50 → 0.25 + 0.15 + 0.50 = 0.90. Clamped to [0, BUILDING_EFFICIENCY_MAX].
 static func calculate_building_efficiency(
 		resource_tiles: int,
 		worker_efficiency: float,
 		upgrade_bonus: float = 0.0,
+		flat_bonus: float = 0.0,
 ) -> float:
 	return clampf(
 			BUILDING_BASE_EFFICIENCY
 			+ float(maxi(0, resource_tiles)) * ADJACENCY_EFFICIENCY_PER_TILE
 			+ worker_efficiency
-			+ upgrade_bonus,
+			+ upgrade_bonus
+			+ flat_bonus,
 			EFFICIENCY_MIN, BUILDING_EFFICIENCY_MAX)
 
 ## F3: Effective production cycle ticks — floor(base / efficiency), minimum 1.
