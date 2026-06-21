@@ -21,11 +21,12 @@ const _COLOR_START := Color(1.0, 0.84, 0.0)        ## Gold border on the chosen 
 const _COLOR_HOVER := Color(1.0, 1.0, 1.0, 0.7)
 const _COLOR_SELECTED := Color(0.4, 0.85, 1.0)     ## Cyan border on the inspected tile.
 
-const _MIN_ZOOM: float = 1.0
+const _MIN_ZOOM: float = 0.1   ## Low enough to fit the whole 256-tile island on screen.
 const _MAX_ZOOM: float = 10.0
 const _ZOOM_STEP: float = 1.15                     ## Multiplicative per wheel notch.
 const _FIT_MARGIN: float = 0.85                    ## Island fills this fraction of the screen.
 const _CLICK_MAX_TRAVEL: float = 6.0               ## Below this drag distance, a release is a click.
+const _GRID_MIN_PX: float = 24.0                   ## Only draw tile grid lines once tiles are this big.
 
 ## Compass label per WorldGrid coast_edge (0 top, 1 bottom, 2 left, 3 right).
 const _EDGE_COMPASS: Array[String] = ["North", "South", "West", "East"]
@@ -40,6 +41,10 @@ var _selected_tile: Vector2i = Vector2i(-1, -1)    ## Tile shown in the inspecti
 var _open: bool = false
 var _pick_mode: bool = false                       ## True while choosing a new game's start.
 
+## One-pixel-per-tile biome image, drawn as a single nearest-filtered rect so rendering cost
+## is independent of OVERWORLD_SIZE (a 256x256 grid is one draw call, not 65k).
+var _biome_tex: ImageTexture = null
+
 # Inspection panel widgets (built programmatically in _ready).
 var _panel: PanelContainer = null
 var _title_label: Label = null
@@ -52,11 +57,27 @@ var _start_button: Button = null
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST  # crisp tile edges when zoomed in
 	visible = false
 	_build_panel()
-	# Redraw when the overworld regenerates or a start tile is chosen.
-	OverworldSystem.overworld_generated.connect(queue_redraw)
+	# Rebuild the biome texture on (re)generation; redraw the marker on start selection.
+	OverworldSystem.overworld_generated.connect(_on_overworld_generated)
 	OverworldSystem.start_selected.connect(func(_c: Vector2i) -> void: queue_redraw())
+
+
+func _on_overworld_generated() -> void:
+	_biome_tex = null  # invalidate; rebuilt lazily on next draw
+	queue_redraw()
+
+
+## Builds the one-pixel-per-tile biome image. Cheap and done once per generation.
+func _rebuild_biome_texture() -> void:
+	var n: int = OverworldSystem.OVERWORLD_SIZE
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	for x in range(n):
+		for y in range(n):
+			img.set_pixel(x, y, _biome_color(OverworldSystem.get_biome(Vector2i(x, y))))
+	_biome_tex = ImageTexture.create_from_image(img)
 
 
 # --- Toggle / open / close ---------------------------------------------------
@@ -302,17 +323,22 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), _COLOR_BACKDROP)
 	if not OverworldSystem.is_generated():
 		return
+	if _biome_tex == null:
+		_rebuild_biome_texture()
 	var n: int = OverworldSystem.OVERWORLD_SIZE
 	var ts: int = OverworldSystem.OVERWORLD_TILE_SIZE
 	var px: float = ts * _view_zoom
-	for x in range(n):
-		for y in range(n):
-			var coord := Vector2i(x, y)
-			var screen_pos: Vector2 = (Vector2(coord * ts) - _view_offset) * _view_zoom
-			var rect := Rect2(screen_pos, Vector2(px, px))
-			draw_rect(rect, _biome_color(OverworldSystem.get_biome(coord)))
-			if px >= 6.0:
-				draw_rect(rect, _COLOR_GRID, false, 1.0)
+	# Whole biome grid as one nearest-filtered rect (1 draw call regardless of size).
+	var map_origin: Vector2 = (Vector2.ZERO - _view_offset) * _view_zoom
+	var map_size: float = n * ts * _view_zoom
+	draw_texture_rect(_biome_tex, Rect2(map_origin, Vector2(map_size, map_size)), false)
+	# Grid lines only when zoomed in enough to matter, and only over the visible tile range.
+	if px >= _GRID_MIN_PX:
+		var tl: Vector2i = _clamp_tile(_screen_to_tile(Vector2.ZERO))
+		var br: Vector2i = _clamp_tile(_screen_to_tile(size))
+		for x in range(tl.x, br.x + 1):
+			for y in range(tl.y, br.y + 1):
+				draw_rect(_tile_rect(Vector2i(x, y), ts), _COLOR_GRID, false, 1.0)
 	# Start tile marker.
 	var start: Vector2i = OverworldSystem.get_start_coord()
 	if start != Vector2i(-1, -1):
@@ -323,6 +349,11 @@ func _draw() -> void:
 	# Hover highlight (only on selectable land).
 	if OverworldSystem.is_selectable(_hover_tile):
 		draw_rect(_tile_rect(_hover_tile, ts), _COLOR_HOVER, false, 2.0)
+
+
+func _clamp_tile(coord: Vector2i) -> Vector2i:
+	var n: int = OverworldSystem.OVERWORLD_SIZE
+	return Vector2i(clampi(coord.x, 0, n - 1), clampi(coord.y, 0, n - 1))
 
 
 func _tile_rect(coord: Vector2i, ts: int) -> Rect2:

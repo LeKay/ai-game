@@ -10,7 +10,7 @@ extends Node
 ## Registered as an Autoload, but generate()/get_tile() are pure and have no autoload
 ## dependencies, so the generator is instantiable in tests (OverworldSystem.new()).
 
-const OVERWORLD_SIZE: int = 24       ## Tiles per axis (square grid).
+const OVERWORLD_SIZE: int = 256      ## Tiles per axis (square grid).
 const OVERWORLD_TILE_SIZE: int = 16  ## Render size in px — RimWorld-small vs tactical 64.
 const FERTILITIES_PER_TILE: int = 3  ## Fertilities each land tile supports.
 
@@ -19,7 +19,9 @@ const FERTILITIES_PER_TILE: int = 3  ## Fertilities each land tile supports.
 ## smaller island / more ocean. The falloff guarantees an all-ocean ring at the grid edges.
 const _ISLAND_THRESHOLD: float = 0.10
 const _ISLAND_FALLOFF_POWER: float = 2.0    ## Steepness of the radial coast (rounder if higher).
-const _ISLAND_NOISE_FREQUENCY: float = 0.12 ## Coastline raggedness.
+## Coastline raggedness expressed as noise periods across the whole map, so the island keeps
+## the same overall shape at any OVERWORLD_SIZE (frequency = periods / size).
+const _ISLAND_NOISE_PERIODS: float = 2.9
 const _ISLAND_NOISE_OCTAVES: int = 3
 
 ## Large seed offsets so the overworld RNG/noise never aligns with tactical-map seeds.
@@ -110,7 +112,7 @@ func _build_island_mask(world_seed: int) -> Dictionary:
 	noise.seed = world_seed + _ISLAND_NOISE_SEED_OFFSET
 	noise.fractal_type = FastNoiseLite.FRACTAL_FBM
 	noise.fractal_octaves = _ISLAND_NOISE_OCTAVES
-	noise.frequency = _ISLAND_NOISE_FREQUENCY
+	noise.frequency = _ISLAND_NOISE_PERIODS / float(OVERWORLD_SIZE)
 
 	var center: float = (OVERWORLD_SIZE - 1) * 0.5
 	var mask: Dictionary = {}
