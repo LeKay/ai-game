@@ -1,4 +1,6 @@
-class_name OverworldSystem extends Node
+extends Node
+## OverworldSystem (Autoload — registered in project.godot; no class_name to avoid hiding
+## the autoload singleton). Access via the global `OverworldSystem` per the singletons rule.
 ## Overworld / world map — an island of small biome tiles (ocean / coast / inland),
 ## generated once per game and fully deterministic from one world_seed. It is the
 ## start-location picker (the chosen land tile drives WorldGrid.generate()) and a
