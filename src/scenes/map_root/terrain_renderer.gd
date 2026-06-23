@@ -242,7 +242,7 @@ const _TERRAIN_PNG_VARIANTS: Array = [
 		"res://assets/art/tiles/sand/env_tile_sand_13.png", "res://assets/art/tiles/sand/env_tile_sand_14.png",
 		"res://assets/art/tiles/sand/env_tile_sand_15.png", "res://assets/art/tiles/sand/env_tile_sand_16.png",
 	],  # SAND
-	[  # OLIVE — 16 transparent olive-grove overlays (composited over GRASS)
+	[  # OLIVE — 16 transparent olive-grove overlays (composited over EMPTY/sand)
 		"res://assets/art/tiles/olive/env_tile_olive_01.png", "res://assets/art/tiles/olive/env_tile_olive_02.png",
 		"res://assets/art/tiles/olive/env_tile_olive_03.png", "res://assets/art/tiles/olive/env_tile_olive_04.png",
 		"res://assets/art/tiles/olive/env_tile_olive_05.png", "res://assets/art/tiles/olive/env_tile_olive_06.png",
@@ -252,7 +252,7 @@ const _TERRAIN_PNG_VARIANTS: Array = [
 		"res://assets/art/tiles/olive/env_tile_olive_13.png", "res://assets/art/tiles/olive/env_tile_olive_14.png",
 		"res://assets/art/tiles/olive/env_tile_olive_15.png", "res://assets/art/tiles/olive/env_tile_olive_16.png",
 	],  # OLIVE
-	[  # BEES — 16 transparent flower overlays (honey source, composited over GRASS)
+	[  # BEES — 16 transparent flower overlays (honey source, composited over EMPTY/sand)
 		"res://assets/art/tiles/bees/env_tile_bees_01.png", "res://assets/art/tiles/bees/env_tile_bees_02.png",
 		"res://assets/art/tiles/bees/env_tile_bees_03.png", "res://assets/art/tiles/bees/env_tile_bees_04.png",
 		"res://assets/art/tiles/bees/env_tile_bees_05.png", "res://assets/art/tiles/bees/env_tile_bees_06.png",
@@ -313,8 +313,6 @@ const _TERRAIN_FALLBACK_COLORS: Array[Color] = [
 ## overlay sprite. Unlisted types render on the default EMPTY (sand) base — matching how
 ## tree/stone overlays already composite over sand. (ADR-0015 addendum.)
 const _TERRAIN_BASE_TYPE: Dictionary = {
-	WorldGrid.TileType.OLIVE: WorldGrid.TileType.GRASS,
-	WorldGrid.TileType.BEES: WorldGrid.TileType.GRASS,
 	WorldGrid.TileType.AMBER: WorldGrid.TileType.GRASS,
 	WorldGrid.TileType.PEARL: WorldGrid.TileType.WATER,
 }

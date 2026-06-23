@@ -72,6 +72,7 @@ var _faction_icon: TextureRect = null   ## Faction emblem shown at the top of th
 var _title_label: Label = null
 var _biome_label: Label = null
 var _fertility_label: Label = null
+var _fertility_icons: HFlowContainer = null  ## Per-fertility icon + name chips, below _fertility_label.
 var _note_label: Label = null
 var _start_button: Button = null
 
@@ -323,6 +324,10 @@ func _build_panel() -> void:
 	_biome_label = _make_label(vbox, 14)
 	_fertility_label = _make_label(vbox, 14)
 	_fertility_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_fertility_icons = HFlowContainer.new()
+	_fertility_icons.add_theme_constant_override("h_separation", 10)
+	_fertility_icons.add_theme_constant_override("v_separation", 4)
+	vbox.add_child(_fertility_icons)
 	_note_label = _make_label(vbox, 13)
 	_note_label.modulate = _COLOR_START
 
@@ -365,12 +370,15 @@ func _populate_panel(coord: Vector2i) -> void:
 	# the fixed STARTING_FERTILITY (clay/wheat/wild), so showing them here would mislead.
 	if _pick_mode:
 		_fertility_label.visible = false
+		_set_fertility_chips([])
 	elif tile.fertilities.is_empty():
 		_fertility_label.visible = true
 		_fertility_label.text = "Open water — no land to settle."
+		_set_fertility_chips([])
 	else:
 		_fertility_label.visible = true
-		_fertility_label.text = "Fertilities: %s" % _fertility_text(tile.fertilities)
+		_fertility_label.text = "Fertilities:"
+		_set_fertility_chips(tile.fertilities)
 	# Note line: NPC-city status takes priority over the start marker.
 	if OverworldSystem.is_city(coord):
 		_note_label.visible = true
@@ -429,11 +437,35 @@ func _biome_text(tile) -> String:
 			return "Ocean"
 
 
-func _fertility_text(fertilities: Array) -> String:
-	var parts: Array[String] = []
+## Fertilities whose UI label/icon differ from the fertility id itself. The "bees" fertility
+## yields the "honey" resource, so it is presented as Honey (with the honey icon) in the UI.
+const _FERTILITY_RESOURCE_ID: Dictionary = {
+	&"bees": &"honey",
+}
+const _FERTILITY_ICON_PX: int = 20
+
+## Rebuilds the per-fertility chip row (icon + display name) under the fertility header.
+func _set_fertility_chips(fertilities: Array) -> void:
+	for child in _fertility_icons.get_children():
+		child.queue_free()
+	_fertility_icons.visible = not fertilities.is_empty()
 	for f in fertilities:
-		parts.append(String(f).capitalize())
-	return ", ".join(parts)
+		var res_id: StringName = _FERTILITY_RESOURCE_ID.get(f, StringName(f))
+		var chip := HBoxContainer.new()
+		chip.add_theme_constant_override("separation", 4)
+		var def := ResourceRegistry.get_definition(res_id)
+		if def != null:
+			var icon := TextureRect.new()
+			icon.texture = ResourceRegistry.get_icon_texture(res_id, _FERTILITY_ICON_PX)
+			icon.custom_minimum_size = Vector2(_FERTILITY_ICON_PX, _FERTILITY_ICON_PX)
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST  # crisp pixel-art icon
+			chip.add_child(icon)
+		var label := Label.new()
+		label.add_theme_font_size_override("font_size", 14)
+		label.text = def.display_name if def != null else String(f).capitalize()
+		chip.add_child(label)
+		_fertility_icons.add_child(chip)
 
 
 # --- Rendering ---------------------------------------------------------------

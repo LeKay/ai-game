@@ -24,7 +24,7 @@ const RESOURCE_LAYER: int = 2
 ## FLAX..PEARL (ordinals 16-24) are the second fertility wave (ADR-0015 addendum 2026-06-23):
 ##   FLAX/HOPS/GRAPES — opaque field crops placed on EMPTY tiles (wheat-like).
 ##   SAND            — opaque beach tile placed on land bordering WATER/COAST.
-##   OLIVE/BEES      — transparent overlay sprites composited over a GRASS base.
+##   OLIVE/BEES      — transparent overlay sprites placed on EMPTY tiles (composited over sand).
 ##   MARBLE          — transparent overlay sprite ("like stone"), mountain-biased.
 ##   AMBER           — hidden deposit (clay-like): Search reveals it as an AMBER overlay.
 ##   PEARL           — visible overlay on the ocean (COAST base); impassable like water.
@@ -55,10 +55,14 @@ enum TerrainProfile { PLAINS, FOREST, MOUNTAIN }
 ## PLAINS uses stone_hi = 1.01 so the peak branch is unreachable — byte-identical to the
 ## original thresholds (0.15 / 0.30 / 0.55 / 0.75, else STONE).
 const _ELEV_BANDS: Dictionary = {
-	TerrainProfile.PLAINS:   [0.15, 0.30, 0.55, 0.75, 1.01],
+	TerrainProfile.PLAINS:   [0.15, 0.30, 0.55, 0.68, 1.01],  # tree_hi lowered 0.75→0.68 (~35% fewer trees)
 	TerrainProfile.FOREST:   [0.15, 0.30, 0.45, 0.82, 1.01],
-	TerrainProfile.MOUNTAIN: [0.12, 0.24, 0.40, 0.58, 0.82],
+	TerrainProfile.MOUNTAIN: [0.12, 0.24, 0.40, 0.47, 0.82],  # tree_hi lowered 0.58→0.47 (~61% fewer trees)
 }
+
+## Tile types that cluster exclusively with their own kind during smoothing.
+## Cross-type neighbors are treated as EMPTY so BERRY/STONE/GRASS don't absorb one another.
+const _EXCLUSIVE_CLUSTER_TYPES: Array[int] = [TileType.BERRY, TileType.STONE, TileType.GRASS]
 
 ## Resource data for a single tile. Null when the tile has no resource.
 class ResourceTileData:
@@ -342,23 +346,23 @@ func _populate_field_crops(world_seed: int) -> void:
 			_terrain[empties[i].x][empties[i].y] = tile_type
 
 
-## Converts GRASS tiles to transparent-overlay terrain (olives/bees) for each grove fertility
-## this map supports. The overlay sprite is composited over a GRASS base by the renderer.
+## Converts EMPTY tiles to transparent-overlay terrain (olives/bees) for each grove fertility
+## this map supports. The overlay sprite is composited over an EMPTY (sand) base by the renderer.
 func _populate_grass_overlays(world_seed: int) -> void:
 	var offset: int = 0
 	for resource_id: StringName in GRASS_OVERLAY_TILE_TYPE:
 		offset += 1
 		if not has_fertility(resource_id):
 			continue
-		var grass: Array[Vector2i] = _get_type_tiles_in_terrain(TileType.GRASS)
-		if grass.is_empty():
+		var empties: Array[Vector2i] = _get_empty_tiles_in_terrain()
+		if empties.is_empty():
 			continue
 		var rng := RandomNumberGenerator.new()
 		rng.seed = world_seed + _GRASS_OVERLAY_SEED_OFFSET + offset * 1009
-		_shuffle_tiles(grass, rng)
+		_shuffle_tiles(empties, rng)
 		var tile_type: int = GRASS_OVERLAY_TILE_TYPE[resource_id]
-		for i in range(mini(GRASS_OVERLAY_COUNT, grass.size())):
-			_terrain[grass[i].x][grass[i].y] = tile_type
+		for i in range(mini(GRASS_OVERLAY_COUNT, empties.size())):
+			_terrain[empties[i].x][empties[i].y] = tile_type
 
 
 ## Converts STONE tiles to MARBLE ("treated like stone", transparent overlay) when this map is
@@ -650,7 +654,20 @@ func _smooth_terrain(terrain: Array, smooth_seed: int) -> Array:
 				var neighbors: Array[int] = _get_raw_neighbors(current, x, y)
 				if neighbors.is_empty():
 					continue
-				var dominant: int = _find_dominant_type(neighbors)
+				var current_type: int = current[x][y]
+				var dominant: int
+				if current_type in _EXCLUSIVE_CLUSTER_TYPES:
+					# Replace cross-type exclusive neighbors with EMPTY so each type
+					# only reinforces itself and is not absorbed by the others.
+					var filtered: Array[int] = []
+					for t: int in neighbors:
+						if t in _EXCLUSIVE_CLUSTER_TYPES and t != current_type:
+							filtered.append(TileType.EMPTY)
+						else:
+							filtered.append(t)
+					dominant = _find_dominant_type(filtered)
+				else:
+					dominant = _find_dominant_type(neighbors)
 				if rng.randf() < 0.6:
 					next[x][y] = dominant
 		current = next
