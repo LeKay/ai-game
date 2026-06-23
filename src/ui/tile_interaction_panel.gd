@@ -367,15 +367,17 @@ func _on_search_pressed() -> void:
 		_search_result_label.text = result.get("reason", "Cannot search")
 		return
 	var parts: Array[String] = []
-	var clay_dist: int = result.get("clay_distance", -1)
-	if result.get("clay_revealed", false):
-		parts.append("Clay pit exposed here!")
-	elif clay_dist == 0 and result.get("reason", "") != "":
+	var dist: int = result.get("deposit_distance", -1)
+	var deposit_id: StringName = result.get("deposit_id", &"")
+	var deposit_name: String = String(deposit_id).capitalize() if deposit_id != &"" else "deposit"
+	if result.get("deposit_revealed", false):
+		parts.append("%s pit exposed here!" % deposit_name)
+	elif dist == 0 and result.get("reason", "") != "":
 		parts.append(result.get("reason", ""))
-	elif clay_dist > 0:
-		parts.append("Nearest clay: %d tiles away" % clay_dist)
+	elif dist > 0:
+		parts.append("Nearest deposit (%s): %d tiles away" % [deposit_name, dist])
 	else:
-		parts.append("No clay deposits found")
+		parts.append("No deposits found")
 	_search_result_label.text = "\n".join(parts)
 	_search_button.disabled = pc.get_current_energy() < PlayerCharacter.SURVEY_ENERGY
 

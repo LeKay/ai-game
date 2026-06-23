@@ -76,7 +76,7 @@ func start_placement(building_type: int) -> void:
 	_is_path_mode  = false
 	_building_type = building_type
 	var tex_path: String = BuildingRegistry.BUILDING_TEXTURES.get(
-		building_type, "res://assets/art/tiles/bld_tile_storage.png")
+		building_type, "res://assets/art/buildings/bld_tile_storage.png")
 	_ghost.texture = load(tex_path)
 	visible        = true
 

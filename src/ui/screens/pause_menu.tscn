@@ -1,0 +1,73 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/ui/screens/pause_menu.gd" id="1_pause"]
+[ext_resource type="Theme" uid="uid://c562ak3f31iv7" path="res://src/ui/styles/menu_button.tres" id="2_menu_button"]
+[ext_resource type="Theme" uid="uid://drql75cotrfen" path="res://src/ui/styles/menu_button_disabled.tres" id="3_menu_button_disabled"]
+
+[node name="PauseMenu" type="CanvasLayer"]
+script = ExtResource("1_pause")
+
+[node name="Background" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.165, 0.165, 0.165, 0.78)
+
+[node name="MenuButtons" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -150.0
+offset_right = 100.0
+offset_bottom = 150.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="Title" type="Label" parent="MenuButtons"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.94, 0.93, 0.9, 1)
+theme_override_font_sizes/font_size = 32
+text = "Paused"
+horizontal_alignment = 1
+
+[node name="Save" type="Button" parent="MenuButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+theme = ExtResource("2_menu_button")
+text = "Save"
+
+[node name="Load" type="Button" parent="MenuButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+theme = ExtResource("2_menu_button")
+text = "Load"
+
+[node name="Settings" type="Button" parent="MenuButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+theme = ExtResource("3_menu_button_disabled")
+disabled = true
+text = "Settings"
+
+[node name="BackToMenu" type="Button" parent="MenuButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+theme = ExtResource("2_menu_button")
+text = "Back to Menu"
+
+[node name="Feedback" type="Label" parent="MenuButtons"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.82, 0.55, 1)
+theme_override_font_sizes/font_size = 15
+horizontal_alignment = 1

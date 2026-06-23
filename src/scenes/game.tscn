@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="PackedScene" path="res://src/scenes/map_root.tscn" id="1_maproot"]
 [ext_resource type="Script" path="res://src/systems/camera_controller.gd" id="2_camera"]
@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://src/ui/DayOverviewPanel.tscn" id="6_dop"]
 [ext_resource type="Script" path="res://src/ui/perk_choice_panel.gd" id="7_perk"]
 [ext_resource type="Script" path="res://src/ui/overworld/overworld_view.gd" id="8_overworld"]
+[ext_resource type="PackedScene" path="res://src/ui/screens/pause_menu.tscn" id="9_pause"]
 
 [node name="GameWorld" type="Node2D"]
 
@@ -36,3 +37,5 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("8_overworld")
+
+[node name="PauseMenu" parent="." instance=ExtResource("9_pause")]

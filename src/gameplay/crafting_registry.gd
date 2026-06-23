@@ -129,14 +129,15 @@ func try_craft(recipe_id: StringName) -> int:
 	var energy_cost: int   = RECIPE_ENERGY_COST.get(recipe_id, 0)
 	var output: Dictionary = RECIPE_OUTPUT.get(recipe_id, {})
 
-	# 1. Resource check
-	for res_id: StringName in cost:
-		if _get_total_resource(res_id) < cost[res_id]:
-			return CraftResult.INSUFFICIENT_RESOURCES
+	# 1. Resource check (skipped when the debug "ignore costs" cheat is active)
+	if not DebugSettings.ignore_costs:
+		for res_id: StringName in cost:
+			if _get_total_resource(res_id) < cost[res_id]:
+				return CraftResult.INSUFFICIENT_RESOURCES
 
 	# 2. Energy check
 	var player: Node = get_tree().get_first_node_in_group(&"player_character")
-	if player != null and energy_cost > 0:
+	if not DebugSettings.ignore_costs and player != null and energy_cost > 0:
 		if player.get_current_energy() < energy_cost:
 			return CraftResult.INSUFFICIENT_ENERGY
 
@@ -145,13 +146,13 @@ func try_craft(recipe_id: StringName) -> int:
 	if target_id == &"":
 		return CraftResult.NO_STORAGE
 
-	# 4. Deduct resources
-	for res_id: StringName in cost:
-		_consume_resource_any(res_id, cost[res_id])
-
-	# 5. Deduct energy
-	if player != null and energy_cost > 0:
-		player.consume_energy(energy_cost)
+	# 4. Deduct resources + energy (skipped under the debug "ignore costs" cheat)
+	if not DebugSettings.ignore_costs:
+		for res_id: StringName in cost:
+			_consume_resource_any(res_id, cost[res_id])
+		# 5. Deduct energy
+		if player != null and energy_cost > 0:
+			player.consume_energy(energy_cost)
 
 	# 6. Resolve which building owns the target container (for map indicator).
 	_crafting_building_id = ""

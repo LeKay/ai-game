@@ -91,7 +91,7 @@
       "icon": "🌉",
       "branch": "food",
       "ring": 5,
-      "prerequisites": ["paving"],
+      "prerequisites": ["paving", "rope_weaving"],
       "unlocks": [
         { "type": "building", "id": "BRIDGE" }
       ],
@@ -284,7 +284,14 @@
       "prerequisites": ["tooled_quarrying"],
       "unlocks": [
         { "type": "search", "id": "SEARCH" },
-        { "type": "gather", "id": "MINE_CLAY" }
+        { "type": "gather", "id": "MINE_CLAY" },
+        { "type": "gather", "id": "MINE_IRON" },
+        { "type": "gather", "id": "MINE_COPPER" },
+        { "type": "gather", "id": "MINE_TIN" },
+        { "type": "gather", "id": "MINE_SILVER" },
+        { "type": "gather", "id": "MINE_GOLD" },
+        { "type": "gather", "id": "MINE_GEMSTONE" },
+        { "type": "gather", "id": "MINE_AMBER" }
       ],
       "cost": null
     },
@@ -479,7 +486,6 @@
       "ring": 3,
       "prerequisites": ["toolmaking", "fiber_harvesting"],
       "unlocks": [
-        { "type": "building", "id": "BOWYERS_WORKSHOP" },
         { "type": "manual_recipe", "id": "hunting_bow" }
       ],
       "cost": null
@@ -729,6 +735,43 @@
         { "type": "building", "id": "PRESERVATION_HOUSE" },
         { "type": "building_recipe", "id": "PRESERVATION_HOUSE:preserve_meat" },
         { "type": "building_recipe", "id": "PRESERVATION_HOUSE:preserve_fish" }
+      ],
+      "cost": null
+    },
+    {
+      "node_id": "rope_weaving",
+      "display_name": "Rope Weaving",
+      "icon": "🪢",
+      "branch": "textiles",
+      "ring": 5,
+      "prerequisites": ["weaving", "spindle"],
+      "unlocks": [
+        { "type": "building_recipe", "id": "WEAVER:twist_rope" }
+      ],
+      "cost": null
+    },
+    {
+      "node_id": "rope_nets",
+      "display_name": "Rope Nets",
+      "icon": "🕸️",
+      "branch": "textiles",
+      "ring": 6,
+      "prerequisites": ["net_weaving", "rope_weaving"],
+      "unlocks": [
+        { "type": "building_recipe", "id": "WEAVER:craft_net_from_rope" }
+      ],
+      "cost": null
+    },
+    {
+      "node_id": "rope_bow",
+      "display_name": "Rope-strung Bow",
+      "icon": "🏹",
+      "branch": "crafting",
+      "ring": 5,
+      "prerequisites": ["bowyer", "rope_weaving"],
+      "unlocks": [
+        { "type": "building", "id": "BOWYERS_WORKSHOP" },
+        { "type": "building_recipe", "id": "BOWYERS_WORKSHOP:bow_with_rope" }
       ],
       "cost": null
     }

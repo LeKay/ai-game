@@ -11,13 +11,17 @@ extends Control
 ##    dismissed without choosing, so a new game always has a valid start tile.
 ## Spec: design/quick-specs/overworld-map-system-2026-06-21.md
 
-## Biome fill colors (ocean / coast / inland).
+## Biome fill colors (ocean / coast / inland / forest / mountain).
 const _COLOR_OCEAN := Color(0.12, 0.32, 0.55)
 const _COLOR_COAST := Color(0.85, 0.78, 0.55)
 const _COLOR_INLAND := Color(0.30, 0.55, 0.28)
+const _COLOR_FOREST := Color(0.13, 0.34, 0.16)     ## Dark green woodland.
+const _COLOR_MOUNTAIN := Color(0.45, 0.42, 0.40)   ## Grey-brown rock.
+const _COLOR_RIVER := Color(0.25, 0.55, 0.85)       ## River water — lighter than ocean to read on land.
+const _COLOR_LAKE := Color(0.32, 0.62, 0.80)        ## Lake freshwater — teal-ish, distinct from salt ocean.
 const _COLOR_BACKDROP := Color(0.05, 0.08, 0.12)
 const _COLOR_GRID := Color(0.0, 0.0, 0.0, 0.15)
-const _COLOR_START := Color(1.0, 0.84, 0.0)        ## Gold border on the chosen start tile.
+const _COLOR_START := Color(1.0, 0.84, 0.0)        ## Gold accent for the "Current start" panel note.
 const _COLOR_HOVER := Color(1.0, 1.0, 1.0, 0.7)
 const _COLOR_SELECTED := Color(0.4, 0.85, 1.0)     ## Cyan border on the inspected tile.
 
@@ -45,8 +49,26 @@ var _pick_mode: bool = false                       ## True while choosing a new 
 ## is independent of OVERWORLD_SIZE (a 256x256 grid is one draw call, not 65k).
 var _biome_tex: ImageTexture = null
 
+## NPC-city marker icon, drawn over each city tile. Loaded (not preloaded) so a missing/unimported
+## asset degrades to "no icon" instead of a compile error. See _CITY_ICON_PATH.
+const _CITY_ICON_PATH := "res://assets/ui/icons/overworld/city.png"
+const _PLAYER_ICON_PATH := "res://assets/ui/icons/overworld/player_settlement.png"
+const _CITY_ICON_MIN_PX: float = 18.0   ## Icon never shrinks below this, so cities read at any zoom.
+const _CITY_ICON_TILE_SPAN: float = 3.0 ## Icon covers this many tiles per side (3x3, city-centred).
+const _FACTION_EMBLEM_SCALE: float = 0.6 ## Faction emblem size relative to the city icon.
+const _PLAYER_PREVIEW_MODULATE := Color(1.0, 1.0, 1.0, 0.55)  ## Translucent while a start is only previewed.
+const _FACTION_ICON_DIR := "res://assets/ui/icons/factions/"
+var _city_tex: Texture2D = null
+var _player_tex: Texture2D = null
+var _faction_tex: Dictionary = {}  ## faction id -> Texture2D (loaded once; missing assets skipped)
+
+## Emitted when the player double-clicks a land tile (other than the current one) after a start
+## has been chosen. MapRoot listens and switches the tactical map to that tile.
+signal map_opened(coord: Vector2i)
+
 # Inspection panel widgets (built programmatically in _ready).
 var _panel: PanelContainer = null
+var _faction_icon: TextureRect = null   ## Faction emblem shown at the top of the panel for city tiles.
 var _title_label: Label = null
 var _biome_label: Label = null
 var _fertility_label: Label = null
@@ -59,6 +81,14 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST  # crisp tile edges when zoomed in
 	visible = false
+	if ResourceLoader.exists(_CITY_ICON_PATH):
+		_city_tex = load(_CITY_ICON_PATH)
+	if ResourceLoader.exists(_PLAYER_ICON_PATH):
+		_player_tex = load(_PLAYER_ICON_PATH)
+	for faction: Dictionary in OverworldSystem.FACTIONS:
+		var path: String = _FACTION_ICON_DIR + faction["id"] + ".png"
+		if ResourceLoader.exists(path):
+			_faction_tex[faction["id"]] = load(path)
 	_build_panel()
 	# Rebuild the biome texture on (re)generation; redraw the marker on start selection.
 	OverworldSystem.overworld_generated.connect(_on_overworld_generated)
@@ -76,7 +106,10 @@ func _rebuild_biome_texture() -> void:
 	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
 	for x in range(n):
 		for y in range(n):
-			img.set_pixel(x, y, _biome_color(OverworldSystem.get_biome(Vector2i(x, y))))
+			var coord := Vector2i(x, y)
+			# River tiles read as water on top of their biome (rivers cross forest/mountain/plains).
+			var color: Color = _biome_color(OverworldSystem.get_biome(coord))
+			img.set_pixel(x, y, color)
 	_biome_tex = ImageTexture.create_from_image(img)
 
 
@@ -156,6 +189,11 @@ func _handle_view_input(event: InputEvent) -> void:
 			_dragging = mb.pressed
 		elif mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
+				# Double-click a land tile (after a start exists) to travel there. Handled on
+				# press via the engine's double_click flag; a single click still inspects.
+				if mb.double_click and _try_open_map(_screen_to_tile(mb.position)):
+					get_viewport().set_input_as_handled()
+					return
 				_dragging = true
 				_drag_travel = 0.0
 			else:
@@ -209,9 +247,39 @@ func _on_tile_clicked(coord: Vector2i) -> void:
 	if OverworldSystem.get_tile(coord) == null:
 		_hide_panel()
 		return
+	_log_water_kind(coord)
 	_selected_tile = coord
 	_populate_panel(coord)
 	queue_redraw()
+
+
+## Logs whether the clicked tile is open sea, a lake or a river (water bodies only).
+func _log_water_kind(coord: Vector2i) -> void:
+	match OverworldSystem.get_biome(coord):
+		OverworldSystem.Biome.OCEAN:
+			print("[OVERWORLD] Tile %s: Meer (ocean)" % coord)
+		OverworldSystem.Biome.LAKE:
+			print("[OVERWORLD] Tile %s: See (lake)" % coord)
+		OverworldSystem.Biome.RIVER:
+			print("[OVERWORLD] Tile %s: Fluss (river)" % coord)
+
+
+## Attempts to travel to coord's tactical map on a double-click. Allowed only outside pick mode,
+## once a start exists, on a land tile that isn't the one already loaded. Closes the view (popping
+## UI context) and emits map_opened; returns true if travel was started, false to fall through to
+## the normal click/drag handling.
+func _try_open_map(coord: Vector2i) -> bool:
+	if _pick_mode:
+		return false
+	if OverworldSystem.get_start_coord() == Vector2i(-1, -1):
+		return false
+	if not OverworldSystem.is_selectable(coord):
+		return false
+	if coord == WorldSaveManager.get_current_map_coord():
+		return false
+	close()  # pop UI context before MapRoot reloads the scene
+	map_opened.emit(coord)
+	return true
 
 
 # --- Inspection panel --------------------------------------------------------
@@ -229,7 +297,8 @@ func _build_panel() -> void:
 	_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_panel.grow_vertical = Control.GROW_DIRECTION_END
 	_panel.offset_right = -24
-	_panel.offset_top = 24
+	# Sit clear below the HUD's top band so the two don't overlap.
+	_panel.offset_top = HUD.TOP_BAND_HEIGHT + 24
 	add_child(_panel)
 
 	var margin := MarginContainer.new()
@@ -241,6 +310,14 @@ func _build_panel() -> void:
 	vbox.custom_minimum_size = Vector2(200, 0)
 	vbox.add_theme_constant_override("separation", 6)
 	margin.add_child(vbox)
+
+	# Faction emblem, centred at the top — only shown for NPC-city tiles.
+	_faction_icon = TextureRect.new()
+	_faction_icon.visible = false
+	_faction_icon.custom_minimum_size = Vector2(64, 64)
+	_faction_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_faction_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST  # crisp pixel-art emblem
+	vbox.add_child(_faction_icon)
 
 	_title_label = _make_label(vbox, 18)
 	_biome_label = _make_label(vbox, 14)
@@ -268,16 +345,47 @@ func _populate_panel(coord: Vector2i) -> void:
 	if tile == null:
 		_hide_panel()
 		return
-	_title_label.text = "Tile (%d, %d)" % [coord.x, coord.y]
-	_biome_label.text = "Biome: %s" % _biome_text(tile)
-	if tile.fertilities.is_empty():
+	# Faction emblem + title: cities are titled by their owning faction; other tiles by coords.
+	var faction_idx: int = OverworldSystem.get_city_faction(coord)
+	if faction_idx >= 0:
+		var faction_id: String = OverworldSystem.get_faction_id(faction_idx)
+		_faction_icon.texture = _faction_tex.get(faction_id, null)
+		_faction_icon.visible = _faction_icon.texture != null
+		_title_label.text = OverworldSystem.get_faction_name(faction_idx)
+	else:
+		_faction_icon.visible = false
+		_title_label.text = "Tile (%d, %d)" % [coord.x, coord.y]
+	var biome_line: String = _biome_text(tile)
+	if not tile.river_edges.is_empty():
+		biome_line += "  •  Borders a river"
+	if not tile.lake_edges.is_empty():
+		biome_line += "  •  Borders a lake"
+	_biome_label.text = "Biome: %s" % biome_line
+	# Fertilities are hidden while picking a start: the chosen tile's rolled set is replaced by
+	# the fixed STARTING_FERTILITY (clay/wheat/wild), so showing them here would mislead.
+	if _pick_mode:
+		_fertility_label.visible = false
+	elif tile.fertilities.is_empty():
+		_fertility_label.visible = true
 		_fertility_label.text = "Open water — no land to settle."
 	else:
+		_fertility_label.visible = true
 		_fertility_label.text = "Fertilities: %s" % _fertility_text(tile.fertilities)
-	_note_label.visible = tile.is_start
-	_note_label.text = "Current start"
-	# Offer the start button only while picking and only on land tiles.
-	_start_button.visible = _pick_mode and OverworldSystem.is_selectable(coord)
+	# Note line: NPC-city status takes priority over the start marker.
+	if OverworldSystem.is_city(coord):
+		_note_label.visible = true
+		_note_label.modulate = _COLOR_RIVER
+		_note_label.text = "NPC city — cannot settle here"
+	elif OverworldSystem.is_city_blocked(coord):
+		_note_label.visible = true
+		_note_label.modulate = _COLOR_RIVER
+		_note_label.text = "Too close to an NPC city to settle"
+	else:
+		_note_label.visible = tile.is_start
+		_note_label.modulate = _COLOR_START
+		_note_label.text = "Current start"
+	# Offer the start button only while picking and only on tiles the player may actually start on.
+	_start_button.visible = _pick_mode and OverworldSystem.is_start_allowed(coord)
 	_panel.visible = true
 
 
@@ -288,7 +396,7 @@ func _hide_panel() -> void:
 
 
 func _on_start_here_pressed() -> void:
-	if not OverworldSystem.is_selectable(_selected_tile):
+	if not OverworldSystem.is_start_allowed(_selected_tile):
 		return
 	# Commit: this fires OverworldSystem.start_selected, which the map coordinator listens
 	# for to generate the tactical map. Drop pick mode first so close() will proceed.
@@ -302,10 +410,21 @@ func _on_start_here_pressed() -> void:
 func _biome_text(tile) -> String:
 	match tile.biome:
 		OverworldSystem.Biome.INLAND:
-			return "Inland"
+			return "Plains"
+		OverworldSystem.Biome.FOREST:
+			return "Forest"
+		OverworldSystem.Biome.MOUNTAIN:
+			return "Mountain"
+		OverworldSystem.Biome.RIVER:
+			return "River (freshwater)"
+		OverworldSystem.Biome.LAKE:
+			return "Lake (freshwater)"
 		OverworldSystem.Biome.COAST:
-			var dir: String = _EDGE_COMPASS[tile.coast_edge] if tile.coast_edge >= 0 else "?"
-			return "Coast (faces %s)" % dir
+			var dirs: Array[String] = []
+			for edge: int in tile.coast_edges:
+				dirs.append(_EDGE_COMPASS[edge])
+			var facing: String = ", ".join(dirs) if not dirs.is_empty() else "?"
+			return "Coast (faces %s)" % facing
 		_:
 			return "Ocean"
 
@@ -339,15 +458,31 @@ func _draw() -> void:
 		for x in range(tl.x, br.x + 1):
 			for y in range(tl.y, br.y + 1):
 				draw_rect(_tile_rect(Vector2i(x, y), ts), _COLOR_GRID, false, 1.0)
-	# Start tile marker.
-	var start: Vector2i = OverworldSystem.get_start_coord()
-	if start != Vector2i(-1, -1):
-		draw_rect(_tile_rect(start, ts), _COLOR_START, false, maxf(2.0, px * 0.12))
-	# Inspected tile outline.
-	if _selected_tile != Vector2i(-1, -1):
+	# NPC-city icons, each spanning a 3x3 tile block centred on the city tile, with the owning
+	# faction's emblem floating smaller and diagonally above it.
+	if _city_tex != null:
+		for city: Vector2i in OverworldSystem.get_cities():
+			_draw_settlement_icon(_city_tex, city, ts, px)
+			_draw_city_faction_emblem(city, ts, px)
+	# Player settlement: a translucent preview on the candidate tile while choosing a start, then a
+	# solid marker fixed on the chosen tile once a start exists.
+	if _player_tex != null:
+		if _pick_mode:
+			if _selected_tile != Vector2i(-1, -1) and OverworldSystem.is_start_allowed(_selected_tile):
+				_draw_settlement_icon(_player_tex, _selected_tile, ts, px, _PLAYER_PREVIEW_MODULATE)
+		else:
+			var start_coord: Vector2i = OverworldSystem.get_start_coord()
+			if start_coord != Vector2i(-1, -1):
+				_draw_settlement_icon(_player_tex, start_coord, ts, px)
+	# Inspected tile outline — only outside the start picker, where the settlement preview icon
+	# already marks the selected tile.
+	if not _pick_mode and _selected_tile != Vector2i(-1, -1):
 		draw_rect(_tile_rect(_selected_tile, ts), _COLOR_SELECTED, false, 2.0)
-	# Hover highlight (only on selectable land).
-	if OverworldSystem.is_selectable(_hover_tile):
+	# Hover highlight: while picking, only over tiles you may actually start on; otherwise any land.
+	var hover_ok: bool = (
+		OverworldSystem.is_start_allowed(_hover_tile) if _pick_mode
+		else OverworldSystem.is_selectable(_hover_tile))
+	if hover_ok:
 		draw_rect(_tile_rect(_hover_tile, ts), _COLOR_HOVER, false, 2.0)
 
 
@@ -361,10 +496,49 @@ func _tile_rect(coord: Vector2i, ts: int) -> Rect2:
 	return Rect2(screen_pos, Vector2(ts * _view_zoom, ts * _view_zoom))
 
 
+## Draws a settlement icon (NPC city or player home) spanning a 3x3 tile block centred on `coord`,
+## floored at _CITY_ICON_MIN_PX so it stays readable at any zoom. `modulate` tints it (e.g. a
+## translucent preview). `px` is the current pixels-per-tile.
+func _draw_settlement_icon(tex: Texture2D, coord: Vector2i, ts: int, px: float,
+		modulate: Color = Color.WHITE) -> void:
+	var icon_px: float = maxf(px * _CITY_ICON_TILE_SPAN, _CITY_ICON_MIN_PX)
+	var center: Vector2 = _tile_rect(coord, ts).get_center()
+	draw_texture_rect(
+		tex,
+		Rect2(center - Vector2(icon_px, icon_px) * 0.5, Vector2(icon_px, icon_px)),
+		false,
+		modulate)
+
+
+## Draws a city's faction emblem smaller and diagonally above the city icon (a floating badge at the
+## upper-right). No-op if the faction has no loaded emblem.
+func _draw_city_faction_emblem(city: Vector2i, ts: int, px: float) -> void:
+	var faction_id: String = OverworldSystem.get_faction_id(OverworldSystem.get_city_faction(city))
+	var tex: Texture2D = _faction_tex.get(faction_id, null)
+	if tex == null:
+		return
+	var icon_px: float = maxf(px * _CITY_ICON_TILE_SPAN, _CITY_ICON_MIN_PX)
+	var emblem_px: float = icon_px * _FACTION_EMBLEM_SCALE
+	# Float it up and to the right of the city centre — "schräg darüber".
+	var center: Vector2 = _tile_rect(city, ts).get_center() + Vector2(icon_px * 0.4, -icon_px * 0.5)
+	draw_texture_rect(
+		tex,
+		Rect2(center - Vector2(emblem_px, emblem_px) * 0.5, Vector2(emblem_px, emblem_px)),
+		false)
+
+
 func _biome_color(biome: int) -> Color:
 	match biome:
 		OverworldSystem.Biome.INLAND:
 			return _COLOR_INLAND
+		OverworldSystem.Biome.FOREST:
+			return _COLOR_FOREST
+		OverworldSystem.Biome.MOUNTAIN:
+			return _COLOR_MOUNTAIN
+		OverworldSystem.Biome.RIVER:
+			return _COLOR_RIVER
+		OverworldSystem.Biome.LAKE:
+			return _COLOR_LAKE
 		OverworldSystem.Biome.COAST:
 			return _COLOR_COAST
 		_:

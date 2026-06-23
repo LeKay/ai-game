@@ -14,7 +14,7 @@
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/wood.png",
 	  "glyph": "🪵",
-	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_wood.png",
+	  "world_icon_path": "res://assets/ui/icons/resources/wood.png",
 	  "fallback_color": [
 		0.55,
 		0.28,
@@ -38,7 +38,7 @@
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/stone.png",
 	  "glyph": "🪨",
-	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_stone.png",
+	  "world_icon_path": "res://assets/ui/icons/resources/stone.png",
 	  "fallback_color": [
 		0.62,
 		0.62,
@@ -61,7 +61,7 @@
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/fiber.png",
 	  "glyph": "🌿",
-	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_fiber.png",
+	  "world_icon_path": "res://assets/ui/icons/resources/fiber.png",
 	  "fallback_color": [
 		0.78,
 		0.88,
@@ -82,7 +82,7 @@
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/berry.png",
 	  "glyph": "🫐",
-	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_berry.png",
+	  "world_icon_path": "res://assets/ui/icons/resources/berry.png",
 	  "fallback_color": [
 		0.9,
 		0.12,
@@ -125,7 +125,7 @@
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/plank.png",
 	  "glyph": "🟫",
-	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_plank.png",
+	  "world_icon_path": "res://assets/ui/icons/resources/plank.png",
 	  "fallback_color": [
 		0.83,
 		0.66,
@@ -235,7 +235,7 @@
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/tree_seed.png",
 	  "glyph": "🌱",
-	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_tree_seed.png",
+	  "world_icon_path": "res://assets/ui/icons/resources/tree_seed.png",
 	  "fallback_color": [
 		0.18,
 		0.54,
@@ -258,7 +258,7 @@
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/grass_seed.png",
 	  "glyph": "🌾",
-	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_grass_seed.png",
+	  "world_icon_path": "res://assets/ui/icons/resources/grass_seed.png",
 	  "fallback_color": [
 		0.65,
 		0.78,
@@ -281,7 +281,7 @@
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/berry_seed.png",
 	  "glyph": "🍒",
-	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_berry_seed.png",
+	  "world_icon_path": "res://assets/ui/icons/resources/berry_seed.png",
 	  "fallback_color": [
 		0.55,
 		0.15,
@@ -304,7 +304,7 @@
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/clay.png",
 	  "glyph": "🧱",
-	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_clay.png",
+	  "world_icon_path": "res://assets/ui/icons/resources/clay.png",
 	  "fallback_color": [
 		0.7,
 		0.45,
@@ -313,6 +313,144 @@
 	  "description": "A deposit of raw clay. Hidden at map generation — must be located by searching.",
 	  "tags": [
         "construction_material"
+	  ]
+	},
+	{
+	  "id": "iron",
+	  "display_name": "Iron Ore",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 99,
+	  "weight": 4.0,
+	  "base_value": 6,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/iron.png",
+	  "glyph": "⛏️",
+	  "world_icon_path": "res://assets/ui/icons/resources/iron.png",
+	  "fallback_color": [
+		0.49,
+		0.32,
+		0.26
+	  ],
+	  "description": "Raw iron ore. Hidden at map generation — must be located by searching.",
+	  "tags": [
+        "raw_material"
+	  ]
+	},
+	{
+	  "id": "copper",
+	  "display_name": "Copper Ore",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 99,
+	  "weight": 4.0,
+	  "base_value": 7,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/copper.png",
+	  "glyph": "⛏️",
+	  "world_icon_path": "res://assets/ui/icons/resources/copper.png",
+	  "fallback_color": [
+		0.72,
+		0.45,
+		0.20
+	  ],
+	  "description": "Raw copper ore. Hidden at map generation — must be located by searching.",
+	  "tags": [
+        "raw_material"
+	  ]
+	},
+	{
+	  "id": "tin",
+	  "display_name": "Tin Ore",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 99,
+	  "weight": 4.0,
+	  "base_value": 7,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/tin.png",
+	  "glyph": "⛏️",
+	  "world_icon_path": "res://assets/ui/icons/resources/tin.png",
+	  "fallback_color": [
+		0.62,
+		0.64,
+		0.67
+	  ],
+	  "description": "Raw tin ore. Hidden at map generation — must be located by searching.",
+	  "tags": [
+        "raw_material"
+	  ]
+	},
+	{
+	  "id": "silver",
+	  "display_name": "Silver Ore",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 99,
+	  "weight": 4.0,
+	  "base_value": 24,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/silver.png",
+	  "glyph": "💎",
+	  "world_icon_path": "res://assets/ui/icons/resources/silver.png",
+	  "fallback_color": [
+		0.78,
+		0.80,
+		0.85
+	  ],
+	  "description": "Raw silver ore. Rare — hidden at map generation, must be located by searching.",
+	  "tags": [
+        "trade_good"
+	  ]
+	},
+	{
+	  "id": "gold",
+	  "display_name": "Gold Ore",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 99,
+	  "weight": 4.0,
+	  "base_value": 48,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/gold.png",
+	  "glyph": "💰",
+	  "world_icon_path": "res://assets/ui/icons/resources/gold.png",
+	  "fallback_color": [
+		0.90,
+		0.75,
+		0.20
+	  ],
+	  "description": "Raw gold ore. Rare — hidden at map generation, must be located by searching.",
+	  "tags": [
+        "trade_good"
+	  ]
+	},
+	{
+	  "id": "gemstones",
+	  "display_name": "Gemstones",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 99,
+	  "weight": 2.0,
+	  "base_value": 60,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/gemstones.png",
+	  "glyph": "💎",
+	  "world_icon_path": "res://assets/ui/icons/resources/gemstones.png",
+	  "fallback_color": [
+		0.40,
+		0.75,
+		0.78
+	  ],
+	  "description": "Uncut gemstones. Very rare — hidden at map generation, must be located by searching.",
+	  "tags": [
+        "trade_good"
 	  ]
 	},
 	{
@@ -327,7 +465,7 @@
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/wheat.png",
 	  "glyph": "🌾",
-	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_wheat.png",
+	  "world_icon_path": "res://assets/ui/icons/resources/wheat.png",
 	  "fallback_color": [
 		0.85,
 		0.72,
@@ -351,7 +489,7 @@
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/wheat_seed.png",
 	  "glyph": "🌱",
-	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_wheat_seed.png",
+	  "world_icon_path": "res://assets/ui/icons/resources/wheat_seed.png",
 	  "fallback_color": [
 		0.8,
 		0.7,
@@ -392,7 +530,7 @@
 	  "movement_cost": 4.0,
 	  "icon_path": "assets/ui/icons/resources/hide.png",
 	  "glyph": "🟤",
-	  "world_icon_path": "res://assets/art/tiles/env_tile_resource_hide.png",
+	  "world_icon_path": "res://assets/ui/icons/resources/hide.png",
 	  "fallback_color": [
 		0.55,
 		0.4,
@@ -599,6 +737,233 @@
 	  "icon_path": "assets/ui/icons/resources/preserved_food.png",
 	  "glyph": "🥫",
 	  "description": "Salted meat or fish sealed in pottery vessels. A premium trade commodity.",
+	  "tags": [
+        "trade_good"
+	  ]
+	},
+	{
+	  "id": "flax",
+	  "display_name": "Flax",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 99,
+	  "weight": 0.4,
+	  "base_value": 3,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/flax.png",
+	  "glyph": "🌾",
+	  "world_icon_path": "res://assets/ui/icons/resources/flax.png",
+	  "fallback_color": [
+		0.62,
+		0.72,
+		0.86
+	  ],
+	  "description": "Harvested flax stalks. Grows on plains-rich land; spun into linen fibre.",
+	  "tags": [
+        "raw_material"
+	  ]
+	},
+	{
+	  "id": "hops",
+	  "display_name": "Hops",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 99,
+	  "weight": 0.3,
+	  "base_value": 4,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/hops.png",
+	  "glyph": "🌿",
+	  "world_icon_path": "res://assets/ui/icons/resources/hops.png",
+	  "fallback_color": [
+		0.56,
+		0.74,
+		0.36
+	  ],
+	  "description": "Green hop cones. Grows on plains-rich land; bittering agent for brewing.",
+	  "tags": [
+        "raw_material"
+	  ]
+	},
+	{
+	  "id": "grapes",
+	  "display_name": "Grapes",
+	  "category": "consumable",
+	  "subcategory": "food",
+	  "stack_limit": 50,
+	  "weight": 0.5,
+	  "base_value": 4,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/grapes.png",
+	  "glyph": "🍇",
+	  "world_icon_path": "res://assets/ui/icons/resources/grapes.png",
+	  "fallback_color": [
+		0.42,
+		0.16,
+		0.42
+	  ],
+	  "description": "Ripe grape clusters. Grows on plains-rich land; pressed into wine.",
+	  "nutrition": 0.3,
+	  "tags": [
+        "food"
+	  ]
+	},
+	{
+	  "id": "olives",
+	  "display_name": "Olives",
+	  "category": "consumable",
+	  "subcategory": "food",
+	  "stack_limit": 50,
+	  "weight": 0.5,
+	  "base_value": 5,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/olives.png",
+	  "glyph": "🫒",
+	  "world_icon_path": "res://assets/ui/icons/resources/olives.png",
+	  "fallback_color": [
+		0.36,
+		0.46,
+		0.24
+	  ],
+	  "description": "Olives from a grove tree. Grows on plains-rich land; pressed for oil.",
+	  "nutrition": 0.3,
+	  "tags": [
+        "food"
+	  ]
+	},
+	{
+	  "id": "honey",
+	  "display_name": "Honey",
+	  "category": "consumable",
+	  "subcategory": "food",
+	  "stack_limit": 50,
+	  "weight": 0.6,
+	  "base_value": 6,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/honey.png",
+	  "glyph": "🍯",
+	  "world_icon_path": "res://assets/ui/icons/resources/honey.png",
+	  "fallback_color": [
+		0.96,
+		0.82,
+		0.28
+	  ],
+	  "description": "Honey gathered from wildflowers where bees forage. A sweet food and trade good.",
+	  "nutrition": 0.4,
+	  "tags": [
+        "food"
+	  ]
+	},
+	{
+	  "id": "sand",
+	  "display_name": "Sand",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 99,
+	  "weight": 2.0,
+	  "base_value": 1,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/sand.png",
+	  "glyph": "⏳",
+	  "world_icon_path": "res://assets/ui/icons/resources/sand.png",
+	  "fallback_color": [
+		0.90,
+		0.84,
+		0.62
+	  ],
+	  "description": "Fine beach sand gathered at the water's edge. Raw material for glass.",
+	  "tags": [
+        "raw_material"
+	  ]
+	},
+	{
+	  "id": "marble",
+	  "display_name": "Marble",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 99,
+	  "weight": 5.0,
+	  "base_value": 10,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/marble.png",
+	  "glyph": "🏛️",
+	  "world_icon_path": "res://assets/ui/icons/resources/marble.png",
+	  "fallback_color": [
+		0.88,
+		0.88,
+		0.90
+	  ],
+	  "description": "Blocks of marble quarried from mountain outcrops. A premium building stone.",
+	  "tags": [
+        "construction_material"
+	  ]
+	},
+	{
+	  "id": "amber",
+	  "display_name": "Amber",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 99,
+	  "weight": 0.5,
+	  "base_value": 20,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/amber.png",
+	  "glyph": "🟠",
+	  "world_icon_path": "res://assets/ui/icons/resources/amber.png",
+	  "fallback_color": [
+		0.86,
+		0.52,
+		0.16
+	  ],
+	  "description": "Fossilised amber. Hidden in coastal and forest land — must be located by searching.",
+	  "tags": [
+        "trade_good"
+	  ]
+	},
+	{
+	  "id": "rope",
+	  "display_name": "Rope",
+	  "category": "production_good",
+	  "subcategory": "intermediate",
+	  "stack_limit": 99,
+	  "weight": 0.8,
+	  "base_value": 8,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/rope.png",
+	  "glyph": "🪢",
+	  "description": "Twisted fiber rope. A versatile material used in construction, tools, and trade.",
+	  "tags": [
+        "trade_good"
+	  ]
+	},
+	{
+	  "id": "pearl",
+	  "display_name": "Pearl",
+	  "category": "production_good",
+	  "subcategory": "raw_material",
+	  "stack_limit": 99,
+	  "weight": 0.2,
+	  "base_value": 25,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/pearl.png",
+	  "glyph": "🦪",
+	  "world_icon_path": "res://assets/ui/icons/resources/pearl.png",
+	  "fallback_color": [
+		0.94,
+		0.92,
+		0.86
+	  ],
+	  "description": "Lustrous pearls found in coastal ocean shallows. A prized trade good.",
 	  "tags": [
         "trade_good"
 	  ]

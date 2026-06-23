@@ -27,6 +27,14 @@ const SAVE_SYSTEMS: Array[String] = ["OverworldSystem", "ProgressionSystem", "Ta
 ## depends on nothing else (the tactical map is restored separately from the WorldGrid blob).
 const LOAD_ORDER: Array[String] = ["OverworldSystem", "ProgressionSystem", "TaskSystem", "InventorySystem", "BuildingRegistry", "PathSystem", "NPCSystem", "HungerSystem", "LogisticsSystem", "WildSystem", "TickSystem"]
 
+## Per-map (tactical) systems for overworld tile-to-tile travel. Snapshotting/restoring just
+## these (plus the WorldGrid) switches the active tile's colony while leaving the global
+## systems (TickSystem time, ProgressionSystem tech, TaskSystem goals, OverworldSystem island)
+## untouched, so they carry across maps. Order matches LOAD_ORDER's dependency chain:
+## InventorySystem (storage containers) before BuildingRegistry; PathSystem/NPCSystem after
+## buildings; HungerSystem/LogisticsSystem after NPCs; WildSystem after terrain/buildings.
+const PER_MAP_SYSTEMS: Array[String] = ["InventorySystem", "BuildingRegistry", "PathSystem", "NPCSystem", "HungerSystem", "LogisticsSystem", "WildSystem"]
+
 ## Emitted after apply_pending_load() has finished deserialising all systems.
 signal load_completed
 
@@ -37,6 +45,17 @@ var _world_grid: WorldGrid = null
 ## Staged load — populated by load_game(), consumed by apply_pending_load().
 var _pending_load_data: Dictionary = {}
 var _has_pending_load: bool = false
+
+## --- Overworld multi-map (in-session) state ---
+## Per-tile tactical colonies kept in memory while the session is alive: Vector2i -> snapshot
+## Dictionary (the same shape save/load uses, but only WorldGrid + PER_MAP_SYSTEMS). This is
+## NOT yet persisted to disk — a save still captures only the currently active map.
+var _map_states: Dictionary = {}
+## Overworld coord of the tactical map currently loaded into the live systems.
+var _current_map_coord: Vector2i = Vector2i(-1, -1)
+## Staged tile-to-tile travel — set before reload_current_scene(), consumed by MapRoot._ready.
+var _pending_map_switch: bool = false
+var _pending_map_coord: Vector2i = Vector2i(-1, -1)
 
 
 func _ready() -> void:
@@ -237,6 +256,92 @@ func delete_save(slot: int) -> bool:
 		DirAccess.remove_absolute(meta_path)
 
 	return true
+
+
+# ── Overworld tile-to-tile travel (in-session multi-map) ─────────────────────
+
+## Records which overworld tile the live tactical systems currently represent. Set by MapRoot
+## when a start is chosen, after a disk load, and after a map switch.
+func set_current_map_coord(coord: Vector2i) -> void:
+	_current_map_coord = coord
+
+
+func get_current_map_coord() -> Vector2i:
+	return _current_map_coord
+
+
+## Captures the live tactical map (WorldGrid + PER_MAP_SYSTEMS) into the in-memory store under
+## the current coord, so it can be restored when the player travels back. No-op if no current
+## coord is set (e.g. before any start is chosen).
+func snapshot_current_map_state() -> void:
+	if _current_map_coord == Vector2i(-1, -1):
+		return
+	var snap: Dictionary = {}
+	if _world_grid != null:
+		snap["WorldGrid"] = _world_grid.serialize()
+	for system_name in PER_MAP_SYSTEMS:
+		var system: Node = get_node_or_null("/root/" + system_name)
+		if system and system.has_method("serialize"):
+			snap[system_name] = system.serialize()
+	_map_states[_current_map_coord] = snap
+
+
+func has_map_state(coord: Vector2i) -> bool:
+	return _map_states.has(coord)
+
+
+## Restores a previously snapshotted tactical map into the live systems. Each PER_MAP_SYSTEMS
+## deserialize() clears its own prior state and re-emits its reconstruction signals (the same
+## path a disk load uses), so the freshly reloaded scene repaints the restored colony.
+func restore_map_state(coord: Vector2i) -> void:
+	var snap: Variant = _map_states.get(coord)
+	if not snap is Dictionary:
+		return
+	if _world_grid != null and (snap as Dictionary).get("WorldGrid") is Dictionary:
+		_world_grid.deserialize((snap as Dictionary)["WorldGrid"])
+	for system_name in PER_MAP_SYSTEMS:
+		var system: Node = get_node_or_null("/root/" + system_name)
+		if system == null or not system.has_method("deserialize"):
+			continue
+		var system_data: Variant = (snap as Dictionary).get(system_name)
+		if system_data != null:
+			system.deserialize(system_data)
+
+
+## Clears every per-map system to its empty state. Needed when generating a fresh tile map: the
+## PER_MAP_SYSTEMS are autoloads that survive the scene reload, so without this they would carry
+## the previous tile's buildings/NPCs/containers onto the new terrain. Each deserialize() clears
+## its own state first; InventorySystem and PathSystem take an Array, the rest take a Dictionary.
+func reset_map_state() -> void:
+	const ARRAY_TYPED: Array[String] = ["InventorySystem", "PathSystem"]
+	for system_name in PER_MAP_SYSTEMS:
+		var system: Node = get_node_or_null("/root/" + system_name)
+		if system == null or not system.has_method("deserialize"):
+			continue
+		if ARRAY_TYPED.has(system_name):
+			system.deserialize([] as Array)
+		else:
+			system.deserialize({} as Dictionary)
+
+
+## Stages a tile-to-tile travel. MapRoot calls reload_current_scene() right after; the rebuilt
+## MapRoot detects the pending switch in _ready and restores/generates the target tile's map.
+func request_map_switch(coord: Vector2i) -> void:
+	_pending_map_switch = true
+	_pending_map_coord = coord
+
+
+func has_pending_map_switch() -> bool:
+	return _pending_map_switch
+
+
+## Clears the pending-switch flag, marks the target as the current map, and returns its coord.
+func consume_pending_map_switch() -> Vector2i:
+	var coord: Vector2i = _pending_map_coord
+	_pending_map_switch = false
+	_pending_map_coord = Vector2i(-1, -1)
+	_current_map_coord = coord
+	return coord
 
 
 ## Internal: apply deserialized data in dependency order.

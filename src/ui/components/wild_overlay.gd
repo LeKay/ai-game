@@ -11,8 +11,8 @@ var _markers: Array[Node2D] = []
 
 func _ready() -> void:
 	z_index = 4
-	if ResourceLoader.exists("res://assets/art/tiles/ui_icon_wild_deer.png"):
-		_deer_texture = load("res://assets/art/tiles/ui_icon_wild_deer.png")
+	if ResourceLoader.exists("res://assets/ui/icons/various/ui_icon_wild_deer.png"):
+		_deer_texture = load("res://assets/ui/icons/various/ui_icon_wild_deer.png")
 	WildSystem.wild_changed.connect(_refresh)
 
 

@@ -18,7 +18,20 @@ const RESOURCE_LAYER: int = 2
 ## placed on a WATER tile), not by a terrain type.
 ## COAST (ordinal 9) is carved in the same pass as WATER but marks ocean coastline
 ## specifically — distinguishable from river/lake WATER, required by SALT_WORKS.
-enum TileType { EMPTY, TREE, STONE, BERRY, GRASS, IMPASSABLE, WHEAT, CLAY, WATER, COAST }
+## IRON..GEMSTONE (ordinals 10-15) are revealed ore/gem pit tiles, mechanical siblings of
+## CLAY: hidden at generation, exposed by the Search action, then hand-mined. Appended last so
+## existing integer values (and saved terrain) are unchanged.
+## FLAX..PEARL (ordinals 16-24) are the second fertility wave (ADR-0015 addendum 2026-06-23):
+##   FLAX/HOPS/GRAPES — opaque field crops placed on EMPTY tiles (wheat-like).
+##   SAND            — opaque beach tile placed on land bordering WATER/COAST.
+##   OLIVE/BEES      — transparent overlay sprites composited over a GRASS base.
+##   MARBLE          — transparent overlay sprite ("like stone"), mountain-biased.
+##   AMBER           — hidden deposit (clay-like): Search reveals it as an AMBER overlay.
+##   PEARL           — visible overlay on the ocean (COAST base); impassable like water.
+## All appended last so existing integer values (and saved terrain) are unchanged.
+enum TileType { EMPTY, TREE, STONE, BERRY, GRASS, IMPASSABLE, WHEAT, CLAY, WATER, COAST,
+		IRON, COPPER, TIN, SILVER, GOLD, GEMSTONE,
+		FLAX, HOPS, GRAPES, SAND, OLIVE, BEES, MARBLE, AMBER, PEARL }
 
 enum PlacementResult {
 	SUCCESS,
@@ -29,6 +42,23 @@ enum PlacementResult {
 }
 
 enum DistanceMetric { MANHATTAN, EUCLIDEAN }
+
+## Terrain bias driven by the overworld biome of the tile this map represents. Shifts the
+## elevation bands in _sample_noise: FOREST grows the TREE band; MOUNTAIN grows STONE and adds
+## IMPASSABLE rocky peaks. PLAINS leaves the original behaviour untouched. Kept WorldGrid-local
+## (no OverworldSystem dependency) so the generator stays standalone-testable.
+enum TerrainProfile { PLAINS, FOREST, MOUNTAIN }
+
+## Elevation band cutoffs per profile: [impassable_lo, veg_lo, empty_hi, tree_hi, stone_hi].
+## elev < impassable_lo → IMPASSABLE; < veg_lo → BERRY/GRASS (by moisture); < empty_hi → EMPTY;
+## < tree_hi → TREE; < stone_hi → STONE; ≥ stone_hi → IMPASSABLE (rocky peak).
+## PLAINS uses stone_hi = 1.01 so the peak branch is unreachable — byte-identical to the
+## original thresholds (0.15 / 0.30 / 0.55 / 0.75, else STONE).
+const _ELEV_BANDS: Dictionary = {
+	TerrainProfile.PLAINS:   [0.15, 0.30, 0.55, 0.75, 1.01],
+	TerrainProfile.FOREST:   [0.15, 0.30, 0.45, 0.82, 1.01],
+	TerrainProfile.MOUNTAIN: [0.12, 0.24, 0.40, 0.58, 0.82],
+}
 
 ## Resource data for a single tile. Null when the tile has no resource.
 class ResourceTileData:
@@ -87,8 +117,8 @@ var _generation_done: bool = false
 var _growing_tiles: Dictionary = {}
 ## Special resources this map supports (subset of FERTILITY_POOL). Set by generate().
 var _fertility: Array[StringName] = []
-## Hidden resource deposits (e.g. clay) keyed by tile → resource_id. Not rendered;
-## located via the player's Search action (find_nearest_hidden / reveal_hidden_clay).
+## Hidden ore/gem deposits (clay, iron, …) keyed by tile → resource_id. Not rendered;
+## located via the player's Search action (find_nearest_hidden / reveal_hidden_deposit).
 var _hidden_resources: Dictionary = {}
 
 
@@ -123,34 +153,100 @@ const _MIN_GRASS: int = 6
 const _SMOOTH_SEED_OFFSET: int = 100000
 
 ## --- Map fertility (special map resources) ---
-## Pool of special resources a map can support. A new map rolls FERTILITY_COUNT random
-## entries from this pool; the starting map is fixed via generate()'s fertility_override.
-const FERTILITY_POOL: Array[StringName] = [&"clay", &"wheat", &"wild"]
+## Pool of special resources a map can support. A new map rolls FERTILITY_COUNT entries
+## (weighted by FERTILITY_WEIGHTS); the starting map is fixed via generate()'s fertility_override.
+const FERTILITY_POOL: Array[StringName] = [
+	&"clay", &"wheat", &"wild",
+	&"iron", &"copper", &"tin",        # common ore deposits (clay-like)
+	&"silver", &"gold", &"gemstones",  # rare/precious deposits
+	&"flax", &"hops", &"grapes", &"olives", &"bees",  # plains-biased crops/groves (ADR-0015 ph.4)
+	&"marble",                         # mountain-biased stone overlay
+	&"sand",                           # coast-only beach
+	&"amber",                          # coast/forest hidden deposit (clay-like)
+	&"pearl",                          # coast-only ocean overlay
+]
+## Relative weight of each fertility in the per-tile roll (sampling without replacement).
+## Common = 12, precious (silver/gold/gemstones) = 1 → precious appears ~1/12 as often.
+## Biome restrictions/boosts are layered on top of these base weights by _biome_fertility_weight.
+const FERTILITY_WEIGHTS: Dictionary = {
+	&"clay": 12, &"wheat": 12, &"wild": 12,
+	&"iron": 12, &"copper": 12, &"tin": 12,
+	&"silver": 1, &"gold": 1, &"gemstones": 1,
+	&"flax": 12, &"hops": 12, &"grapes": 12, &"olives": 12, &"bees": 12,
+	&"marble": 8, &"sand": 10, &"amber": 6, &"pearl": 6,
+}
+## Biome class passed to roll_fertility for biome-aware weighting (ADR-0015 addendum).
+## BIOME_ANY preserves the pre-addendum behaviour (base weights, no restrictions).
+const BIOME_ANY: int = -1
+const BIOME_PLAINS: int = 0
+const BIOME_FOREST: int = 1
+const BIOME_MOUNTAIN: int = 2
+const BIOME_COAST: int = 3
+## Mineable-deposit fertilities → the pit TileType reveal converts the tile to. The single
+## source of truth for "which fertilities are hidden deposits" (clay's mechanic, generalized).
+const DEPOSIT_TILE_TYPE: Dictionary = {
+	&"clay": TileType.CLAY,
+	&"iron": TileType.IRON,
+	&"copper": TileType.COPPER,
+	&"tin": TileType.TIN,
+	&"silver": TileType.SILVER,
+	&"gold": TileType.GOLD,
+	&"gemstones": TileType.GEMSTONE,
+	&"amber": TileType.AMBER,
+}
+## How many hidden deposits a map scatters per deposit fertility it supports.
+## Precious deposits are scarce (1) even when present; common deposits match clay (6).
+const DEPOSIT_COUNTS: Dictionary = {
+	&"clay": 6, &"iron": 6, &"copper": 6, &"tin": 6,
+	&"silver": 1, &"gold": 1, &"gemstones": 1,
+	&"amber": 4,
+}
+## Field-crop fertilities (FLAX/HOPS/GRAPES) → opaque TileType placed on EMPTY tiles (wheat-like).
+const FIELD_CROP_TILE_TYPE: Dictionary = {
+	&"flax": TileType.FLAX,
+	&"hops": TileType.HOPS,
+	&"grapes": TileType.GRAPES,
+}
+## Grass-overlay fertilities → transparent overlay TileType composited on a GRASS base.
+const GRASS_OVERLAY_TILE_TYPE: Dictionary = {
+	&"olives": TileType.OLIVE,
+	&"bees": TileType.BEES,
+}
+## How many tiles each placed fertility scatters across the map.
+const FIELD_CROP_COUNT: int = 6
+const GRASS_OVERLAY_COUNT: int = 8
+const MARBLE_COUNT: int = 6
+const SAND_COUNT: int = 10
+const PEARL_COUNT: int = 6
 ## How many fertilities a freshly rolled (non-starting) map receives.
 const FERTILITY_COUNT: int = 3
 ## The starting map's fixed fertility set (not rolled). Spec: clay, wheat, wild.
 const STARTING_FERTILITY: Array[StringName] = [&"clay", &"wheat", &"wild"]
 ## RNG offset so the fertility roll never aligns with the terrain / smoothing seeds.
 const _FERTILITY_SEED_OFFSET: int = 200000
-## Number of hidden clay deposits placed on a clay-fertile map.
-const CLAY_DEPOSIT_COUNT: int = 6
 ## Number of wheat-field tiles placed on a wheat-fertile map.
 const WHEAT_FIELD_COUNT: int = 6
-## Max Manhattan radius the Search action reports a clay distance for.
-const CLAY_SEARCH_MAX_RADIUS: int = 58
+## Max Manhattan radius the Search action reports a deposit distance for.
+const DEPOSIT_SEARCH_MAX_RADIUS: int = 58
 const _HIDDEN_SEED_OFFSET: int = 300000
 const _WHEAT_SEED_OFFSET: int = 400000
+## Distinct large RNG offsets for the second fertility wave (ADR-0015 addendum).
+const _FIELD_CROP_SEED_OFFSET: int = 900000
+const _GRASS_OVERLAY_SEED_OFFSET: int = 1000000
+const _MARBLE_SEED_OFFSET: int = 1100000
+const _SAND_SEED_OFFSET: int = 1200000
+const _PEARL_SEED_OFFSET: int = 1300000
 
 ## --- Water carving (Step 4.5: coast → lakes → river) ---
 ## All values are named constants per coding standards (no inline magic numbers).
-const _RIVER_COUNT: int = 1             ## Mandatory minimum: every map gets ≥1 river.
+## A river is carved only when the overworld tile has one (river_edges passed to generate());
+## maps without an overworld river get no river — the same contract as coast.
 const _RIVER_WIDTH: int = 1             ## Tiles carved per river step (odd-centered band).
 const _RIVER_MEANDER_CHANCE: float = 0.35  ## Probability of a perpendicular jog per step.
 const _LAKE_CHANCE: float = 0.5         ## Probability a map rolls any lakes.
 const _LAKE_COUNT_MAX: int = 2          ## Upper bound on lakes per map.
 const _LAKE_SIZE_MIN: int = 8           ## Min tiles per lake (randomized in range).
 const _LAKE_SIZE_MAX: int = 14          ## Max tiles per lake.
-const _COAST_CHANCE: float = 0.4        ## Probability a map has a coastline.
 const _COAST_DEPTH: int = 3             ## Inward depth of the coastal water band.
 const _MAX_WATER_FRACTION: float = 0.25  ## Hard cap: water never dominates the map.
 const _MIN_LAND_FRACTION: float = 0.80   ## Largest passable region must be ≥ this share.
@@ -159,6 +255,8 @@ const _MIN_POCKET_SIZE: int = 8         ## Passable pockets smaller than this ar
 const _RIVER_SEED_OFFSET: int = 500000
 const _LAKE_SEED_OFFSET: int = 600000
 const _COAST_SEED_OFFSET: int = 700000
+const _FRESHWATER_SEED_OFFSET: int = 800000
+const _FRESHWATER_DEPTH: int = 3        ## Inward depth of a lakeshore freshwater band.
 ## Orthogonal neighbor offsets, shared by water carving / connectivity / adjacency.
 const _ORTHO_OFFSETS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 
@@ -167,19 +265,25 @@ const _ORTHO_OFFSETS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector
 ## Locks TerrainLayer on completion — assert fires on any subsequent call.
 ## fertility_override: pass a fixed fertility set (e.g. STARTING_FERTILITY) to skip the
 ## random roll; an empty array rolls FERTILITY_COUNT entries from FERTILITY_POOL.
-## coast_edge: forces a coastline on a specific edge (0 top, 1 bottom, 2 left, 3 right),
-## bypassing the random _COAST_CHANCE roll. Used by the Overworld so a coast tile's tactical
-## map faces the ocean the same way it does on the world map. -1 keeps the default random coast.
-func generate(world_seed: int, fertility_override: Array = [], coast_edge: int = -1) -> void:
+## coast_edges: carves a coastline on each listed edge (0 top, 1 bottom, 2 left, 3 right). Used
+## by the Overworld so a coast tile's tactical map faces the ocean on every side it does on the
+## world map (a peninsula tip carries several). Empty ⇒ NO coast — the ocean only borders maps
+## that border it on the overworld (inland/forest/mountain tiles never get a coast).
+## terrain_profile: biases the elevation bands by the tile's overworld biome (PLAINS / FOREST /
+## MOUNTAIN); PLAINS is the unchanged default.
+## river_edges: carves a river between the listed edges (the overworld river's crossing points).
+## Empty ⇒ no river — a river is only present when the overworld tile has one (coast analogy).
+func generate(world_seed: int, fertility_override: Array = [], coast_edges: Array = [],
+		terrain_profile: int = TerrainProfile.PLAINS, river_edges: Array = [], lake_edges: Array = []) -> void:
 	assert(not _generation_done, "generate() called after terrain was locked")
 
 	var terrain: Array
 	var succeeded := false
 	for attempt in range(5):
-		terrain = _sample_noise(world_seed + attempt)
+		terrain = _sample_noise(world_seed + attempt, terrain_profile)
 		terrain = _smooth_terrain(terrain, world_seed + attempt)
 		terrain = _cleanup_clusters(terrain)
-		terrain = _carve_water(terrain, world_seed + attempt, coast_edge)
+		terrain = _carve_water(terrain, world_seed + attempt, coast_edges, river_edges, lake_edges)
 		if _meets_minimums(terrain) and _meets_water_constraints(terrain):
 			succeeded = true
 			break
@@ -191,11 +295,15 @@ func generate(world_seed: int, fertility_override: Array = [], coast_edge: int =
 		_force_fix_minimums()
 		_flood_tiny_pockets()
 
-	_roll_fertility(world_seed, fertility_override)
+	_set_fertility(world_seed, fertility_override)
 	if has_fertility(&"wheat"):
 		_populate_wheat_fields(world_seed)
-	if has_fertility(&"clay"):
-		_populate_hidden_clay(world_seed)
+	_populate_field_crops(world_seed)
+	_populate_grass_overlays(world_seed)
+	_populate_marble(world_seed)
+	_populate_sand_beaches(world_seed)
+	_populate_pearls(world_seed)
+	_populate_hidden_deposits(world_seed)
 
 	_generation_done = true
 
@@ -215,21 +323,134 @@ func _populate_wheat_fields(world_seed: int) -> void:
 		_terrain[empties[i].x][empties[i].y] = TileType.WHEAT
 
 
-## Scatters hidden clay deposits across passable tiles. Deterministic via world_seed.
-## Deposits are not rendered — the player finds them with the Search action.
-func _populate_hidden_clay(world_seed: int) -> void:
-	var candidates: Array[Vector2i] = []
-	for x in range(GRID_SIZE):
-		for y in range(GRID_SIZE):
-			if _terrain[x][y] != TileType.IMPASSABLE:
-				candidates.append(Vector2i(x, y))
+## Converts EMPTY tiles to opaque field-crop terrain (flax/hops/grapes) for each crop fertility
+## this map supports. Wheat-like: terrain only, no resource overlays. Deterministic per crop.
+func _populate_field_crops(world_seed: int) -> void:
+	var offset: int = 0
+	for resource_id: StringName in FIELD_CROP_TILE_TYPE:
+		offset += 1
+		if not has_fertility(resource_id):
+			continue
+		var empties: Array[Vector2i] = _get_empty_tiles_in_terrain()
+		if empties.is_empty():
+			return
+		var rng := RandomNumberGenerator.new()
+		rng.seed = world_seed + _FIELD_CROP_SEED_OFFSET + offset * 1009
+		_shuffle_tiles(empties, rng)
+		var tile_type: int = FIELD_CROP_TILE_TYPE[resource_id]
+		for i in range(mini(FIELD_CROP_COUNT, empties.size())):
+			_terrain[empties[i].x][empties[i].y] = tile_type
+
+
+## Converts GRASS tiles to transparent-overlay terrain (olives/bees) for each grove fertility
+## this map supports. The overlay sprite is composited over a GRASS base by the renderer.
+func _populate_grass_overlays(world_seed: int) -> void:
+	var offset: int = 0
+	for resource_id: StringName in GRASS_OVERLAY_TILE_TYPE:
+		offset += 1
+		if not has_fertility(resource_id):
+			continue
+		var grass: Array[Vector2i] = _get_type_tiles_in_terrain(TileType.GRASS)
+		if grass.is_empty():
+			continue
+		var rng := RandomNumberGenerator.new()
+		rng.seed = world_seed + _GRASS_OVERLAY_SEED_OFFSET + offset * 1009
+		_shuffle_tiles(grass, rng)
+		var tile_type: int = GRASS_OVERLAY_TILE_TYPE[resource_id]
+		for i in range(mini(GRASS_OVERLAY_COUNT, grass.size())):
+			_terrain[grass[i].x][grass[i].y] = tile_type
+
+
+## Converts STONE tiles to MARBLE ("treated like stone", transparent overlay) when this map is
+## marble-fertile. Falls back to EMPTY tiles if the map carries too few stone outcrops.
+func _populate_marble(world_seed: int) -> void:
+	if not has_fertility(&"marble"):
+		return
+	var candidates: Array[Vector2i] = _get_type_tiles_in_terrain(TileType.STONE)
+	if candidates.size() < MARBLE_COUNT:
+		candidates.append_array(_get_empty_tiles_in_terrain())
 	if candidates.is_empty():
 		return
 	var rng := RandomNumberGenerator.new()
-	rng.seed = world_seed + _HIDDEN_SEED_OFFSET
+	rng.seed = world_seed + _MARBLE_SEED_OFFSET
 	_shuffle_tiles(candidates, rng)
-	for i in range(mini(CLAY_DEPOSIT_COUNT, candidates.size())):
-		_hidden_resources[candidates[i]] = &"clay"
+	for i in range(mini(MARBLE_COUNT, candidates.size())):
+		_terrain[candidates[i].x][candidates[i].y] = TileType.MARBLE
+
+
+## Converts land tiles bordering WATER/COAST into opaque SAND beaches when this map is
+## sand-fertile (spec: "sand spawns at the water tiles"). Deterministic per map.
+func _populate_sand_beaches(world_seed: int) -> void:
+	if not has_fertility(&"sand"):
+		return
+	var candidates: Array[Vector2i] = []
+	for x in range(GRID_SIZE):
+		for y in range(GRID_SIZE):
+			if _terrain[x][y] != TileType.EMPTY:
+				continue
+			for off: Vector2i in _ORTHO_OFFSETS:
+				var n: Vector2i = Vector2i(x, y) + off
+				if not is_in_bounds(n):
+					continue
+				if _terrain[n.x][n.y] == TileType.WATER or _terrain[n.x][n.y] == TileType.COAST:
+					candidates.append(Vector2i(x, y))
+					break
+	if candidates.is_empty():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = world_seed + _SAND_SEED_OFFSET
+	_shuffle_tiles(candidates, rng)
+	for i in range(mini(SAND_COUNT, candidates.size())):
+		_terrain[candidates[i].x][candidates[i].y] = TileType.SAND
+
+
+## Converts a few ocean COAST tiles into visible PEARL overlays when this map is pearl-fertile
+## (spec: "pearls can only be in the water", visible at spawn — not a Search resource). Pearls
+## stay impassable like the water they sit on.
+func _populate_pearls(world_seed: int) -> void:
+	if not has_fertility(&"pearl"):
+		return
+	var candidates: Array[Vector2i] = _get_type_tiles_in_terrain(TileType.COAST)
+	if candidates.is_empty():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = world_seed + _PEARL_SEED_OFFSET
+	_shuffle_tiles(candidates, rng)
+	for i in range(mini(PEARL_COUNT, candidates.size())):
+		_terrain[candidates[i].x][candidates[i].y] = TileType.PEARL
+
+
+## Scatters hidden deposits across passable tiles for every mineable fertility this map
+## supports (clay, iron, …). Deterministic via world_seed; each resource gets its own seed
+## offset so placements don't all overlap. One deposit per tile (a tile already holding a
+## hidden deposit is skipped). Deposits are not rendered — the player finds them via Search.
+func _populate_hidden_deposits(world_seed: int) -> void:
+	var passable: Array[Vector2i] = []
+	for x in range(GRID_SIZE):
+		for y in range(GRID_SIZE):
+			if _terrain[x][y] != TileType.IMPASSABLE:
+				passable.append(Vector2i(x, y))
+	if passable.is_empty():
+		return
+	# Deterministic order independent of Dictionary iteration: walk FERTILITY_POOL.
+	var offset: int = 0
+	for resource_id: StringName in FERTILITY_POOL:
+		if not DEPOSIT_TILE_TYPE.has(resource_id) or not has_fertility(resource_id):
+			continue
+		offset += 1
+		var candidates: Array[Vector2i] = passable.duplicate()
+		var rng := RandomNumberGenerator.new()
+		rng.seed = world_seed + _HIDDEN_SEED_OFFSET + offset * 1009
+		_shuffle_tiles(candidates, rng)
+		var placed: int = 0
+		var want: int = DEPOSIT_COUNTS.get(resource_id, 6)
+		for tile: Vector2i in candidates:
+			if placed >= want:
+				break
+			if _hidden_resources.has(tile):
+				continue
+			_hidden_resources[tile] = resource_id
+			placed += 1
 
 
 ## In-place deterministic Fisher–Yates shuffle of a tile array.
@@ -242,24 +463,62 @@ func _shuffle_tiles(tiles: Array[Vector2i], rng: RandomNumberGenerator) -> void:
 
 
 ## Populates _fertility. With a non-empty override the set is fixed (starting map);
-## otherwise FERTILITY_COUNT entries are drawn from FERTILITY_POOL via a deterministic
-## seed-driven Fisher–Yates shuffle (same seed → same fertility).
-func _roll_fertility(world_seed: int, override_set: Array) -> void:
+## otherwise FERTILITY_COUNT entries are drawn via the shared weighted roll.
+func _set_fertility(world_seed: int, override_set: Array) -> void:
 	_fertility.clear()
 	if not override_set.is_empty():
 		for id: Variant in override_set:
 			_fertility.append(StringName(id))
 		return
+	_fertility.assign(roll_fertility(world_seed + _FERTILITY_SEED_OFFSET, FERTILITY_COUNT))
+
+
+## Draws `count` distinct fertilities from FERTILITY_POOL, weighted by FERTILITY_WEIGHTS,
+## sampling without replacement. Deterministic from `roll_seed` (same seed → same result).
+## Shared by WorldGrid (single-map) and OverworldSystem (per-tile) so the two stay consistent.
+## biome (BIOME_*) applies biome-aware boosts and hard restrictions on top of base weights;
+## BIOME_ANY (the default) leaves base weights untouched (pre-addendum behaviour).
+static func roll_fertility(roll_seed: int, count: int, biome: int = BIOME_ANY) -> Array[StringName]:
 	var pool: Array[StringName] = FERTILITY_POOL.duplicate()
+	var weights: Array[int] = []
+	for id: StringName in pool:
+		weights.append(_biome_fertility_weight(id, int(FERTILITY_WEIGHTS.get(id, 1)), biome))
 	var rng := RandomNumberGenerator.new()
-	rng.seed = world_seed + _FERTILITY_SEED_OFFSET
-	for i in range(pool.size() - 1, 0, -1):
-		var j: int = rng.randi_range(0, i)
-		var tmp: StringName = pool[i]
-		pool[i] = pool[j]
-		pool[j] = tmp
-	for k in range(mini(FERTILITY_COUNT, pool.size())):
-		_fertility.append(pool[k])
+	rng.seed = roll_seed
+	var result: Array[StringName] = []
+	for _n in range(mini(count, pool.size())):
+		var total: int = 0
+		for w: int in weights:
+			total += w
+		if total <= 0:
+			break
+		var pick: int = rng.randi_range(0, total - 1)
+		var idx: int = 0
+		while idx < weights.size() - 1 and pick >= weights[idx]:
+			pick -= weights[idx]
+			idx += 1
+		result.append(pool[idx])
+		pool.remove_at(idx)
+		weights.remove_at(idx)
+	return result
+
+
+## Adjusts a fertility's base roll weight for the rolling tile's biome (ADR-0015 addendum).
+## Restricted resources return 0 (never roll) outside their biomes; biased resources get a
+## multiplier inside their preferred biome. BIOME_ANY returns the base weight unchanged.
+static func _biome_fertility_weight(id: StringName, base: int, biome: int) -> int:
+	if biome == BIOME_ANY:
+		return base
+	match id:
+		&"pearl", &"sand":
+			return base if biome == BIOME_COAST else 0
+		&"amber":
+			return base if biome == BIOME_COAST or biome == BIOME_FOREST else 0
+		&"marble":
+			return base * 3 if biome == BIOME_MOUNTAIN else base
+		&"flax", &"hops", &"grapes", &"olives", &"bees":
+			return base * 2 if biome == BIOME_PLAINS else base
+	return base
 
 
 ## Returns true if this map supports the given fertility resource (&"clay", &"wheat", &"wild").
@@ -294,28 +553,48 @@ func find_nearest_hidden(tile: Vector2i, resource_id: StringName, max_radius: in
 	return best
 
 
-## Reveals a hidden clay deposit at tile, converting the terrain to a CLAY pit.
-## Requires the tile to be EMPTY with no resources — any existing resource must be
-## cleared first (spec). Returns true on success, false if blocked or no deposit here.
-func reveal_hidden_clay(tile: Vector2i) -> bool:
+## Returns the nearest hidden deposit of ANY mineable resource within max_radius as
+## {tile: Vector2i, id: StringName}, or an empty Dictionary when none is in range.
+func find_nearest_any_hidden(tile: Vector2i, max_radius: int) -> Dictionary:
+	var best_tile: Variant = null
+	var best_id: StringName = &""
+	var best_d: int = max_radius + 1
+	for h_tile: Vector2i in _hidden_resources:
+		var d: int = manhattan_dist(tile, h_tile)
+		if d < best_d:
+			best_d = d
+			best_tile = h_tile
+			best_id = _hidden_resources[h_tile]
+	if best_tile == null:
+		return {}
+	return {"tile": best_tile, "id": best_id}
+
+
+## Reveals the hidden deposit at tile, converting the terrain to its pit TileType (clay → CLAY,
+## iron → IRON, …). Requires the tile to be EMPTY with no resources — any existing resource must
+## be cleared first (spec). Returns the revealed resource id, or &"" if blocked / no deposit here.
+func reveal_hidden_deposit(tile: Vector2i) -> StringName:
 	if not is_in_bounds(tile):
-		return false
-	if _hidden_resources.get(tile, &"") != &"clay":
-		return false
+		return &""
+	var resource_id: StringName = _hidden_resources.get(tile, &"")
+	if not DEPOSIT_TILE_TYPE.has(resource_id):
+		return &""
 	if _terrain[tile.x][tile.y] != TileType.EMPTY:
-		return false
+		return &""
 	if not _resources[tile.x][tile.y].is_empty():
-		return false
+		return &""
 	_hidden_resources.erase(tile)
-	_terrain[tile.x][tile.y] = TileType.CLAY
+	_terrain[tile.x][tile.y] = DEPOSIT_TILE_TYPE[resource_id]
 	terrain_tile_changed.emit(tile)
-	return true
+	return resource_id
 
 
 ## Step 1: samples elevation and moisture Perlin noise for all 30×30 tiles.
 ## Returns Array[Array[int]] — raw TileType values before smoothing.
 ## Uses FastNoiseLite (Godot 4.x noise class — FastNoise does not exist in Godot 4).
-func _sample_noise(noise_seed: int) -> Array:
+## terrain_profile selects the elevation band cutoffs (_ELEV_BANDS) so forest/mountain maps
+## skew toward trees / stone+peaks respectively; PLAINS reproduces the original thresholds.
+func _sample_noise(noise_seed: int, terrain_profile: int = TerrainProfile.PLAINS) -> Array:
 	var elevation := FastNoiseLite.new()
 	elevation.noise_type = FastNoiseLite.TYPE_PERLIN
 	elevation.seed = noise_seed
@@ -332,6 +611,7 @@ func _sample_noise(noise_seed: int) -> Array:
 	moisture.fractal_octaves = 3
 	moisture.frequency = 0.08
 
+	var bands: Array = _ELEV_BANDS[terrain_profile]
 	var terrain: Array = []
 	for x in range(GRID_SIZE):
 		var row: Array[int] = []
@@ -340,16 +620,18 @@ func _sample_noise(noise_seed: int) -> Array:
 			var elev_norm: float = (elevation.get_noise_2d(x, y) + 1.0) / 2.0
 			var mois_norm: float = (moisture.get_noise_2d(x, y) + 1.0) / 2.0
 			var tile_type: int
-			if elev_norm < 0.15:
+			if elev_norm < bands[0]:
 				tile_type = TileType.IMPASSABLE
-			elif elev_norm < 0.30:
+			elif elev_norm < bands[1]:
 				tile_type = TileType.BERRY if mois_norm < 0.5 else TileType.GRASS
-			elif elev_norm < 0.55:
+			elif elev_norm < bands[2]:
 				tile_type = TileType.EMPTY
-			elif elev_norm < 0.75:
+			elif elev_norm < bands[3]:
 				tile_type = TileType.TREE
-			else:
+			elif elev_norm < bands[4]:
 				tile_type = TileType.STONE
+			else:
+				tile_type = TileType.IMPASSABLE  # rocky peak (mountain profile only)
 			terrain[x].append(tile_type)
 	return terrain
 
@@ -444,46 +726,69 @@ func _meets_minimums(terrain: Array) -> bool:
 ## Routing the three occupation checks (placement / drop / move) and passability through
 ## this single predicate keeps IMPASSABLE and WATER from ever drifting apart.
 func _blocks_occupation(type: int) -> bool:
-	return type == TileType.IMPASSABLE or type == TileType.WATER or type == TileType.COAST
+	return type == TileType.IMPASSABLE or type == TileType.WATER or type == TileType.COAST \
+			or type == TileType.PEARL
 
 
-## Step 4.5: carves WATER into the working terrain array. Order is coast → lakes → river
-## so the river (mandatory) is laid last and can flow into earlier features. Each feature
-## uses a dedicated seed-offset RNG for determinism (same seed → identical water layout).
-func _carve_water(terrain: Array, water_seed: int, coast_edge: int = -1) -> Array:
+## Step 4.5: carves WATER into the working terrain array. Order is coast → freshwater band →
+## lakes → river so later features can flow into earlier ones. Each feature uses a dedicated
+## seed-offset RNG for determinism (same seed → identical water layout).
+func _carve_water(terrain: Array, water_seed: int, coast_edges: Array = [], river_edges: Array = [], lake_edges: Array = []) -> Array:
 	var result := _copy_terrain(terrain)
-	_carve_coast(result, water_seed, coast_edge)
+	_carve_coast(result, water_seed, coast_edges)
+	_carve_freshwater(result, water_seed, lake_edges)
 	_carve_lakes(result, water_seed)
-	_carve_river(result, water_seed)
+	_carve_river(result, water_seed, river_edges)
 	return result
 
 
-## Optional coastline: with prob _COAST_CHANCE, floods a band of depth _COAST_DEPTH inward
-## from one random edge. The inner boundary jitters by ±1 per row/column so it isn't straight.
-## forced_edge >= 0 (0 top, 1 bottom, 2 left, 3 right) overrides both the probability roll and
-## the random edge pick — used by the Overworld to align a coast tile's ocean direction.
-func _carve_coast(terrain: Array, water_seed: int, forced_edge: int = -1) -> void:
+## Conditional lakeshore: the freshwater twin of _carve_coast. For each edge facing an overworld
+## LAKE it carves a band of depth _FRESHWATER_DEPTH inward, jittered ±1, as WATER (fresh) rather
+## than COAST (salt) — "a lake is like a coast, only freshwater". Empty lake_edges ⇒ no band.
+func _carve_freshwater(terrain: Array, water_seed: int, lake_edges: Array = []) -> void:
+	if lake_edges.is_empty():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = water_seed + _FRESHWATER_SEED_OFFSET
+	for edge: int in lake_edges:
+		# `i` runs across the chosen edge, `d` inward to a jittered depth.
+		for i in range(GRID_SIZE):
+			var depth: int = maxi(0, _FRESHWATER_DEPTH + rng.randi_range(-1, 1))
+			for d in range(depth):
+				var tile: Vector2i
+				match edge:
+					0: tile = Vector2i(i, d)
+					1: tile = Vector2i(i, GRID_SIZE - 1 - d)
+					2: tile = Vector2i(d, i)
+					_: tile = Vector2i(GRID_SIZE - 1 - d, i)
+				if is_in_bounds(tile):
+					terrain[tile.x][tile.y] = TileType.WATER
+
+
+## Conditional coastline: carves a band of depth _COAST_DEPTH inward from each forced edge, with
+## the inner boundary jittered by ±1 so it isn't straight. A coast is carved ONLY when the
+## overworld tile is a COAST tile (forced_edges non-empty); inland/forest/mountain tiles pass an
+## empty array and get NO coast — the ocean only borders maps that border it on the overworld.
+## forced_edges: each 0 top, 1 bottom, 2 left, 3 right; a peninsula tip carries several.
+func _carve_coast(terrain: Array, water_seed: int, forced_edges: Array = []) -> void:
+	if forced_edges.is_empty():
+		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = water_seed + _COAST_SEED_OFFSET
-	var edge: int
-	if forced_edge >= 0:
-		edge = forced_edge
-	else:
-		if rng.randf() >= _COAST_CHANCE:
-			return
-		edge = rng.randi_range(0, 3)  # 0 top, 1 bottom, 2 left, 3 right
-	# Iterate along the edge; `i` runs across the chosen edge, `d` inward to a jittered depth.
-	for i in range(GRID_SIZE):
-		var depth: int = maxi(0, _COAST_DEPTH + rng.randi_range(-1, 1))
-		for d in range(depth):
-			var tile: Vector2i
-			match edge:
-				0: tile = Vector2i(i, d)
-				1: tile = Vector2i(i, GRID_SIZE - 1 - d)
-				2: tile = Vector2i(d, i)
-				_: tile = Vector2i(GRID_SIZE - 1 - d, i)
-			if is_in_bounds(tile):
-				terrain[tile.x][tile.y] = TileType.COAST
+	var edges: Array = forced_edges
+	for edge: int in edges:
+		# Iterate along the edge; `i` runs across the chosen edge, `d` inward to a jittered depth.
+		for i in range(GRID_SIZE):
+			var depth: int = maxi(0, _COAST_DEPTH + rng.randi_range(-1, 1))
+			for d in range(depth):
+				var tile: Vector2i
+				match edge:
+					0: tile = Vector2i(i, d)
+					1: tile = Vector2i(i, GRID_SIZE - 1 - d)
+					2: tile = Vector2i(d, i)
+					_: tile = Vector2i(GRID_SIZE - 1 - d, i)
+				if is_in_bounds(tile):
+					terrain[tile.x][tile.y] = TileType.COAST
 
 
 ## Optional lakes: with prob _LAKE_CHANCE, grows 1.._LAKE_COUNT_MAX blobby water regions
@@ -519,18 +824,23 @@ func _region_grow_water(terrain: Array, start: Vector2i, target_size: int, rng: 
 				frontier.append(n)
 
 
-## Mandatory river(s): traces a meandering walk from one edge to a different edge, carving
-## a band of width _RIVER_WIDTH. The walk steps toward the target, with _RIVER_MEANDER_CHANCE
-## probability of a perpendicular jog, and ends when it reaches the goal (flows off-map).
-func _carve_river(terrain: Array, water_seed: int) -> void:
+## Conditional river: carved only when the overworld tile has one (river_edges non-empty).
+## Traces a meandering band of width _RIVER_WIDTH from one of the tile's river edges to another,
+## so the tactical river crosses the same sides the overworld river connects to its neighbours.
+## With a single river edge (a source/mouth tile) it runs to the opposite edge so a full river
+## still crosses the map. Empty river_edges ⇒ no river. The walk jogs perpendicular with
+## _RIVER_MEANDER_CHANCE probability.
+func _carve_river(terrain: Array, water_seed: int, river_edges: Array = []) -> void:
+	if river_edges.is_empty():
+		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = water_seed + _RIVER_SEED_OFFSET
-	for _i in range(_RIVER_COUNT):
-		var start_edge: int = rng.randi_range(0, 3)
-		var end_edge: int = (start_edge + rng.randi_range(1, 3)) % 4
-		var start := _edge_point(start_edge, rng)
-		var goal := _edge_point(end_edge, rng)
-		_trace_river(terrain, start, goal, rng)
+	var start_edge: int = int(river_edges[0])
+	# Opposite edge pairs are top↔bottom (0↔1) and left↔right (2↔3), i.e. edge XOR 1.
+	var end_edge: int = int(river_edges[1]) if river_edges.size() >= 2 else (start_edge ^ 1)
+	var start := _edge_point(start_edge, rng)
+	var goal := _edge_point(end_edge, rng)
+	_trace_river(terrain, start, goal, rng)
 
 
 ## Returns a random tile on the given edge (0 top, 1 bottom, 2 left, 3 right).
@@ -944,6 +1254,21 @@ func get_tile_movement_cost(pos: Vector2i) -> float:
 		TileType.GRASS:      return 4.0
 		TileType.WHEAT:      return 4.0
 		TileType.CLAY:       return 4.0
+		TileType.IRON:       return 4.0
+		TileType.COPPER:     return 4.0
+		TileType.TIN:        return 4.0
+		TileType.SILVER:     return 4.0
+		TileType.GOLD:       return 4.0
+		TileType.GEMSTONE:   return 4.0
+		TileType.FLAX:       return 4.0
+		TileType.HOPS:       return 4.0
+		TileType.GRAPES:     return 4.0
+		TileType.SAND:       return 4.0
+		TileType.OLIVE:      return 4.0
+		TileType.BEES:       return 4.0
+		TileType.MARBLE:     return 4.0
+		TileType.AMBER:      return 4.0
+		TileType.PEARL:      return INF
 		_:                   return 1.0  # EMPTY
 
 

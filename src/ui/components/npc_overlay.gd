@@ -31,7 +31,7 @@ var _npc_texture: Texture2D = null
 func _ready() -> void:
 	y_sort_enabled = true
 	z_index = 3
-	_npc_texture = load("res://assets/art/tiles/npc_icon_villager.png")
+	_npc_texture = load("res://assets/ui/icons/various/npc_icon_villager.png")
 	TickSystem.ticks_advanced.connect(_on_ticks_advanced)
 	NPCSystem.npc_removed.connect(_on_npc_removed)
 	NPCSystem.npc_leveled_up.connect(_on_npc_leveled_up)

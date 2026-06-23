@@ -192,7 +192,7 @@ const BUILD_COST: Dictionary = {
 	BuildingType.POTTERY_KILN:       {&"wood": 5,  &"stone": 8, &"clay": 5},
 	BuildingType.TANNERY:            {&"wood": 8,  &"stone": 3},
 	BuildingType.BOWYERS_WORKSHOP:   {&"wood": 8,  &"fiber": 3, &"stone": 2},
-	BuildingType.BRIDGE:             {&"wood": 8},
+	BuildingType.BRIDGE:             {&"wood": 6, &"rope": 2},
 	BuildingType.CARPENTER:          {&"wood": 10, &"stone": 5},
 	BuildingType.FISHING_HUT:        {&"wood": 8,  &"stone": 2, &"fiber": 4},
 	BuildingType.BRICK_KILN:         {&"wood": 8,  &"stone": 8, &"clay": 5},
@@ -321,32 +321,32 @@ const BUILDING_UPGRADES: Dictionary = {
 
 ## Maps BuildingType → texture resource path. Used by placement ghost and building visuals.
 const BUILDING_TEXTURES: Dictionary = {
-	BuildingType.COLLECTION_POINT:  "res://assets/art/tiles/bld_tile_collection_point.png",
-	BuildingType.STORAGE_BUILDING:  "res://assets/art/tiles/bld_tile_storage.png",
-	BuildingType.RESIDENTIAL_HOUSE: "res://assets/art/tiles/bld_tile_house.png",
-	BuildingType.LUMBER_CAMP:       "res://assets/art/tiles/bld_tile_lumber_camp.png",
-	BuildingType.ROAD:              "res://assets/art/tiles/env_tile_path_nesw.png",
-	BuildingType.GATHERING_HUT:     "res://assets/art/tiles/bld_tile_gathering_hut.png",
-	BuildingType.STONE_MASON:       "res://assets/art/tiles/bld_tile_steinmetz.png",
-	BuildingType.TOOL_WORKSHOP:     "res://assets/art/tiles/bld_tile_tool_workshop.png",
-	BuildingType.WEAVER:            "res://assets/art/tiles/bld_tile_weaver.png",
-	BuildingType.TAILOR:            "res://assets/art/tiles/bld_tile_tailor.png",
-	BuildingType.SAWMILL:           "res://assets/art/tiles/bld_tile_sawmill.png",
-	BuildingType.HUNTING_LODGE:     "res://assets/art/tiles/bld_tile_hunting_lodge.png",
-	BuildingType.FARM:              "res://assets/art/tiles/bld_tile_farm.png",
-	BuildingType.MILL:              "res://assets/art/tiles/bld_tile_mill.png",
-	BuildingType.BAKERY:            "res://assets/art/tiles/bld_tile_bakery.png",
-	BuildingType.CLAY_PIT:          "res://assets/art/tiles/bld_tile_clay_pit.png",
-	BuildingType.POTTERY_KILN:       "res://assets/art/tiles/bld_tile_pottery_kiln.png",
-	BuildingType.TANNERY:            "res://assets/art/tiles/bld_tile_tannery.png",
-	BuildingType.BOWYERS_WORKSHOP:   "res://assets/art/tiles/bld_tile_bowyers_workshop.png",
-	BuildingType.BRIDGE:             "res://assets/art/tiles/env_tile_bridge_h_01.png",
-	BuildingType.CARPENTER:          "res://assets/art/tiles/bld_tile_carpenter.png",
-	BuildingType.FISHING_HUT:        "res://assets/art/tiles/bld_tile_fishing_hut.png",
-	BuildingType.BRICK_KILN:         "res://assets/art/tiles/bld_tile_brick_kiln.png",
-	BuildingType.CHARCOAL_KILN:      "res://assets/art/tiles/bld_tile_charcoal_kiln.png",
-	BuildingType.SALT_WORKS:         "res://assets/art/tiles/bld_tile_salt_works.png",
-	BuildingType.PRESERVATION_HOUSE: "res://assets/art/tiles/bld_tile_preservation_house.png",
+	BuildingType.COLLECTION_POINT:  "res://assets/art/buildings/bld_tile_collection_point.png",
+	BuildingType.STORAGE_BUILDING:  "res://assets/art/buildings/bld_tile_storage.png",
+	BuildingType.RESIDENTIAL_HOUSE: "res://assets/art/buildings/bld_tile_house.png",
+	BuildingType.LUMBER_CAMP:       "res://assets/art/buildings/bld_tile_lumber_camp.png",
+	BuildingType.ROAD:              "res://assets/art/tiles/path/env_tile_path_nesw.png",
+	BuildingType.GATHERING_HUT:     "res://assets/art/buildings/bld_tile_gathering_hut.png",
+	BuildingType.STONE_MASON:       "res://assets/art/buildings/bld_tile_steinmetz.png",
+	BuildingType.TOOL_WORKSHOP:     "res://assets/art/buildings/bld_tile_tool_workshop.png",
+	BuildingType.WEAVER:            "res://assets/art/buildings/bld_tile_weaver.png",
+	BuildingType.TAILOR:            "res://assets/art/buildings/bld_tile_tailor.png",
+	BuildingType.SAWMILL:           "res://assets/art/buildings/bld_tile_sawmill.png",
+	BuildingType.HUNTING_LODGE:     "res://assets/art/buildings/bld_tile_hunting_lodge.png",
+	BuildingType.FARM:              "res://assets/art/buildings/bld_tile_farm.png",
+	BuildingType.MILL:              "res://assets/art/buildings/bld_tile_mill.png",
+	BuildingType.BAKERY:            "res://assets/art/buildings/bld_tile_bakery.png",
+	BuildingType.CLAY_PIT:          "res://assets/art/buildings/bld_tile_clay_pit.png",
+	BuildingType.POTTERY_KILN:       "res://assets/art/buildings/bld_tile_pottery_kiln.png",
+	BuildingType.TANNERY:            "res://assets/art/buildings/bld_tile_tannery.png",
+	BuildingType.BOWYERS_WORKSHOP:   "res://assets/art/buildings/bld_tile_bowyers_workshop.png",
+	BuildingType.BRIDGE:             "res://assets/art/tiles/bridge/env_tile_bridge_h_01.png",
+	BuildingType.CARPENTER:          "res://assets/art/buildings/bld_tile_carpenter.png",
+	BuildingType.FISHING_HUT:        "res://assets/art/buildings/bld_tile_fishing_hut.png",
+	BuildingType.BRICK_KILN:         "res://assets/art/buildings/bld_tile_brick_kiln.png",
+	BuildingType.CHARCOAL_KILN:      "res://assets/art/buildings/bld_tile_charcoal_kiln.png",
+	BuildingType.SALT_WORKS:         "res://assets/art/buildings/bld_tile_salt_works.png",
+	BuildingType.PRESERVATION_HOUSE: "res://assets/art/buildings/bld_tile_preservation_house.png",
 }
 
 ## Maps BuildingType → the job/profession label of a worker employed there.
@@ -537,6 +537,31 @@ const RECIPES: Dictionary = {
 			"base_cycle_ticks": 300,
 			"npc_required": true,
 		},
+		{
+			"id": &"craft_net_from_rope",
+			"label": "Craft Fishing Net (Rope)",
+			"inputs": [
+				{"resource_id": &"rope", "quantity": 2},
+			],
+			"output": {&"fishing_net": 2},
+			"output_capacity": 10,
+			"input_capacity": 10,
+			"base_cycle_ticks": 250,
+			"npc_required": true,
+		},
+		{
+			"id": &"twist_rope",
+			"label": "Twist Rope",
+			"inputs": [
+				{"resource_id": &"fiber",   "quantity": 3},
+				{"resource_id": &"spindle", "quantity": 1},
+			],
+			"output": {&"rope": 2},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 250,
+			"npc_required": true,
+		},
 	],
 	BuildingType.TAILOR: [
 		{
@@ -723,16 +748,16 @@ const RECIPES: Dictionary = {
 	],
 	BuildingType.BOWYERS_WORKSHOP: [
 		{
-			"id": &"craft_bow",
-			"label": "Craft Hunting Bow",
+			"id": &"bow_with_rope",
+			"label": "Craft Hunting Bow (Rope-strung)",
 			"inputs": [
-				{"resource_id": &"wood",  "quantity": 2},
-				{"resource_id": &"fiber", "quantity": 3},
+				{"resource_id": &"wood", "quantity": 2},
+				{"resource_id": &"rope", "quantity": 1},
 			],
-			"output": {&"hunting_bow": 1},
+			"output": {&"hunting_bow": 2},
 			"output_capacity": 10,
 			"input_capacity": 10,
-			"base_cycle_ticks": 375,
+			"base_cycle_ticks": 300,
 			"npc_required": true,
 		},
 	],
@@ -1525,6 +1550,8 @@ func _check_bridge_connects(tile: Vector2i) -> int:
 
 ## Validates resource and energy affordability for building_type. No side effects.
 func _check_resource_and_energy(building_type: int) -> int:
+	if DebugSettings.ignore_costs:
+		return PlacementResult.SUCCESS
 	var cost: Dictionary = BUILD_COST.get(building_type, {})
 	for resource_id: StringName in cost:
 		if _get_total_resource(resource_id) < cost[resource_id]:
@@ -1541,6 +1568,8 @@ func _check_resource_and_energy(building_type: int) -> int:
 
 ## Deducts energy and resource costs for a confirmed build.
 func _deduct_build_cost(building_type: int) -> void:
+	if DebugSettings.ignore_costs:
+		return
 	var energy_cost: int = _calc_energy_cost(building_type)
 	if _player_character != null and energy_cost > 0:
 		_player_character.consume_energy(energy_cost)

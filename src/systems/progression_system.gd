@@ -517,6 +517,8 @@ func get_node_cost(node_id: StringName) -> int:
 
 ## True when the player can pay node_id's unlock cost. Always true when costs are disabled.
 func can_afford(node_id: StringName) -> bool:
+	if DebugSettings.ignore_costs:
+		return true
 	if not node_cost_enabled:
 		return true
 	return progression_points >= get_node_cost(node_id)
@@ -539,7 +541,7 @@ func unlock(node_id: StringName) -> bool:
 		return false
 	if not can_afford(node_id):
 		return false
-	if node_cost_enabled:
+	if node_cost_enabled and not DebugSettings.ignore_costs:
 		progression_points = maxi(0, progression_points - get_node_cost(node_id))
 		points_changed.emit(progression_points)
 	_unlocked[node_id] = true
@@ -566,6 +568,8 @@ func _grants_npc_level_cap(node_id: StringName) -> bool:
 ## True if the node that unlocks this building type is unlocked. Unknown types (never
 ## gated by any node) default to unlocked so non-tree content is never blocked.
 func is_building_unlocked(building_type: int) -> bool:
+	if DebugSettings.unlock_all_progression:
+		return true
 	if not _building_node.has(building_type):
 		return true
 	return is_unlocked(_building_node[building_type])
@@ -573,6 +577,8 @@ func is_building_unlocked(building_type: int) -> bool:
 
 ## True if the manual hand-craft recipe is unlocked. Unknown recipes default to unlocked.
 func is_recipe_unlocked(recipe_id: StringName) -> bool:
+	if DebugSettings.unlock_all_progression:
+		return true
 	if not _recipe_node.has(recipe_id):
 		return true
 	return is_unlocked(_recipe_node[recipe_id])
@@ -580,6 +586,8 @@ func is_recipe_unlocked(recipe_id: StringName) -> bool:
 
 ## True if a specific recipe inside a building is unlocked. Unknown pairs default to unlocked.
 func is_building_recipe_unlocked(building_type: int, recipe_id: StringName) -> bool:
+	if DebugSettings.unlock_all_progression:
+		return true
 	var key: String = "%d:%s" % [building_type, recipe_id]
 	if not _building_recipe_node.has(key):
 		return true
@@ -588,6 +596,8 @@ func is_building_recipe_unlocked(building_type: int, recipe_id: StringName) -> b
 
 ## True if the manual gather/forage action is unlocked. Unknown actions default to unlocked.
 func is_gather_unlocked(action_type: int) -> bool:
+	if DebugSettings.unlock_all_progression:
+		return true
 	if not _gather_node.has(action_type):
 		return true
 	return is_unlocked(_gather_node[action_type])
@@ -596,6 +606,8 @@ func is_gather_unlocked(action_type: int) -> bool:
 ## True if the named building upgrade (e.g. &"crafting_bench") is unlocked. Unknown
 ## upgrades default to unlocked so non-gated upgrades are never blocked.
 func is_upgrade_unlocked(upgrade_id: StringName) -> bool:
+	if DebugSettings.unlock_all_progression:
+		return true
 	if not _upgrade_node.has(upgrade_id):
 		return true
 	return is_unlocked(_upgrade_node[upgrade_id])
@@ -604,6 +616,8 @@ func is_upgrade_unlocked(upgrade_id: StringName) -> bool:
 ## True if the world-tile Search action is unlocked. When no node gates Search it defaults
 ## to unlocked; otherwise any one unlocked gating node suffices.
 func is_search_unlocked() -> bool:
+	if DebugSettings.unlock_all_progression:
+		return true
 	if _search_nodes.is_empty():
 		return true
 	for node_id: StringName in _search_nodes:
@@ -616,6 +630,8 @@ func is_search_unlocked() -> bool:
 ## resource gated by no node (e.g. forage-only loot) defaults to unlocked. Used to hide
 ## not-yet-obtainable resources from menus such as the storage delivery-limits view.
 func is_resource_unlocked(resource_id: StringName) -> bool:
+	if DebugSettings.unlock_all_progression:
+		return true
 	_ensure_resource_map()
 	if not _resource_nodes.has(resource_id):
 		return true

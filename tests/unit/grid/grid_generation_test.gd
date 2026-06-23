@@ -388,6 +388,177 @@ func test_generate_grass_tile_has_fiber_resource_and_is_clearable() -> void:
 				return
 
 
+# ---- Terrain profile (overworld biome bias) ----
+
+func _count_in_terrain(terrain: Array, tile_type: int) -> int:
+	var count := 0
+	for x in range(GridMapScript.GRID_SIZE):
+		for y in range(GridMapScript.GRID_SIZE):
+			if terrain[x][y] == tile_type:
+				count += 1
+	return count
+
+
+func _empty_terrain() -> Array:
+	var terrain: Array = []
+	for _x in range(GridMapScript.GRID_SIZE):
+		var row: Array[int] = []
+		for _y in range(GridMapScript.GRID_SIZE):
+			row.append(GridMapScript.TileType.EMPTY)
+		terrain.append(row)
+	return terrain
+
+
+func test_mountain_profile_has_more_rock_than_plains() -> void:
+	# Same seed, MOUNTAIN profile must yield more STONE + IMPASSABLE (rock/peaks) than PLAINS.
+	# Arrange / Act — sample the raw noise (pre-smoothing) so we test the band logic directly.
+	var grid := _make_grid()
+	var plains: Array = grid._sample_noise(42, GridMapScript.TerrainProfile.PLAINS)
+	var mountain: Array = grid._sample_noise(42, GridMapScript.TerrainProfile.MOUNTAIN)
+
+	# Assert
+	var plains_rock := _count_in_terrain(plains, GridMapScript.TileType.STONE) \
+		+ _count_in_terrain(plains, GridMapScript.TileType.IMPASSABLE)
+	var mountain_rock := _count_in_terrain(mountain, GridMapScript.TileType.STONE) \
+		+ _count_in_terrain(mountain, GridMapScript.TileType.IMPASSABLE)
+	assert_int(mountain_rock).is_greater(plains_rock)
+
+
+func test_forest_profile_has_more_trees_than_plains() -> void:
+	# Same seed, FOREST profile must yield more TREE tiles than PLAINS.
+	# Arrange / Act
+	var grid := _make_grid()
+	var plains: Array = grid._sample_noise(42, GridMapScript.TerrainProfile.PLAINS)
+	var forest: Array = grid._sample_noise(42, GridMapScript.TerrainProfile.FOREST)
+
+	# Assert
+	var plains_trees := _count_in_terrain(plains, GridMapScript.TileType.TREE)
+	var forest_trees := _count_in_terrain(forest, GridMapScript.TileType.TREE)
+	assert_int(forest_trees).is_greater(plains_trees)
+
+
+func test_plains_profile_matches_original_thresholds() -> void:
+	# Regression: the PLAINS bands must reproduce the original hardcoded thresholds, so existing
+	# (non-overworld) maps are byte-identical. The default profile is PLAINS.
+	# Arrange / Act
+	var grid := _make_grid()
+	var explicit_plains: Array = grid._sample_noise(42, GridMapScript.TerrainProfile.PLAINS)
+	var default_profile: Array = grid._sample_noise(42)
+
+	# Assert
+	for x in range(GridMapScript.GRID_SIZE):
+		for y in range(GridMapScript.GRID_SIZE):
+			assert_int(default_profile[x][y]).is_equal(explicit_plains[x][y])
+
+
+# ---- Conditional coast ----
+
+func test_carve_coast_empty_edges_adds_no_coast() -> void:
+	# Regression: an inland tile (empty coast_edges) must get NO coast on its tactical map — the
+	# ocean only borders maps that border it on the overworld. Previously a random roll could
+	# carve a coast on inland maps.
+	# Arrange
+	var grid := _make_grid()
+	var terrain := _empty_terrain()
+
+	# Act
+	grid._carve_coast(terrain, 42, [])
+
+	# Assert
+	assert_int(_count_in_terrain(terrain, GridMapScript.TileType.COAST)).is_equal(0)
+
+
+func test_carve_coast_with_edge_carves_top_band() -> void:
+	# A forced top edge (0) carves a COAST band along the top row.
+	# Arrange
+	var grid := _make_grid()
+	var terrain := _empty_terrain()
+
+	# Act
+	grid._carve_coast(terrain, 42, [0])
+
+	# Assert — coast exists and the top row is coast.
+	assert_int(_count_in_terrain(terrain, GridMapScript.TileType.COAST)).is_greater(0)
+	var top_has_coast := false
+	for x in range(GridMapScript.GRID_SIZE):
+		if terrain[x][0] == GridMapScript.TileType.COAST:
+			top_has_coast = true
+	assert_bool(top_has_coast).is_true()
+
+
+# ---- Conditional river ----
+
+func test_carve_river_empty_edges_adds_no_water() -> void:
+	# A tile whose overworld counterpart has no river must get no tactical river.
+	# Arrange
+	var grid := _make_grid()
+	var terrain := _empty_terrain()
+
+	# Act
+	grid._carve_river(terrain, 42, [])
+
+	# Assert
+	assert_int(_count_in_terrain(terrain, GridMapScript.TileType.WATER)).is_equal(0)
+
+
+func test_carve_river_with_edges_carves_water_touching_both_edges() -> void:
+	# river_edges [0, 1] (top, bottom) must carve a river that reaches both the top and bottom rows.
+	# Arrange
+	var grid := _make_grid()
+	var terrain := _empty_terrain()
+	var last := GridMapScript.GRID_SIZE - 1
+
+	# Act
+	grid._carve_river(terrain, 42, [0, 1])
+
+	# Assert — water exists and a tile on the top row and the bottom row is water.
+	assert_int(_count_in_terrain(terrain, GridMapScript.TileType.WATER)).is_greater(0)
+	var top_has_water := false
+	var bottom_has_water := false
+	for x in range(GridMapScript.GRID_SIZE):
+		if terrain[x][0] == GridMapScript.TileType.WATER:
+			top_has_water = true
+		if terrain[x][last] == GridMapScript.TileType.WATER:
+			bottom_has_water = true
+	assert_bool(top_has_water).is_true()
+	assert_bool(bottom_has_water).is_true()
+
+
+# ---- Conditional freshwater (lakeshore band) ----
+
+func test_carve_freshwater_empty_edges_adds_no_water() -> void:
+	# A tile not bordering an overworld lake gets no freshwater band.
+	# Arrange
+	var grid := _make_grid()
+	var terrain := _empty_terrain()
+
+	# Act
+	grid._carve_freshwater(terrain, 42, [])
+
+	# Assert
+	assert_int(_count_in_terrain(terrain, GridMapScript.TileType.WATER)).is_equal(0)
+
+
+func test_carve_freshwater_with_edge_carves_fresh_water_band_not_coast() -> void:
+	# A lake edge carves a band of WATER (freshwater) — NOT COAST (saltwater) — along that edge.
+	# "A lake is like a coast, only freshwater."
+	# Arrange
+	var grid := _make_grid()
+	var terrain := _empty_terrain()
+
+	# Act
+	grid._carve_freshwater(terrain, 42, [0])
+
+	# Assert — freshwater WATER on the top row, and no salt COAST anywhere.
+	assert_int(_count_in_terrain(terrain, GridMapScript.TileType.WATER)).is_greater(0)
+	assert_int(_count_in_terrain(terrain, GridMapScript.TileType.COAST)).is_equal(0)
+	var top_has_water := false
+	for x in range(GridMapScript.GRID_SIZE):
+		if terrain[x][0] == GridMapScript.TileType.WATER:
+			top_has_water = true
+	assert_bool(top_has_water).is_true()
+
+
 func test_force_fix_adds_tiles_adjacent_to_existing_cluster() -> void:
 	# Arrange: 3 TREE tiles as anchor cluster at (10,10)-(10,12); all others EMPTY
 	var grid := _make_grid()

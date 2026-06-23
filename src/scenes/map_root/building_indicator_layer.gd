@@ -131,4 +131,4 @@ func _building_has_valid_input(instance: BuildingRegistry.BuildingInstance) -> b
 
 
 func _building_texture_path(type: int) -> String:
-	return BuildingRegistry.BUILDING_TEXTURES.get(type, "res://assets/art/tiles/bld_tile_storage.png")
+	return BuildingRegistry.BUILDING_TEXTURES.get(type, "res://assets/art/buildings/bld_tile_storage.png")

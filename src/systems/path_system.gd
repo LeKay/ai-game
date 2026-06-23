@@ -30,22 +30,22 @@ enum PathPlacementResult {
 ## 4-bit bitmask → texture asset path.
 ## Dead-ends (1,2,4,8) and isolated (0) fall back to the nearest-matching available tile.
 const PATH_TEXTURES: Dictionary = {
-	0:  "res://assets/art/tiles/env_tile_path_nesw.png",  # isolated — fallback
-	1:  "res://assets/art/tiles/env_tile_path_ns.png",    # N dead-end
-	2:  "res://assets/art/tiles/env_tile_path_ew.png",    # E dead-end
-	3:  "res://assets/art/tiles/env_tile_path_ne.png",    # NE corner
-	4:  "res://assets/art/tiles/env_tile_path_ns.png",    # S dead-end
-	5:  "res://assets/art/tiles/env_tile_path_ns.png",    # NS straight
-	6:  "res://assets/art/tiles/env_tile_path_se.png",    # SE corner
-	7:  "res://assets/art/tiles/env_tile_path_nes.png",   # NES T-junction
-	8:  "res://assets/art/tiles/env_tile_path_ew.png",    # W dead-end
-	9:  "res://assets/art/tiles/env_tile_path_nw.png",    # NW corner
-	10: "res://assets/art/tiles/env_tile_path_ew.png",    # EW straight
-	11: "res://assets/art/tiles/env_tile_path_new.png",   # NEW T-junction
-	12: "res://assets/art/tiles/env_tile_path_sw.png",    # SW corner
-	13: "res://assets/art/tiles/env_tile_path_nsw.png",   # NSW T-junction
-	14: "res://assets/art/tiles/env_tile_path_esw.png",   # ESW T-junction
-	15: "res://assets/art/tiles/env_tile_path_nesw.png",  # NESW crossroads
+	0:  "res://assets/art/tiles/path/env_tile_path_nesw.png",  # isolated — fallback
+	1:  "res://assets/art/tiles/path/env_tile_path_ns.png",    # N dead-end
+	2:  "res://assets/art/tiles/path/env_tile_path_ew.png",    # E dead-end
+	3:  "res://assets/art/tiles/path/env_tile_path_ne.png",    # NE corner
+	4:  "res://assets/art/tiles/path/env_tile_path_ns.png",    # S dead-end
+	5:  "res://assets/art/tiles/path/env_tile_path_ns.png",    # NS straight
+	6:  "res://assets/art/tiles/path/env_tile_path_se.png",    # SE corner
+	7:  "res://assets/art/tiles/path/env_tile_path_nes.png",   # NES T-junction
+	8:  "res://assets/art/tiles/path/env_tile_path_ew.png",    # W dead-end
+	9:  "res://assets/art/tiles/path/env_tile_path_nw.png",    # NW corner
+	10: "res://assets/art/tiles/path/env_tile_path_ew.png",    # EW straight
+	11: "res://assets/art/tiles/path/env_tile_path_new.png",   # NEW T-junction
+	12: "res://assets/art/tiles/path/env_tile_path_sw.png",    # SW corner
+	13: "res://assets/art/tiles/path/env_tile_path_nsw.png",   # NSW T-junction
+	14: "res://assets/art/tiles/path/env_tile_path_esw.png",   # ESW T-junction
+	15: "res://assets/art/tiles/path/env_tile_path_nesw.png",  # NESW crossroads
 }
 
 ## Emitted when construction begins on a path tile (tile is not yet passable).

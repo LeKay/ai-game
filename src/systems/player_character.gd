@@ -40,6 +40,20 @@ enum ManualActionType {
 	HARVEST_WHEAT,  ## Harvests a WHEAT field tile → wheat (+ chance of wheat_seed byproduct).
 	CLEAR_WHEAT,    ## Clears a WHEAT field tile for building → wheat (+ wheat_seed byproduct).
 	MINE_CLAY,      ## Mines a revealed CLAY pit tile → clay. Unlocked by the Prospecting node.
+	MINE_IRON,      ## Mines a revealed IRON pit tile → iron. Unlocked by the Prospecting node.
+	MINE_COPPER,    ## Mines a revealed COPPER pit tile → copper. Unlocked by the Prospecting node.
+	MINE_TIN,       ## Mines a revealed TIN pit tile → tin. Unlocked by the Prospecting node.
+	MINE_SILVER,    ## Mines a revealed SILVER pit tile → silver. Unlocked by the Prospecting node.
+	MINE_GOLD,      ## Mines a revealed GOLD pit tile → gold. Unlocked by the Prospecting node.
+	MINE_GEMSTONE,  ## Mines a revealed GEMSTONE pit tile → gemstones. Unlocked by the Prospecting node.
+	HARVEST_FLAX,   ## Harvests a FLAX field tile → flax.
+	HARVEST_HOPS,   ## Harvests a HOPS field tile → hops.
+	HARVEST_GRAPES, ## Harvests a GRAPES vineyard tile → grapes.
+	HARVEST_OLIVES, ## Harvests an OLIVE grove tile → olives.
+	HARVEST_HONEY,  ## Harvests a BEES flower tile → honey.
+	GATHER_SAND,    ## Gathers from a SAND beach tile → sand.
+	MINE_MARBLE,    ## Mines a MARBLE outcrop tile → marble.
+	MINE_AMBER,     ## Mines a revealed AMBER deposit tile → amber. Unlocked by the Prospecting node.
 }
 
 enum StartResult {
@@ -287,7 +301,21 @@ func _ready() -> void:
 		ManualActionType.PLANT_SEED:    ManualActionConfig.new(ManualActionType.PLANT_SEED,    30,  8, 0, &"",     false),
 		ManualActionType.HARVEST_WHEAT: ManualActionConfig.new(ManualActionType.HARVEST_WHEAT, 45,  6, 2, &"wheat", false),
 		ManualActionType.CLEAR_WHEAT:   ManualActionConfig.new(ManualActionType.CLEAR_WHEAT,  400, 40, 20, &"wheat", false),
-		ManualActionType.MINE_CLAY:     ManualActionConfig.new(ManualActionType.MINE_CLAY,    60, 10, 3, &"clay",  false),
+		ManualActionType.MINE_CLAY:     ManualActionConfig.new(ManualActionType.MINE_CLAY,    60, 10, 3, &"clay",      false),
+		ManualActionType.MINE_IRON:     ManualActionConfig.new(ManualActionType.MINE_IRON,    60, 10, 3, &"iron",      false),
+		ManualActionType.MINE_COPPER:   ManualActionConfig.new(ManualActionType.MINE_COPPER,  60, 10, 3, &"copper",    false),
+		ManualActionType.MINE_TIN:      ManualActionConfig.new(ManualActionType.MINE_TIN,     60, 10, 3, &"tin",       false),
+		ManualActionType.MINE_SILVER:   ManualActionConfig.new(ManualActionType.MINE_SILVER,  60, 10, 3, &"silver",    false),
+		ManualActionType.MINE_GOLD:     ManualActionConfig.new(ManualActionType.MINE_GOLD,    60, 10, 3, &"gold",      false),
+		ManualActionType.MINE_GEMSTONE: ManualActionConfig.new(ManualActionType.MINE_GEMSTONE, 60, 10, 3, &"gemstones", false),
+		ManualActionType.HARVEST_FLAX:   ManualActionConfig.new(ManualActionType.HARVEST_FLAX,   45,  6, 2, &"flax",   false),
+		ManualActionType.HARVEST_HOPS:   ManualActionConfig.new(ManualActionType.HARVEST_HOPS,   45,  6, 2, &"hops",   false),
+		ManualActionType.HARVEST_GRAPES: ManualActionConfig.new(ManualActionType.HARVEST_GRAPES, 45,  6, 2, &"grapes", false),
+		ManualActionType.HARVEST_OLIVES: ManualActionConfig.new(ManualActionType.HARVEST_OLIVES, 45,  6, 2, &"olives", false),
+		ManualActionType.HARVEST_HONEY:  ManualActionConfig.new(ManualActionType.HARVEST_HONEY,  45,  6, 2, &"honey",  false),
+		ManualActionType.GATHER_SAND:    ManualActionConfig.new(ManualActionType.GATHER_SAND,    50,  8, 3, &"sand",   false),
+		ManualActionType.MINE_MARBLE:    ManualActionConfig.new(ManualActionType.MINE_MARBLE,    60, 10, 3, &"marble", true),
+		ManualActionType.MINE_AMBER:     ManualActionConfig.new(ManualActionType.MINE_AMBER,     60, 10, 3, &"amber",  false),
 	}
 
 
@@ -327,12 +355,22 @@ func is_depleted() -> bool:
 ## Returns false when energy was insufficient; true when fully paid.
 ## Called by BuildingRegistry (placement cost) and MapRoot (transport cost).
 func consume_energy(amount: int) -> bool:
+	if DebugSettings.no_energy_cost:
+		return true
 	if amount <= 0:
 		return true
 	if _energy_pool.try_spend(amount):
 		return true
 	_energy_pool.spend_unchecked(amount)
 	return false
+
+
+## Restores up to `amount` energy, clamped to the max. Pass get_max_energy() to top up fully.
+## Used by the debug menu's "infinite energy" cheat to refill on activation.
+func restore_energy(amount: int) -> void:
+	if amount <= 0:
+		return
+	_energy_pool.restore(amount)
 
 # ---- Action API (Story 002) -------------------------------------------------
 
@@ -859,13 +897,15 @@ func try_start_plant_seed(tile: Vector2i, seed_type: StringName) -> int:
 	return StartResult.SUCCESS
 
 
-## Searches a tile for hidden clay. Spends SURVEY_ENERGY. Returns a result dict:
+## Searches a tile for any hidden ore/gem deposit (clay, iron, …). Spends SURVEY_ENERGY.
+## Returns a result dict:
 ##   blocked (bool), reason (String),
-##   clay_revealed (bool), clay_distance (int: 0 on-tile, >0 nearest, -1 none).
+##   deposit_revealed (bool), deposit_distance (int: 0 on-tile, >0 nearest, -1 none),
+##   deposit_id (StringName: revealed/nearest resource, &"" when none in range).
 func survey_tile(tile: Vector2i) -> Dictionary:
 	var result: Dictionary = {
 		blocked = false, reason = "",
-		clay_revealed = false, clay_distance = -1,
+		deposit_revealed = false, deposit_distance = -1, deposit_id = &"",
 	}
 	if _grid == null:
 		result.blocked = true
@@ -876,16 +916,23 @@ func survey_tile(tile: Vector2i) -> Dictionary:
 		result.reason = "Not enough energy"
 		return result
 	_energy_pool.try_spend(SURVEY_ENERGY)
-	if _grid.has_hidden_resource(tile, &"clay"):
-		result.clay_distance = 0
-		if _grid.reveal_hidden_clay(tile):
-			result.clay_revealed = true
-		else:
-			result.reason = "Clear this tile first to expose the clay"
-	else:
-		var nearest: Variant = _grid.find_nearest_hidden(tile, &"clay", WorldGrid.CLAY_SEARCH_MAX_RADIUS)
-		if nearest != null:
-			result.clay_distance = _grid.manhattan_dist(tile, nearest)
+	var on_tile: StringName = _grid.reveal_hidden_deposit(tile)
+	if on_tile != &"":
+		result.deposit_revealed = true
+		result.deposit_distance = 0
+		result.deposit_id = on_tile
+		return result
+	# A deposit sits here but couldn't be exposed yet (tile must be cleared first).
+	var on_this_tile: Dictionary = _grid.find_nearest_any_hidden(tile, 0)
+	if not on_this_tile.is_empty():
+		result.deposit_distance = 0
+		result.deposit_id = on_this_tile.get("id", &"")
+		result.reason = "Clear this tile first to expose the deposit"
+		return result
+	var nearest: Dictionary = _grid.find_nearest_any_hidden(tile, WorldGrid.DEPOSIT_SEARCH_MAX_RADIUS)
+	if not nearest.is_empty():
+		result.deposit_distance = _grid.manhattan_dist(tile, nearest["tile"])
+		result.deposit_id = nearest["id"]
 	return result
 
 
@@ -979,6 +1026,20 @@ func get_action_label(action_type: int) -> String:
 		ManualActionType.HARVEST_WHEAT:      return "Harvest"
 		ManualActionType.CLEAR_WHEAT:        return "Clear"
 		ManualActionType.MINE_CLAY:          return "Mine"
+		ManualActionType.MINE_IRON:          return "Mine"
+		ManualActionType.MINE_COPPER:        return "Mine"
+		ManualActionType.MINE_TIN:           return "Mine"
+		ManualActionType.MINE_SILVER:        return "Mine"
+		ManualActionType.MINE_GOLD:          return "Mine"
+		ManualActionType.MINE_GEMSTONE:      return "Mine"
+		ManualActionType.HARVEST_FLAX:       return "Harvest"
+		ManualActionType.HARVEST_HOPS:       return "Harvest"
+		ManualActionType.HARVEST_GRAPES:     return "Harvest"
+		ManualActionType.HARVEST_OLIVES:     return "Harvest"
+		ManualActionType.HARVEST_HONEY:      return "Harvest"
+		ManualActionType.GATHER_SAND:        return "Gather"
+		ManualActionType.MINE_MARBLE:        return "Mine"
+		ManualActionType.MINE_AMBER:         return "Mine"
 	return "Action"
 
 

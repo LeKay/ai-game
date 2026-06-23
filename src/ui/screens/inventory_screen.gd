@@ -674,6 +674,8 @@ func _building_list() -> Array[Dictionary]:
 		var energy_cost: int = int(floor(float(total_res) * BuildingRegistry.ENERGY_PER_RESOURCE))
 		if energy_cost > 0 and current_energy < energy_cost:
 			can_afford = false
+		if DebugSettings.ignore_costs:
+			can_afford = true
 		result.append({
 			&"building_type":   btype,
 			&"display_name":    BuildingRegistry.get_type_display_name(btype),
@@ -722,6 +724,8 @@ func _crafting_list() -> Array[Dictionary]:
 				can_afford = false
 		if energy_cost > 0 and current_energy < energy_cost:
 			can_afford = false
+		if DebugSettings.ignore_costs:
+			can_afford = true
 		result.append({
 			&"recipe_id":      recipe_id,
 			&"display_name":   display_name,

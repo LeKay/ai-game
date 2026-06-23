@@ -55,7 +55,7 @@ func _make_circle(fid: StringName) -> Control:
 	# wild has no resource entry — use the same deer marker the forest overlay shows.
 	var tex: Texture2D
 	if fid == &"wild":
-		const DEER := "res://assets/art/tiles/ui_icon_wild_deer.png"
+		const DEER := "res://assets/ui/icons/various/ui_icon_wild_deer.png"
 		tex = (load(DEER) as Texture2D) if ResourceLoader.exists(DEER) else TextureFactory.circle(CIRCLE_R, Color(0.43, 0.32, 0.14))
 	else:
 		tex = ResourceRegistry.get_icon_texture(fid, CIRCLE_R)

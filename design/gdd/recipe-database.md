@@ -53,7 +53,24 @@
 >   `CARPENTER:bare_planks`; `leather_furniture` node (materials branch, prereqs: carpenter +
 >   tannery) unlocks `CARPENTER:with_leather`. Furniture is ungated as production_good for now;
 >   use in housing/comfort system TBD.
->   **Fishing chain (2026-06-21):** New tool resource `fishing_net` (🕸️, fiber ×4 at Weaver, 300
+>   **Rope chain (2026-06-23):** New intermediate+trade_good resource `rope` (🪢, base_value 8,
+   tags: trade_good). New building **Rope Maker** (`ROPE_MAKER`): two recipes —
+   `with_spindle` (primary, fiber ×3 + spindle ×1 → rope ×2, 250 ticks, NPC) and
+   `bare_hands` (fallback, fiber ×4 → rope ×1, 750 ticks, NPC; ~8× lower throughput
+   rate — keeps production alive without tool supply but strongly incentivises spindle use).
+   Bridge BUILD_COST updated: wood ×8 → wood ×6 + rope ×2 (rope as lashing material).
+   Weaver gains 4th recipe `craft_net_from_rope` (rope ×2 → fishing_net ×2, 250 ticks —
+   ~2.4× more efficient than the fiber-based net recipe).
+   Bowyer's Workshop gains 2nd recipe `bow_with_rope` (wood ×2 + rope ×1 → hunting_bow ×2,
+   300 ticks — ~2.5× more efficient than `craft_bow`; rope acts as bowstring material).
+   Progression: `rope_making` node (textiles branch, prereq: fiber_harvesting) unlocks
+   ROPE_MAKER + `ROPE_MAKER:bare_hands`; `tooled_rope_making` node (textiles branch,
+   prereqs: rope_making + spindle) unlocks `ROPE_MAKER:with_spindle`; `rope_nets` node
+   (textiles branch, prereqs: net_weaving + rope_making) unlocks `WEAVER:craft_net_from_rope`;
+   `rope_bow` node (crafting branch, prereqs: bowyer + rope_making) unlocks
+   `BOWYERS_WORKSHOP:bow_with_rope`. Bridge gating updated: `bridge_building` node now
+   also requires `rope_making` as prereq (consistent with BUILD_COST change).
+   **Fishing chain (2026-06-21):** New tool resource `fishing_net` (🕸️, fiber ×4 at Weaver, 300
 >   ticks). New food resource `fish` (🐟, nutrition 3, base_value 3). New building
 >   **Fishing Hut** (`FISHING_HUT`): single recipe `with_net` (fishing_net ×1 → fish ×5, 250
 >   ticks, NPC required). Mandatory adjacency requirement: ≥1 adjacent WATER tile (BLOCKED_BY_ADJACENCY

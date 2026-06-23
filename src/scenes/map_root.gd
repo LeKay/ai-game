@@ -89,8 +89,15 @@ func _ready() -> void:
 	_player.seed_planted.connect(_on_seed_planted)
 	grid.terrain_growing_started.connect(_on_terrain_growing_started)
 	grid.terrain_tile_changed.connect(_on_terrain_tile_changed)
-	if WorldSaveManager.has_pending_load():
+	print("[TRAVELDBG] _ready: pending_switch=%s pending_load=%s current=%s" % [WorldSaveManager.has_pending_map_switch(), WorldSaveManager.has_pending_load(), WorldSaveManager.get_current_map_coord()])
+	if WorldSaveManager.has_pending_map_switch():
+		# Overworld tile-to-tile travel: this scene was reloaded to swap the active tactical map.
+		# The overworld island + globals (time, tech) persist in their autoloads; only the per-map
+		# colony is restored or freshly generated for the target tile.
+		_apply_pending_map_switch()
+	elif WorldSaveManager.has_pending_load():
 		WorldSaveManager.apply_pending_load()
+		WorldSaveManager.set_current_map_coord(OverworldSystem.get_start_coord())
 		_terrain_renderer.sync(grid, background_layer, terrain_layer)
 		_resource_badges._spawn_resource_badges()
 	else:
@@ -128,6 +135,7 @@ func _ready() -> void:
 	_fertility_indicator.init_dependencies(grid)
 	call_deferred(&"_wire_building_detail")
 	call_deferred(&"_wire_inventory_hud")
+	call_deferred(&"_wire_overworld_travel")
 
 
 ## Opens the overworld as a blocking start picker on a new game. Deferred from _ready so the
@@ -135,10 +143,19 @@ func _ready() -> void:
 func _begin_new_game_start_pick() -> void:
 	var ow_view := get_node_or_null("../OverworldLayer/OverworldView")
 	if ow_view != null and ow_view.has_method("open_for_pick"):
+		_set_hud_visible(false)  # no settlement yet — hide the gameplay HUD during the start picker
 		ow_view.open_for_pick()
 	else:
 		var center := Vector2i(OverworldSystem.OVERWORLD_SIZE / 2, OverworldSystem.OVERWORLD_SIZE / 2)
 		OverworldSystem.select_start(center)
+
+
+## Shows/hides the gameplay HUD (CanvasLayer in the "hud" group). Hidden while the player has not
+## yet chosen a settlement, so the start picker is clean.
+func _set_hud_visible(is_visible: bool) -> void:
+	var hud := get_tree().get_first_node_in_group(&"hud") as CanvasLayer
+	if hud != null:
+		hud.visible = is_visible
 
 
 ## Generates the tactical map from the chosen overworld start tile and finishes new-game setup.
@@ -152,6 +169,75 @@ func _on_new_game_start_selected(coord: Vector2i) -> void:
 	_resource_badges._spawn_resource_badges()
 	# FertilityIndicator snapshots get_fertility() at init; the grid was empty then, so
 	# re-snapshot now that the chosen tile's map (and its fertilities) exists.
+	if _fertility_indicator != null:
+		_fertility_indicator.init_dependencies(grid)
+	WorldSaveManager.set_current_map_coord(coord)
+	_set_hud_visible(true)  # settlement chosen — bring the gameplay HUD back
+
+
+## Connects the overworld view's double-click travel signal. Deferred so the sibling
+## OverworldLayer/OverworldView node is present and ready.
+func _wire_overworld_travel() -> void:
+	var ow_view := get_node_or_null("../OverworldLayer/OverworldView")
+	if ow_view == null or not ow_view.has_signal("map_opened"):
+		push_warning("[MapRoot] OverworldView/map_opened not found — tile travel not wired")
+		return
+	# String-based connect: ow_view is statically typed Node, which doesn't declare map_opened,
+	# so ow_view.map_opened.connect(...) resolves unreliably. connect() by name is dynamic.
+	if not ow_view.is_connected("map_opened", Callable(self, "travel_to")):
+		ow_view.connect("map_opened", Callable(self, "travel_to"))
+	print("[TRAVELDBG] _wire_overworld_travel: connected=%s" % ow_view.is_connected("map_opened", Callable(self, "travel_to")))
+
+
+## Switches the active tactical map to another overworld tile (double-click travel). Snapshots the
+## current colony into memory, stages the target, and reloads the scene — the rebuilt MapRoot then
+## restores or generates the target map in _apply_pending_map_switch(). Reload gives correct visual
+## teardown for free and reuses the proven load-reconstruction path.
+func travel_to(coord: Vector2i) -> void:
+	print("[TRAVELDBG] travel_to(%s) current=%s selectable=%s" % [coord, WorldSaveManager.get_current_map_coord(), OverworldSystem.is_selectable(coord)])
+	if not OverworldSystem.is_selectable(coord):
+		return
+	if coord == WorldSaveManager.get_current_map_coord():
+		return
+	WorldSaveManager.snapshot_current_map_state()
+	WorldSaveManager.request_map_switch(coord)
+	# The main menu launches the game by instancing game.tscn and add_child'ing it to root (it is
+	# never the SceneTree.current_scene), so reload_current_scene() would miss it. Rebuild the
+	# GameWorld subtree directly instead. Deferred so we aren't restructuring the tree mid-signal.
+	_reload_game_scene.call_deferred()
+
+
+## Frees the live GameWorld subtree and instances a fresh game.tscn under the same parent. The
+## rebuilt MapRoot then applies the pending map switch in _ready.
+func _reload_game_scene() -> void:
+	var game_root: Node = get_parent()
+	var holder: Node = game_root.get_parent()
+	var scene_path: String = game_root.scene_file_path
+	if scene_path.is_empty():
+		scene_path = "res://src/scenes/game.tscn"
+	holder.remove_child(game_root)
+	game_root.queue_free()
+	var fresh: Node = (load(scene_path) as PackedScene).instantiate()
+	holder.add_child(fresh)
+
+
+## Restores a previously visited tile's colony, or generates a fresh, bare map on first visit
+## (no starter Collection Point — only the chosen start tile gets one). Runs in _ready after a
+## travel-triggered scene reload.
+func _apply_pending_map_switch() -> void:
+	var coord: Vector2i = WorldSaveManager.consume_pending_map_switch()
+	print("[TRAVELDBG] _apply_pending_map_switch coord=%s has_state=%s" % [coord, WorldSaveManager.has_map_state(coord)])
+	if WorldSaveManager.has_map_state(coord):
+		WorldSaveManager.restore_map_state(coord)
+	else:
+		# First visit: clear the previous tile's colony (the per-map autoloads survive the reload)
+		# before laying down fresh terrain. No starter Collection Point here — only the chosen
+		# start tile gets one; travelled-to maps start bare.
+		WorldSaveManager.reset_map_state()
+		OverworldSystem.generate_tactical_map(grid, coord)
+		WildSystem.initialize_for_new_map()
+	_terrain_renderer.sync(grid, background_layer, terrain_layer)
+	_resource_badges._spawn_resource_badges()
 	if _fertility_indicator != null:
 		_fertility_indicator.init_dependencies(grid)
 
@@ -423,6 +509,20 @@ func _terrain_to_action(terrain: WorldGrid.TileType) -> int:
 		WorldGrid.TileType.GRASS:       return PlayerCharacter.ManualActionType.HARVEST_FIBER
 		WorldGrid.TileType.WHEAT:       return PlayerCharacter.ManualActionType.HARVEST_WHEAT
 		WorldGrid.TileType.CLAY:        return PlayerCharacter.ManualActionType.MINE_CLAY
+		WorldGrid.TileType.IRON:        return PlayerCharacter.ManualActionType.MINE_IRON
+		WorldGrid.TileType.COPPER:      return PlayerCharacter.ManualActionType.MINE_COPPER
+		WorldGrid.TileType.TIN:         return PlayerCharacter.ManualActionType.MINE_TIN
+		WorldGrid.TileType.SILVER:      return PlayerCharacter.ManualActionType.MINE_SILVER
+		WorldGrid.TileType.GOLD:        return PlayerCharacter.ManualActionType.MINE_GOLD
+		WorldGrid.TileType.GEMSTONE:    return PlayerCharacter.ManualActionType.MINE_GEMSTONE
+		WorldGrid.TileType.FLAX:        return PlayerCharacter.ManualActionType.HARVEST_FLAX
+		WorldGrid.TileType.HOPS:        return PlayerCharacter.ManualActionType.HARVEST_HOPS
+		WorldGrid.TileType.GRAPES:      return PlayerCharacter.ManualActionType.HARVEST_GRAPES
+		WorldGrid.TileType.OLIVE:       return PlayerCharacter.ManualActionType.HARVEST_OLIVES
+		WorldGrid.TileType.BEES:        return PlayerCharacter.ManualActionType.HARVEST_HONEY
+		WorldGrid.TileType.SAND:        return PlayerCharacter.ManualActionType.GATHER_SAND
+		WorldGrid.TileType.MARBLE:      return PlayerCharacter.ManualActionType.MINE_MARBLE
+		WorldGrid.TileType.AMBER:       return PlayerCharacter.ManualActionType.MINE_AMBER
 		WorldGrid.TileType.EMPTY:       return PlayerCharacter.ManualActionType.FORAGE
 		WorldGrid.TileType.IMPASSABLE:  return -1
 		_:                              return -1

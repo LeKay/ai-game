@@ -100,6 +100,7 @@ After placement succeeds, the building enters the CONSTRUCTING state. Constructi
 | Pottery Kiln | 5 Wood + 8 Stone + 5 Clay | 900 ticks | ~0.6 |
 | Tannery | 8 Wood + 3 Stone | 700 ticks | ~0.5 |
 | Bowyer's Workshop | 8 Wood + 3 Fiber + 2 Stone | 700 ticks | ~0.5 |
+| Rope Maker | 8 Wood + 3 Fiber | 700 ticks | ~0.5 |
 
 > Build times were rescaled ×8–12 in the 2026-06-11 balancing pass so construction
 > takes hours-to-days of in-game time and the day becomes a real planning unit
@@ -157,6 +158,10 @@ A building in OPERATING state is functional. Its behavior depends on building ty
 | Clay Pit | 1 Pickaxe | 5 Clay | 250 ticks | 20 | 5 | Yes (1) |
 | Pottery Kiln (main) | 2 Clay + 1 Pickaxe | 3 Pottery | 300 ticks | 20 | 10 | Yes (1) |
 | Pottery Kiln (fallback) | 2 Clay | 1 Pottery | 900 ticks | 20 | 10 | Yes (1) |
+| Rope Maker (main) | 3 Fiber + 1 Spindle | 2 Rope | 250 ticks | 20 | 10 | Yes (1) |
+| Rope Maker (fallback) | 4 Fiber | 1 Rope | 750 ticks | 20 | 10 | Yes (1) |
+| Weaver (rope nets) | 2 Rope | 2 Fishing Net | 250 ticks | 10 | 10 | Yes (1) |
+| Bowyer (rope bow) | 2 Wood + 1 Rope | 2 Hunting Bow | 300 ticks | 10 | 10 | Yes (1) |
 
 > **Tool as capital good (2026-06-11):** A delivered tool adds 1.0 charge to the
 > building's input buffer; each cycle consumes only **1/30** charge, so one tool
