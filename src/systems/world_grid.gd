@@ -261,6 +261,9 @@ const _LAKE_SEED_OFFSET: int = 600000
 const _COAST_SEED_OFFSET: int = 700000
 const _FRESHWATER_SEED_OFFSET: int = 800000
 const _FRESHWATER_DEPTH: int = 3        ## Inward depth of a lakeshore freshwater band.
+## Fallback water patch guaranteed on the start map when no river/lake/coast borders it.
+const _FORCED_WATER_SIZE: int = 5
+const _FORCED_WATER_SEED_OFFSET: int = 1400000
 ## Orthogonal neighbor offsets, shared by water carving / connectivity / adjacency.
 const _ORTHO_OFFSETS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 
@@ -277,8 +280,11 @@ const _ORTHO_OFFSETS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector
 ## MOUNTAIN); PLAINS is the unchanged default.
 ## river_edges: carves a river between the listed edges (the overworld river's crossing points).
 ## Empty ⇒ no river — a river is only present when the overworld tile has one (coast analogy).
+## force_water: when true (start map only), guarantees at least one water patch even if the
+## overworld tile has no river/lake/coast adjacency and the random lake roll misses.
 func generate(world_seed: int, fertility_override: Array = [], coast_edges: Array = [],
-		terrain_profile: int = TerrainProfile.PLAINS, river_edges: Array = [], lake_edges: Array = []) -> void:
+		terrain_profile: int = TerrainProfile.PLAINS, river_edges: Array = [], lake_edges: Array = [],
+		force_water: bool = false) -> void:
 	assert(not _generation_done, "generate() called after terrain was locked")
 
 	var terrain: Array
@@ -287,7 +293,7 @@ func generate(world_seed: int, fertility_override: Array = [], coast_edges: Arra
 		terrain = _sample_noise(world_seed + attempt, terrain_profile)
 		terrain = _smooth_terrain(terrain, world_seed + attempt)
 		terrain = _cleanup_clusters(terrain)
-		terrain = _carve_water(terrain, world_seed + attempt, coast_edges, river_edges, lake_edges)
+		terrain = _carve_water(terrain, world_seed + attempt, coast_edges, river_edges, lake_edges, force_water)
 		if _meets_minimums(terrain) and _meets_water_constraints(terrain):
 			succeeded = true
 			break
@@ -750,13 +756,37 @@ func _blocks_occupation(type: int) -> bool:
 ## Step 4.5: carves WATER into the working terrain array. Order is coast → freshwater band →
 ## lakes → river so later features can flow into earlier ones. Each feature uses a dedicated
 ## seed-offset RNG for determinism (same seed → identical water layout).
-func _carve_water(terrain: Array, water_seed: int, coast_edges: Array = [], river_edges: Array = [], lake_edges: Array = []) -> Array:
+## force_water: if true, appends a guaranteed _FORCED_WATER_SIZE patch when no water exists yet.
+func _carve_water(terrain: Array, water_seed: int, coast_edges: Array = [], river_edges: Array = [], lake_edges: Array = [], force_water: bool = false) -> Array:
 	var result := _copy_terrain(terrain)
 	_carve_coast(result, water_seed, coast_edges)
 	_carve_freshwater(result, water_seed, lake_edges)
 	_carve_lakes(result, water_seed)
 	_carve_river(result, water_seed, river_edges)
+	if force_water and not _has_water_tiles(result):
+		_carve_forced_patch(result, water_seed)
 	return result
+
+
+## True if terrain already contains at least one WATER or COAST tile (used by force_water guard).
+func _has_water_tiles(terrain: Array) -> bool:
+	for x in range(GRID_SIZE):
+		for y in range(GRID_SIZE):
+			if terrain[x][y] == TileType.WATER or terrain[x][y] == TileType.COAST:
+				return true
+	return false
+
+
+## Grows a small blob of _FORCED_WATER_SIZE WATER tiles at a seed-deterministic interior point.
+## Only called when force_water is true and no water tiles exist after normal carving.
+func _carve_forced_patch(terrain: Array, water_seed: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = water_seed + _FORCED_WATER_SEED_OFFSET
+	var margin: int = 4
+	var start := Vector2i(
+		rng.randi_range(margin, GRID_SIZE - 1 - margin),
+		rng.randi_range(margin, GRID_SIZE - 1 - margin))
+	_region_grow_water(terrain, start, _FORCED_WATER_SIZE, rng)
 
 
 ## Conditional lakeshore: the freshwater twin of _carve_coast. For each edge facing an overworld

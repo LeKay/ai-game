@@ -354,7 +354,7 @@
 	  "fallback_color": [
 		0.72,
 		0.45,
-		0.20
+		0.2
 	  ],
 	  "description": "Raw copper ore. Hidden at map generation — must be located by searching.",
 	  "tags": [
@@ -399,7 +399,7 @@
 	  "world_icon_path": "res://assets/ui/icons/resources/silver.png",
 	  "fallback_color": [
 		0.78,
-		0.80,
+		0.8,
 		0.85
 	  ],
 	  "description": "Raw silver ore. Rare — hidden at map generation, must be located by searching.",
@@ -421,9 +421,9 @@
 	  "glyph": "💰",
 	  "world_icon_path": "res://assets/ui/icons/resources/gold.png",
 	  "fallback_color": [
-		0.90,
+		0.9,
 		0.75,
-		0.20
+		0.2
 	  ],
 	  "description": "Raw gold ore. Rare — hidden at map generation, must be located by searching.",
 	  "tags": [
@@ -444,7 +444,7 @@
 	  "glyph": "💎",
 	  "world_icon_path": "res://assets/ui/icons/resources/gemstones.png",
 	  "fallback_color": [
-		0.40,
+		0.4,
 		0.75,
 		0.78
 	  ],
@@ -873,7 +873,7 @@
 	  "glyph": "⏳",
 	  "world_icon_path": "res://assets/ui/icons/resources/sand.png",
 	  "fallback_color": [
-		0.90,
+		0.9,
 		0.84,
 		0.62
 	  ],
@@ -898,7 +898,7 @@
 	  "fallback_color": [
 		0.88,
 		0.88,
-		0.90
+		0.9
 	  ],
 	  "description": "Blocks of marble quarried from mountain outcrops. A premium building stone.",
 	  "tags": [
@@ -964,6 +964,57 @@
 		0.86
 	  ],
 	  "description": "Lustrous pearls found in coastal ocean shallows. A prized trade good.",
+	  "tags": [
+        "trade_good"
+	  ]
+	},
+	{
+	  "id": "barrel",
+	  "display_name": "Barrel",
+	  "category": "production_good",
+	  "subcategory": "trade_good",
+	  "stack_limit": 20,
+	  "weight": 3.0,
+	  "base_value": 18,
+	  "max_charge": 100.0,
+	  "movement_cost": 6.0,
+	  "icon_path": "assets/ui/icons/resources/barrel.png",
+	  "glyph": "🛢️",
+	  "description": "A sturdy wooden barrel crafted from planks. Used to transport goods at the trading post.",
+	  "tags": [
+        "trade_good"
+	  ]
+	},
+	{
+	  "id": "wheel",
+	  "display_name": "Wheel",
+	  "category": "production_good",
+	  "subcategory": "trade_good",
+	  "stack_limit": 20,
+	  "weight": 2.0,
+	  "base_value": 12,
+	  "max_charge": 100.0,
+	  "movement_cost": 4.0,
+	  "icon_path": "assets/ui/icons/resources/wheel.png",
+	  "glyph": "🛞",
+	  "description": "A sturdy wooden wheel shaped from raw timber. Used in cart assembly and traded at the post.",
+	  "tags": [
+        "trade_good"
+	  ]
+	},
+	{
+	  "id": "cart",
+	  "display_name": "Cart",
+	  "category": "production_good",
+	  "subcategory": "trade_good",
+	  "stack_limit": 10,
+	  "weight": 5.0,
+	  "base_value": 22,
+	  "max_charge": 100.0,
+	  "movement_cost": 6.0,
+	  "icon_path": "assets/ui/icons/resources/cart.png",
+	  "glyph": "🛒",
+	  "description": "A wooden cart assembled from planks and wheels. A valuable trade good for the trading post.",
 	  "tags": [
         "trade_good"
 	  ]

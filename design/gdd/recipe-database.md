@@ -134,6 +134,45 @@
 >   vs output value: meat recipe 2.56× margin, fish recipe 1.79× margin. Progression:
 >   `food_preservation` node (food branch, prereqs: hunting + fishing, hidden prereqs:
 >   pottery + salt_works) unlocks PRESERVATION_HOUSE + both recipes.
+>   **Barrel chain (2026-06-24):** New trade_good resource `barrel` (🛢️, base_value 18,
+>   movement_cost 6.0, stack_limit 20). New building **Cooperage** (`COOPERAGE`): single
+>   recipe `craft_barrels` (plank ×3 → barrel ×2, 300 ticks, NPC required, no tool slot).
+>   Rate: 2/300 = 0.0067/tick → ~9.6 barrels/day @ eff 1.0. One Sawmill (~17 planks/day)
+>   pairs with one Cooperage (~14 planks/day demand). Barrels are trade goods intended to
+>   be consumed by a future Trading Post building. BUILD_COST: wood ×10 + stone ×5;
+>   BUILD_TIME: 1000 ticks; BUILD_ENERGY: 28. No terrain adjacency requirement.
+>   Progression: `cooperage` node (materials branch, prereq: sawmilling, ring 6) unlocks
+>   COOPERAGE + `COOPERAGE:craft_barrels`.
+>   **Wheel & Cart chain (2026-06-24):** Two new trade_good resources: `wheel` (🛞,
+>   base_value 12, stack_limit 20) and `cart` (🛒, base_value 22, stack_limit 10,
+>   movement_cost 6.0). New building **Wheel Maker** (`WHEEL_MAKER`): single recipe
+>   `craft_wheels` (wood ×3 → wheel ×2, 300 ticks, NPC required). Rate: 2/300 = 0.0067/tick
+>   → ~10 wheels/day @ eff 1.0. New building **Cart Workshop** (`CART_WORKSHOP`): single
+>   recipe `assemble_cart` (plank ×4 + wheel ×2 → cart ×1, 375 ticks, NPC required). Rate:
+>   1/375 = 0.0027/tick → ~4 carts/day @ eff 1.0. Supply chain: one Sawmill feeds planks;
+>   one Wheel Maker feeds wheels; one Cart Workshop consumes both. Both buildings are trade
+>   goods intended to be consumed by a future Trading Post. BUILD_COST: WHEEL_MAKER wood ×8 +
+>   stone ×3 (700 ticks, 22 energy); CART_WORKSHOP wood ×10 + stone ×5 + plank ×3 (800 ticks,
+>   25 energy). No terrain adjacency requirement for either. Progression: `wheel_making` node
+>   (materials branch, prereq: forestry, ring 5) unlocks WHEEL_MAKER + `WHEEL_MAKER:craft_wheels`;
+>   `cart_workshop` node (materials branch, prereqs: wheel_making + sawmilling, ring 7) unlocks
+>   CART_WORKSHOP + `CART_WORKSHOP:assemble_cart`.
+>   **Progression revision (2026-06-24):** Manual crafting now has **five** recipes —
+>   `axe`, `pickaxe`, `knife`, `spindle`, and new `rope` (4 Fiber, 15 Energy, 90 ticks →
+>   1 Rope). The manual `cloth`, `clothing`, and `hunting_bow` recipes were **removed** —
+>   those goods are now only producible via buildings (Weaver→Cloth, Tailor→Clothing,
+>   Bowyer's Workshop→Hunting Bow). Tree changes: `axe` + `pickaxe` nodes deleted, their
+>   recipes folded into `toolmaking` (which now also grants the `crafting_bench` upgrade,
+>   absorbing the deleted `workbench` node); `toolmaking` prereqs are now `storage` +
+>   `stonecutting` (storage no longer requires shelter, so it unlocks earlier). `spindle`
+>   moved to depend on `toolmaking` (was `weaving`). Textiles `spinning` + `garment_making`
+>   nodes deleted (cloth/clothing no longer hand-craftable); `weaving` reparented to
+>   `fiber_harvesting`, `tailoring` to `weaving`. The fiber-based manual bow was dropped and
+>   the `bowyer` and `rope_bow` nodes **merged** into one `bowyer` node (prereq:
+>   `rope_weaving`) that unlocks BOWYERS_WORKSHOP + `bow_with_rope`. New manual `rope` recipe
+>   is gated by the `rope_weaving` node. Tool-dependent material nodes (`tooled_logging`,
+>   `sawmilling`, `tooled_quarrying`, `tooled_pottery`, `tool_workshop`) now require
+>   `toolmaking` instead of `axe`/`pickaxe`.
 > Migrating both tables into the JSON registry below remains the design goal
 > (data-driven content rule); treat the rest of this document as the target design,
 > not the implemented state.

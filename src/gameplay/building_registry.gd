@@ -37,6 +37,10 @@ enum BuildingType {
 	CHARCOAL_KILN,       ## burns Wood → Charcoal; must border a WATER tile (no efficiency bonus)
 	SALT_WORKS,          ## evaporates seawater → Salt; requires adjacent COAST tile; efficiency scales with coast count
 	PRESERVATION_HOUSE,  ## preserves Meat/Fish with Salt + Pottery → Preserved Food (trade good)
+	COOPERAGE,           ## crafts Planks → Barrels; trade-good container for the trading post
+	WHEEL_MAKER,         ## crafts Wheel from raw Wood; no terrain requirement
+	CART_WORKSHOP,       ## assembles Cart from Plank + Wheel; no terrain requirement
+	TRADING_POST,        ## consumes Wheel + Cart per cycle; stub for the inter-settlement trade system
 }
 
 ## Building operational status codes — exposed for cross-system API use (e.g. LogisticsSystem).
@@ -199,13 +203,18 @@ const BUILD_COST: Dictionary = {
 	BuildingType.CHARCOAL_KILN:      {&"wood": 10, &"stone": 8},
 	BuildingType.SALT_WORKS:         {&"wood": 12, &"stone": 8},
 	BuildingType.PRESERVATION_HOUSE: {&"wood": 10, &"stone": 6},
+	BuildingType.COOPERAGE:          {&"wood": 10, &"stone": 5},
+	BuildingType.WHEEL_MAKER:        {&"wood": 8, &"stone": 3},
+	BuildingType.CART_WORKSHOP:      {&"wood": 10, &"stone": 5, &"plank": 3},
+	BuildingType.TRADING_POST:       {&"wood": 20, &"stone": 10, &"plank": 8},
 }
 
 ## Canonical list of player-buildable types, in build-menu display order.
 ## Single source of truth for the build menu (see inventory_screen._building_list()).
-## Excludes COLLECTION_POINT (starter depot, auto-placed) and ROAD (placed via the Path tool).
+## Excludes ROAD (placed via the Path tool).
 ## The future Progression Tree gates this list with a single is_building_unlocked() guard.
 const BUILDABLE_TYPES: Array[int] = [
+	BuildingType.COLLECTION_POINT,
 	BuildingType.STORAGE_BUILDING,
 	BuildingType.RESIDENTIAL_HOUSE,
 	BuildingType.LUMBER_CAMP,
@@ -230,6 +239,10 @@ const BUILDABLE_TYPES: Array[int] = [
 	BuildingType.CHARCOAL_KILN,
 	BuildingType.SALT_WORKS,
 	BuildingType.PRESERVATION_HOUSE,
+	BuildingType.COOPERAGE,
+	BuildingType.WHEEL_MAKER,
+	BuildingType.CART_WORKSHOP,
+	BuildingType.TRADING_POST,
 ]
 
 ## Build times rescaled for pacing (balancing 2026-06-11): anchor 1 tick ≈ 1 minute,
@@ -262,6 +275,10 @@ const BUILD_TIME: Dictionary = {
 	BuildingType.CHARCOAL_KILN:     800,
 	BuildingType.SALT_WORKS:        900,
 	BuildingType.PRESERVATION_HOUSE: 900,
+	BuildingType.COOPERAGE:          1000,
+	BuildingType.WHEEL_MAKER:        700,
+	BuildingType.CART_WORKSHOP:      800,
+	BuildingType.TRADING_POST:       1200,
 }
 
 ## Energy cost the player spends to manually construct a building (ManualActionType.CONSTRUCT_BUILDING).
@@ -292,6 +309,10 @@ const BUILD_ENERGY: Dictionary = {
 	BuildingType.CHARCOAL_KILN:     22,
 	BuildingType.SALT_WORKS:        28,
 	BuildingType.PRESERVATION_HOUSE: 25,
+	BuildingType.COOPERAGE:          28,
+	BuildingType.WHEEL_MAKER:        22,
+	BuildingType.CART_WORKSHOP:      25,
+	BuildingType.TRADING_POST:       35,
 }
 
 ## Movement cost for buildings that NPCs and carriers can traverse.
@@ -302,7 +323,7 @@ const MOVEMENT_EFFICIENCY: Dictionary = {
 }
 
 const STORAGE_CAPACITY: Dictionary = {
-	BuildingType.COLLECTION_POINT: 50,
+	BuildingType.COLLECTION_POINT: 20,
 	BuildingType.STORAGE_BUILDING: 150,
 }
 
@@ -347,6 +368,10 @@ const BUILDING_TEXTURES: Dictionary = {
 	BuildingType.CHARCOAL_KILN:      "res://assets/art/buildings/bld_tile_charcoal_kiln.png",
 	BuildingType.SALT_WORKS:         "res://assets/art/buildings/bld_tile_salt_works.png",
 	BuildingType.PRESERVATION_HOUSE: "res://assets/art/buildings/bld_tile_preservation_house.png",
+	BuildingType.COOPERAGE:          "res://assets/art/buildings/bld_tile_cooperage.png",
+	BuildingType.WHEEL_MAKER:        "res://assets/art/buildings/bld_tile_wheel_maker.png",
+	BuildingType.CART_WORKSHOP:      "res://assets/art/buildings/bld_tile_cart_workshop.png",
+	BuildingType.TRADING_POST:       "res://assets/art/buildings/bld_tile_trading_post.png",
 }
 
 ## Maps BuildingType → the job/profession label of a worker employed there.
@@ -374,6 +399,10 @@ const BUILDING_JOB_NAMES: Dictionary = {
 	BuildingType.CHARCOAL_KILN:      "Charcoal Burner",
 	BuildingType.SALT_WORKS:         "Salt Worker",
 	BuildingType.PRESERVATION_HOUSE: "Preserver",
+	BuildingType.COOPERAGE:          "Cooper",
+	BuildingType.WHEEL_MAKER:        "Wheelwright",
+	BuildingType.CART_WORKSHOP:      "Cart Builder",
+	BuildingType.TRADING_POST:       "Merchant",
 }
 
 ## Multi-recipe table: BuildingType → Array of recipe dicts (index 0 = default recipe).
@@ -884,6 +913,65 @@ const RECIPES: Dictionary = {
 			"npc_required": true,
 		},
 	],
+	BuildingType.COOPERAGE: [
+		{
+			"id": &"craft_barrels",
+			"label": "Craft Barrels",
+			"inputs": [
+				{"resource_id": &"plank", "quantity": 3},
+			],
+			"output": {&"barrel": 2},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 300,
+			"npc_required": true,
+		},
+	],
+	BuildingType.WHEEL_MAKER: [
+		{
+			"id": &"craft_wheels",
+			"label": "Craft Wheels",
+			"inputs": [
+				{"resource_id": &"wood", "quantity": 3},
+			],
+			"output": {&"wheel": 2},
+			"output_capacity": 20,
+			"input_capacity": 10,
+			"base_cycle_ticks": 300,
+			"npc_required": true,
+		},
+	],
+	BuildingType.CART_WORKSHOP: [
+		{
+			"id": &"assemble_cart",
+			"label": "Assemble Cart",
+			"inputs": [
+				{"resource_id": &"plank", "quantity": 4},
+				{"resource_id": &"wheel", "quantity": 2},
+			],
+			"output": {&"cart": 1},
+			"output_capacity": 10,
+			"input_capacity": 10,
+			"base_cycle_ticks": 375,
+			"npc_required": true,
+		},
+	],
+	## Stub: dispatches goods away; no output until the inter-settlement trade system is designed.
+	BuildingType.TRADING_POST: [
+		{
+			"id": &"dispatch_goods",
+			"label": "Dispatch Goods",
+			"inputs": [
+				{"resource_id": &"wheel", "quantity": 2},
+				{"resource_id": &"cart",  "quantity": 1},
+			],
+			"output": {},
+			"output_capacity": 1,
+			"input_capacity": 5,
+			"base_cycle_ticks": 500,
+			"npc_required": true,
+		},
+	],
 }
 
 ## Terrain types required in at least one cardinal neighbor for a building to be placeable.
@@ -966,6 +1054,10 @@ const PRODUCTION_TABLE: Dictionary = {
 	BuildingType.CHARCOAL_KILN:       true,
 	BuildingType.SALT_WORKS:          true,
 	BuildingType.PRESERVATION_HOUSE:  true,
+	BuildingType.COOPERAGE:           true,
+	BuildingType.WHEEL_MAKER:         true,
+	BuildingType.CART_WORKSHOP:       true,
+	BuildingType.TRADING_POST:        true,
 }
 
 # ---- Signals ----------------------------------------------------------------
@@ -1995,6 +2087,10 @@ func _building_type_name(building_type: int) -> String:
 		BuildingType.CHARCOAL_KILN:      return "Charcoal Kiln"
 		BuildingType.SALT_WORKS:         return "Salt Works"
 		BuildingType.PRESERVATION_HOUSE: return "Preservation House"
+		BuildingType.COOPERAGE:          return "Cooperage"
+		BuildingType.WHEEL_MAKER:        return "Wheel Maker"
+		BuildingType.CART_WORKSHOP:      return "Cart Workshop"
+		BuildingType.TRADING_POST:       return "Trading Post"
 	return "Unknown"
 
 # ---- Stub methods (future stories) -----------------------------------------

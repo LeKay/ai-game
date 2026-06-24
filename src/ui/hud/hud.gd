@@ -39,13 +39,11 @@ var _energy_segments: Array[ColorRect] = []
 
 var _building_detail_panel: BuildingDetailPanel
 var _npc_detail_panel:      NpcDetailPanel
-var _transportation_panel:  TransportationPanel
-var _transport_btn:          Button
+var _transport_drawer:       TransportDrawer
 var _route_toggle_btn:       Button
-var _save_btn:               Button
+var _map_btn:                Button
 var _progression_btn:        Button
 var _progression_screen:     ProgressionTreeScreen
-var _tasks_btn:              Button
 var _task_dialog:           TaskDialog
 var _map_select_prompt:      Label
 var _map_select_step:        String = ""
@@ -55,6 +53,12 @@ var _toast_tween:            Tween = null
 # --- System references -------------------------------------------------------
 
 var _player_character: Node = null
+
+var _overworld_view: Node = null
+var _top_band_content: Control = null
+var _overworld_bar: Control = null
+var _overworld_title_label: Label = null
+var _overworld_close_override: Callable
 
 var _day_tick_count: int = 0
 var _route_lines: RouteLines = null
@@ -102,6 +106,7 @@ func _build_ui() -> void:
 	hbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	hbox.add_theme_constant_override("separation", 12)
 	top_band.add_child(hbox)
+	_top_band_content = hbox
 
 	var left_pad := Control.new()
 	left_pad.custom_minimum_size = Vector2(BAND_PADDING, 0)
@@ -116,11 +121,9 @@ func _build_ui() -> void:
 
 	_add_time_display(hbox)
 	_add_energy_bar(hbox)
-	_add_transport_btn(hbox)
 	_add_route_toggle_btn(hbox)
 	_add_progression_btn(hbox)
-	_add_tasks_btn(hbox)
-	_add_save_btn(hbox)
+	_add_map_btn(hbox)
 
 	var right_pad := Control.new()
 	right_pad.custom_minimum_size = Vector2(BAND_PADDING, 0)
@@ -128,6 +131,7 @@ func _build_ui() -> void:
 
 	_add_stubs()
 	_add_toast()
+	_build_overworld_bar(top_band)
 
 
 func _make_top_band() -> Control:
@@ -149,6 +153,98 @@ func _make_top_band() -> Control:
 	band.add_child(bg)
 
 	return band
+
+
+func _build_overworld_bar(parent: Control) -> void:
+	_overworld_bar = Control.new()
+	_overworld_bar.name = "OverworldBar"
+	_overworld_bar.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_overworld_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_overworld_bar.visible = false
+	parent.add_child(_overworld_bar)
+
+	_overworld_title_label = Label.new()
+	_overworld_title_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_overworld_title_label.text = "Overworld Map"
+	_overworld_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_overworld_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_overworld_title_label.add_theme_font_size_override("font_size", 18)
+	_overworld_title_label.add_theme_color_override("font_color", Color("#F0EDE6"))
+	_overworld_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_overworld_bar.add_child(_overworld_title_label)
+
+	var close_btn := Button.new()
+	close_btn.text = "✕"
+	close_btn.tooltip_text = "Close (M / Esc)"
+	close_btn.custom_minimum_size = Vector2(40, 32)
+	close_btn.focus_mode = Control.FOCUS_NONE
+	close_btn.anchor_left = 1.0
+	close_btn.anchor_right = 1.0
+	close_btn.offset_left = -52
+	close_btn.offset_top = 6
+	close_btn.offset_right = -12
+	close_btn.offset_bottom = 38
+	close_btn.pressed.connect(_on_overworld_close_pressed)
+	_overworld_bar.add_child(close_btn)
+
+
+## Switches the top band to "Overworld Map" mode (title + close button).
+## Called by OverworldView when it opens in non-pick mode.
+func enter_overworld_mode() -> void:
+	enter_screen_mode("Overworld Map",
+		func() -> void:
+			if _overworld_view != null and _overworld_view.has_method(&"close"):
+				_overworld_view.close())
+
+
+## Switches the top band to visiting mode for a foreign tile.
+## on_return is called when the player clicks X (typically travel_to(home_coord)).
+func enter_visiting_mode(coord: Vector2i, on_return: Callable) -> void:
+	enter_screen_mode("Visiting (%d, %d)" % [coord.x, coord.y], on_return)
+
+
+## Restores the normal HUD top band. Called by OverworldView on close.
+func exit_overworld_mode() -> void:
+	_overworld_close_override = Callable()
+	if _overworld_bar != null:
+		_overworld_bar.visible = false
+	if _top_band_content != null:
+		_top_band_content.visible = true
+	_set_drawers_visible(true)
+
+
+## Shows the overworld bar replacing the normal HUD band, wiring X to a custom callback.
+## Used both by overworld view (pass _overworld_view.close) and visiting mode (pass travel_to_home).
+func enter_screen_mode(title: String, on_close: Callable) -> void:
+	if _overworld_title_label != null:
+		_overworld_title_label.text = title
+	_overworld_close_override = on_close
+	if _top_band_content != null:
+		_top_band_content.visible = false
+	if _overworld_bar != null:
+		_overworld_bar.visible = true
+	_set_drawers_visible(false)
+
+
+## Shows/hides the right-edge drawers (Tasks + Transport) together. Used to keep their always-on
+## edge tabs from showing over full-screen overlays (overworld map, progression tree). Hiding also
+## closes them so they don't reappear pinned/open when shown again.
+func _set_drawers_visible(v: bool) -> void:
+	if _task_dialog != null:
+		if not v:
+			_task_dialog.close()
+		_task_dialog.visible = v
+	if _transport_drawer != null:
+		if not v:
+			_transport_drawer.close()
+		_transport_drawer.visible = v
+
+
+func _on_overworld_close_pressed() -> void:
+	if _overworld_close_override.is_valid():
+		_overworld_close_override.call()
+	elif _overworld_view != null and _overworld_view.has_method(&"close"):
+		_overworld_view.close()
 
 
 func _add_tick_controls(parent: HBoxContainer) -> void:
@@ -270,20 +366,7 @@ func _add_energy_bar(parent: HBoxContainer) -> void:
 		_energy_segments.append(seg)
 
 
-## Adds the transport icon button to the HUD top band.
-func _add_transport_btn(parent: HBoxContainer) -> void:
-	_transport_btn = Button.new()
-	_transport_btn.name = "TransportBtn"
-	_transport_btn.text = "🚚"
-	_transport_btn.tooltip_text = "Transportation"
-	_transport_btn.custom_minimum_size = Vector2(36, 28)
-	_transport_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_transport_btn.focus_mode = Control.FOCUS_NONE
-	_transport_btn.pressed.connect(_on_transport_btn_pressed)
-	parent.add_child(_transport_btn)
-
-
-## Adds the route overlay toggle button to the HUD top band (next to transport icon).
+## Adds the route overlay toggle button to the HUD top band.
 func _add_route_toggle_btn(parent: HBoxContainer) -> void:
 	_route_toggle_btn = Button.new()
 	_route_toggle_btn.name = "RouteToggleBtn"
@@ -310,30 +393,22 @@ func _add_progression_btn(parent: HBoxContainer) -> void:
 	parent.add_child(_progression_btn)
 
 
-## Adds the Delivery Tasks toggle button to the HUD top band.
-func _add_tasks_btn(parent: HBoxContainer) -> void:
-	_tasks_btn = Button.new()
-	_tasks_btn.name = "TasksBtn"
-	_tasks_btn.text = "📋"
-	_tasks_btn.tooltip_text = "Tasks"
-	_tasks_btn.custom_minimum_size = Vector2(36, 28)
-	_tasks_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_tasks_btn.focus_mode = Control.FOCUS_NONE
-	_tasks_btn.pressed.connect(_on_tasks_btn_pressed)
-	parent.add_child(_tasks_btn)
+## Adds the world map button to the HUD top band.
+func _add_map_btn(parent: HBoxContainer) -> void:
+	_map_btn = Button.new()
+	_map_btn.name = "MapBtn"
+	_map_btn.text = "🗺️"
+	_map_btn.tooltip_text = "World Map"
+	_map_btn.custom_minimum_size = Vector2(36, 28)
+	_map_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_map_btn.focus_mode = Control.FOCUS_NONE
+	_map_btn.pressed.connect(_on_map_btn_pressed)
+	parent.add_child(_map_btn)
 
 
-## Adds the save icon button to the HUD top band.
-func _add_save_btn(parent: HBoxContainer) -> void:
-	_save_btn = Button.new()
-	_save_btn.name = "SaveBtn"
-	_save_btn.text = "💾"
-	_save_btn.tooltip_text = "Save Game"
-	_save_btn.custom_minimum_size = Vector2(36, 28)
-	_save_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_save_btn.focus_mode = Control.FOCUS_NONE
-	_save_btn.pressed.connect(_on_save_btn_pressed)
-	parent.add_child(_save_btn)
+## Wires the overworld view so the map button can toggle it.
+func set_overworld_view(ov: Node) -> void:
+	_overworld_view = ov
 
 
 ## Builds the transient toast label shown at the bottom-center of the screen
@@ -422,10 +497,6 @@ func _add_stubs() -> void:
 			HungerSystem.set_food_amount(npc_id, amount))
 	add_child(_npc_detail_panel)
 
-	_transportation_panel = TransportationPanel.new()
-	_transportation_panel.name = "TransportationPanel"
-	add_child(_transportation_panel)
-
 	# Progression Tree overlay — its own CanvasLayer, toggled by the 🌳 HUD button.
 	_progression_screen = preload(
 		"res://src/ui/progression/ProgressionTreeScreen.tscn").instantiate()
@@ -435,6 +506,12 @@ func _add_stubs() -> void:
 	_task_dialog = TaskDialog.new()
 	_task_dialog.name = "TaskDialog"
 	add_child(_task_dialog)
+
+	# Transport routes drawer — its own CanvasLayer, right-edge tab (mirrors the Tasks drawer).
+	# Lists active routes and hosts inline create/edit (RouteEditor cards); no separate dialog.
+	_transport_drawer = TransportDrawer.new()
+	_transport_drawer.name = "TransportDrawer"
+	add_child(_transport_drawer)
 
 	# Map-select text prompt — shown during map-select mode over the gameplay view.
 	_map_select_prompt = Label.new()
@@ -479,11 +556,15 @@ func _connect_systems() -> void:
 	else:
 		_player_character.energy_changed.connect(_on_energy_changed)
 
-	_transportation_panel.route_created.connect(_on_transport_route_created)
-	_transportation_panel.route_updated.connect(_on_transport_route_updated)
-	_transportation_panel.route_deleted.connect(_on_transport_route_deleted)
-	_transportation_panel.map_select_requested.connect(_on_map_select_requested)
-	_transportation_panel.panel_closed.connect(_on_transport_panel_closed)
+	_transport_drawer.route_create_requested.connect(_on_transport_route_created)
+	_transport_drawer.route_update_requested.connect(_on_transport_route_updated)
+	_transport_drawer.route_delete_requested.connect(_on_transport_route_deleted)
+	_transport_drawer.map_select_requested.connect(_on_map_select_requested)
+
+	# Hide the edge drawers (Tasks + Transport) while the full-screen progression tree is up.
+	if _progression_screen != null:
+		_progression_screen.opened.connect(func() -> void: _set_drawers_visible(false))
+		_progression_screen.closed.connect(func() -> void: _set_drawers_visible(true))
 	WorldSaveManager.load_completed.connect(_on_save_load_completed)
 
 
@@ -527,24 +608,12 @@ func _on_progression_btn_pressed() -> void:
 		_progression_screen.toggle()
 
 
-func _on_tasks_btn_pressed() -> void:
-	if _task_dialog != null:
-		_task_dialog.toggle()
-
-
-func _on_transport_btn_pressed() -> void:
-	if _transportation_panel.visible:
-		_transportation_panel.close()
-	else:
-		_transportation_panel.open("hud")
-
-
 func _on_transport_management_opened(building_id: String, role: String) -> void:
-	_transportation_panel.open_for_building(StringName(building_id), role)
+	_transport_drawer.open_for_building(StringName(building_id), role)
 
 
 func _on_transport_route_edit_requested(route: LogisticsRoute) -> void:
-	_transportation_panel.open_for_route(route)
+	_transport_drawer.open_for_route(route)
 
 
 func _on_transport_route_created(from_id: StringName, to_id: StringName, npc_id: StringName, item_id: StringName) -> void:
@@ -562,7 +631,7 @@ func _on_transport_route_created(from_id: StringName, to_id: StringName, npc_id:
 		var route: LogisticsRoute = result.get("route")
 		if route != null:
 			LogisticsSystem.start_route(route.id)
-	_transportation_panel.refresh()
+	_transport_drawer.refresh()
 
 
 func _on_transport_route_updated(route_id: StringName, changes: Dictionary) -> void:
@@ -583,20 +652,16 @@ func _on_transport_route_updated(route_id: StringName, changes: Dictionary) -> v
 		LogisticsSystem.start_route(result["route"].id)
 	elif not result.get("success", false):
 		push_warning("[HUD] Route update failed: %s" % result.get("error", ""))
-	_transportation_panel.refresh()
+	_transport_drawer.refresh()
 
 
 func _on_transport_route_deleted(route_id: StringName) -> void:
 	LogisticsSystem.delete_route(route_id)
-	_transportation_panel.refresh()
-
-
-func _on_transport_panel_closed(_changes_made: bool) -> void:
-	_exit_map_select_mode()
+	_transport_drawer.refresh()
 
 
 func _on_save_load_completed() -> void:
-	_transportation_panel.refresh()
+	_transport_drawer.refresh()
 
 
 ## Returns true while the player is selecting a building on the map for a route.
@@ -604,24 +669,23 @@ func is_map_select_active() -> bool:
 	return _map_select_step != ""
 
 
-## Enters map-select mode: hides all open panels, shows a text prompt.
+## Enters map-select mode: hides the transport drawer + building detail, shows a text prompt.
 ## The map_root should call notify_building_selected_in_map_select() when the player
-## clicks a building on the map.
+## clicks a building on the map. The drawer keeps its in-progress editor intact across the trip.
 func _on_map_select_requested(step: String) -> void:
 	_map_select_step = step
-	_transportation_panel.hide_for_map_select()
 	if _building_detail_panel != null and _building_detail_panel.visible:
 		_building_detail_panel.close()
 	var prompt_text := "Select source building" if step == "from" else "Select destination building"
 	_map_select_prompt.text = prompt_text
 	_map_select_prompt.visible = true
-	_transport_btn.disabled = true
+	if _transport_drawer != null:
+		_transport_drawer.hide_for_map_select()
 
 
 func _exit_map_select_mode() -> void:
 	_map_select_step = ""
 	_map_select_prompt.visible = false
-	_transport_btn.disabled = false
 
 
 ## Called by map_root when the player clicks a building during map-select.
@@ -631,7 +695,8 @@ func notify_building_selected_in_map_select(building_id: StringName) -> void:
 		return
 	var step := _map_select_step
 	_exit_map_select_mode()
-	_transportation_panel.resume_map_select(step, building_id)
+	if _transport_drawer != null:
+		_transport_drawer.resume_map_select(step, building_id)
 
 
 # --- Button handlers ---------------------------------------------------------
@@ -652,11 +717,9 @@ func _on_play_pause_pressed() -> void:
 	TickSystem.set_pause(not TickSystem.is_paused())
 
 
-func _on_save_btn_pressed() -> void:
-	if WorldSaveManager.save_game(1):
-		show_toast("Game saved")
-	else:
-		show_toast("Save failed")
+func _on_map_btn_pressed() -> void:
+	if _overworld_view != null and _overworld_view.has_method("toggle"):
+		_overworld_view.toggle()
 
 
 # --- Visual helpers ----------------------------------------------------------

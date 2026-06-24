@@ -148,6 +148,34 @@ node's reserved `cost` field is now read as an int):
 
 ---
 
+## Addendum (2026-06-24): Building Requirements
+
+Requirements are now **typed** so a task can demand built structures, not just delivered goods.
+A task's `requires[]` may mix both kinds:
+
+```json
+"requires": [
+  { "type": "resource", "resource": "wood",  "amount": 8 },
+  { "type": "building", "building": "STORAGE_BUILDING", "amount": 1 }
+]
+```
+
+| `type` | Fulfilled when | On Complete | UI tile |
+|---|---|---|---|
+| `resource` | `get_global_quantity(resource) ≥ amount` (possession) | goods **consumed** | resource glyph + `have/need` |
+| `building` | cumulative builds of that type `≥ amount` | **not** consumed (building stays) | building icon (🏛 fallback) + `built/need` |
+
+- `building` is a **BuildingType enum key** (case-insensitive), e.g. `"SAWMILL"`, `"LUMBER_CAMP"`.
+- **Cumulative / latching:** `TaskSystem` counts `BuildingRegistry.building_construction_complete`
+  per type into `_built_counts`; the count never decrements, so a building requirement stays met
+  even if the structure is later demolished. Persisted in save files.
+- **Backward compatible:** a typeless entry with a `resource` field is read as `type: "resource"`,
+  so all existing delivery tasks keep working unchanged.
+- **No soft-lock (Rule 6) still applies:** a building requirement must name a building obtainable
+  from the node's prerequisite closure (the node that grants the task usually unlocks it).
+- Completion stays **manual** (the Complete button) for consistency and to support mixed tasks
+  where resource parts must be consumed.
+
 ## Architecture
 
 | Concern | Owner | Notes |

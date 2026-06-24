@@ -47,6 +47,8 @@ var _route_lines: RouteLines = null
 var _npc_overlay: NpcOverlay = null
 ## Top-right fertility icons; re-initialized after the overworld start tile generates the map.
 var _fertility_indicator: FertilityIndicator = null
+## Set when this scene was loaded via tile travel to a non-home coord; triggers visiting HUD mode.
+var _visiting_coord: Vector2i = Vector2i(-1, -1)
 
 
 
@@ -104,8 +106,7 @@ func _ready() -> void:
 		# New game: the player picks a start tile on the overworld first. The tactical map is
 		# generated from that tile in _on_new_game_start_selected (deferred so every node's
 		# _ready — including the overworld view — has run before the picker opens).
-		OverworldSystem.generate(randi())
-		OverworldSystem.start_selected.connect(_on_new_game_start_selected, CONNECT_ONE_SHOT)
+		# generate() is called one frame after opening the view so a loading message renders first.
 		call_deferred(&"_begin_new_game_start_pick")
 	_player.action_started.connect(_action_feedback._on_action_started)
 	_player.action_queued.connect(_action_feedback._on_action_queued)
@@ -140,12 +141,18 @@ func _ready() -> void:
 
 ## Opens the overworld as a blocking start picker on a new game. Deferred from _ready so the
 ## overworld view node is fully ready. Falls back to the center land tile if the view is absent.
+## Shows a loading state for one frame before generate() runs so the player sees feedback.
 func _begin_new_game_start_pick() -> void:
+	_set_hud_visible(false)
 	var ow_view := get_node_or_null("../OverworldLayer/OverworldView")
-	if ow_view != null and ow_view.has_method("open_for_pick"):
-		_set_hud_visible(false)  # no settlement yet — hide the gameplay HUD during the start picker
-		ow_view.open_for_pick()
+	if ow_view != null and ow_view.has_method("open_for_loading"):
+		ow_view.open_for_loading()
+		await get_tree().process_frame
+		OverworldSystem.start_selected.connect(_on_new_game_start_selected, CONNECT_ONE_SHOT)
+		OverworldSystem.generate(randi())
 	else:
+		OverworldSystem.start_selected.connect(_on_new_game_start_selected, CONNECT_ONE_SHOT)
+		OverworldSystem.generate(randi())
 		var center := Vector2i(OverworldSystem.OVERWORLD_SIZE / 2, OverworldSystem.OVERWORLD_SIZE / 2)
 		OverworldSystem.select_start(center)
 
@@ -161,9 +168,6 @@ func _set_hud_visible(is_visible: bool) -> void:
 ## Generates the tactical map from the chosen overworld start tile and finishes new-game setup.
 func _on_new_game_start_selected(coord: Vector2i) -> void:
 	OverworldSystem.generate_tactical_map(grid, coord)
-	# Keep the starter building off water/impassable tiles after water carving.
-	var starter_tile: Vector2i = grid.find_nearest_passable_tile(Vector2i(12, 12))
-	_registry.place_starter_building(BuildingRegistry.BuildingType.COLLECTION_POINT, starter_tile)
 	WildSystem.initialize_for_new_map()
 	_terrain_renderer.sync(grid, background_layer, terrain_layer)
 	_resource_badges._spawn_resource_badges()
@@ -187,6 +191,8 @@ func _wire_overworld_travel() -> void:
 	if not ow_view.is_connected("map_opened", Callable(self, "travel_to")):
 		ow_view.connect("map_opened", Callable(self, "travel_to"))
 	print("[TRAVELDBG] _wire_overworld_travel: connected=%s" % ow_view.is_connected("map_opened", Callable(self, "travel_to")))
+	if _hud != null:
+		_hud.set_overworld_view(ow_view)
 
 
 ## Switches the active tactical map to another overworld tile (double-click travel). Snapshots the
@@ -240,6 +246,12 @@ func _apply_pending_map_switch() -> void:
 	_resource_badges._spawn_resource_badges()
 	if _fertility_indicator != null:
 		_fertility_indicator.init_dependencies(grid)
+	var home_coord: Vector2i = OverworldSystem.get_start_coord()
+	if coord != home_coord and home_coord != Vector2i(-1, -1):
+		_visiting_coord = coord
+		TickSystem.set_pause(true)
+	elif coord == home_coord:
+		TickSystem.set_pause(false)
 
 
 ## Animates all resource icons with a sine-wave vertical float (period: 2.5s, amplitude: 4px).
@@ -291,6 +303,17 @@ func _wire_building_detail() -> void:
 	panel.input_drag_started.connect(_drag_controller._on_input_drag_started)
 	panel.output_drag_started.connect(_drag_controller._on_output_drag_started)
 	hud.set_route_lines(_route_lines)
+	if _visiting_coord != Vector2i(-1, -1):
+		_apply_visiting_hud_mode()
+
+
+## Applies the "visiting" HUD bar for a non-home tile. Called from _wire_building_detail so
+## _hud is guaranteed to be set first.
+func _apply_visiting_hud_mode() -> void:
+	if _fertility_indicator != null:
+		_fertility_indicator.visible = false
+	var home_coord := OverworldSystem.get_start_coord()
+	_hud.enter_visiting_mode(_visiting_coord, func() -> void: travel_to(home_coord))
 
 
 # ── Tile interaction input ────────────────────────────────────────────────────

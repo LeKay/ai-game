@@ -167,8 +167,8 @@
       "display_name": "Woodcutting",
       "icon": "🌲",
       "branch": "materials",
-      "ring": 1,
-      "prerequisites": ["hearth"],
+      "ring": 2,
+      "prerequisites": ["foraging"],
       "unlocks": [
         { "type": "gather", "id": "CHOP_TREE" },
         { "type": "gather", "id": "CLEAR_TREE" }
@@ -180,8 +180,8 @@
       "display_name": "Fiber Harvesting",
       "icon": "🌿",
       "branch": "materials",
-      "ring": 1,
-      "prerequisites": ["hearth"],
+      "ring": 2,
+      "prerequisites": ["foraging"],
       "unlocks": [
         { "type": "gather", "id": "HARVEST_FIBER" },
         { "type": "gather", "id": "CLEAR_GRASS" }
@@ -193,7 +193,7 @@
       "display_name": "Stonecutting",
       "icon": "🪨",
       "branch": "materials",
-      "ring": 2,
+      "ring": 3,
       "prerequisites": ["woodcutting"],
       "unlocks": [
         { "type": "gather", "id": "MINE_STONE" },
@@ -206,22 +206,10 @@
       "display_name": "Storage",
       "icon": "📦",
       "branch": "materials",
-      "ring": 2,
-      "prerequisites": ["woodcutting", "shelter"],
+      "ring": 4,
+      "prerequisites": ["woodcutting", "stonecutting"],
       "unlocks": [
         { "type": "building", "id": "STORAGE_BUILDING" }
-      ],
-      "cost": null
-    },
-    {
-      "node_id": "workbench",
-      "display_name": "Workbench",
-      "icon": "🛠️",
-      "branch": "materials",
-      "ring": 3,
-      "prerequisites": ["storage"],
-      "unlocks": [
-        { "type": "upgrade", "id": "crafting_bench" }
       ],
       "cost": null
     },
@@ -244,7 +232,7 @@
       "icon": "🪓",
       "branch": "materials",
       "ring": 4,
-      "prerequisites": ["forestry", "axe"],
+      "prerequisites": ["forestry", "toolmaking"],
       "unlocks": [
         { "type": "building_recipe", "id": "LUMBER_CAMP:with_tool" }
       ],
@@ -269,7 +257,7 @@
       "icon": "⛏️",
       "branch": "materials",
       "ring": 4,
-      "prerequisites": ["masonry", "pickaxe"],
+      "prerequisites": ["masonry", "toolmaking"],
       "unlocks": [
         { "type": "building_recipe", "id": "STONE_MASON:with_tool" }
       ],
@@ -338,7 +326,7 @@
       "icon": "⛏️",
       "branch": "materials",
       "ring": 8,
-      "prerequisites": ["pottery", "pickaxe"],
+      "prerequisites": ["pottery", "toolmaking"],
       "unlocks": [
         { "type": "building_recipe", "id": "POTTERY_KILN:with_tool" }
       ],
@@ -374,9 +362,61 @@
       "icon": "🪚",
       "branch": "materials",
       "ring": 5,
-      "prerequisites": ["forestry", "axe"],
+      "prerequisites": ["forestry", "toolmaking"],
       "unlocks": [
         { "type": "building", "id": "SAWMILL" }
+      ],
+      "cost": null
+    },
+    {
+      "node_id": "cooperage",
+      "display_name": "Cooperage",
+      "icon": "🛢️",
+      "branch": "materials",
+      "ring": 6,
+      "prerequisites": ["sawmilling"],
+      "unlocks": [
+        { "type": "building", "id": "COOPERAGE" },
+        { "type": "building_recipe", "id": "COOPERAGE:craft_barrels" }
+      ],
+      "cost": null
+    },
+    {
+      "node_id": "wheel_making",
+      "display_name": "Wheel Making",
+      "icon": "🛞",
+      "branch": "materials",
+      "ring": 5,
+      "prerequisites": ["forestry"],
+      "unlocks": [
+        { "type": "building", "id": "WHEEL_MAKER" },
+        { "type": "building_recipe", "id": "WHEEL_MAKER:craft_wheels" }
+      ],
+      "cost": null
+    },
+    {
+      "node_id": "cart_workshop",
+      "display_name": "Cart Workshop",
+      "icon": "🛒",
+      "branch": "materials",
+      "ring": 7,
+      "prerequisites": ["wheel_making", "sawmilling"],
+      "unlocks": [
+        { "type": "building", "id": "CART_WORKSHOP" },
+        { "type": "building_recipe", "id": "CART_WORKSHOP:assemble_cart" }
+      ],
+      "cost": null
+    },
+    {
+      "node_id": "trading_post",
+      "display_name": "Trading Post",
+      "icon": "🏪",
+      "branch": "materials",
+      "ring": 8,
+      "prerequisites": ["cart_workshop"],
+      "unlocks": [
+        { "type": "building", "id": "TRADING_POST" },
+        { "type": "building_recipe", "id": "TRADING_POST:dispatch_goods" }
       ],
       "cost": null
     },
@@ -412,23 +452,15 @@
       "icon": "🔧",
       "branch": "crafting",
       "ring": 2,
-      "prerequisites": ["woodcutting", "stonecutting"],
-      "unlocks": [],
-      "cost": null
-    },
-
-    {
-      "node_id": "axe",
-      "display_name": "Toolmaking: Axe",
-      "icon": "🔨",
-      "branch": "crafting",
-      "ring": 3,
-      "prerequisites": ["woodcutting", "stonecutting"],
+      "prerequisites": ["storage", "stonecutting"],
       "unlocks": [
-        { "type": "manual_recipe", "id": "axe" }
+        { "type": "manual_recipe", "id": "axe" },
+        { "type": "manual_recipe", "id": "pickaxe" },
+        { "type": "upgrade", "id": "crafting_bench" }
       ],
       "cost": null
     },
+
     {
       "node_id": "knife",
       "display_name": "Toolmaking: Knife",
@@ -443,24 +475,12 @@
       "cost": null
     },
     {
-      "node_id": "pickaxe",
-      "display_name": "Toolmaking: Pickaxe",
-      "icon": "⚒️",
-      "branch": "crafting",
-      "ring": 3,
-      "prerequisites": ["woodcutting", "stonecutting"],
-      "unlocks": [
-        { "type": "manual_recipe", "id": "pickaxe" }
-      ],
-      "cost": null
-    },
-    {
       "node_id": "spindle",
       "display_name": "Spinning Tools: Spindle",
       "icon": "🧷",
       "branch": "crafting",
       "ring": 5,
-      "prerequisites": ["weaving"],
+      "prerequisites": ["toolmaking"],
       "unlocks": [
         { "type": "manual_recipe", "id": "spindle" }
       ],
@@ -472,7 +492,7 @@
       "icon": "🏭",
       "branch": "crafting",
       "ring": 4,
-      "prerequisites": ["axe", "pickaxe", "shelter"],
+      "prerequisites": ["toolmaking", "shelter"],
       "unlocks": [
         { "type": "building", "id": "TOOL_WORKSHOP" }
       ],
@@ -483,47 +503,24 @@
       "display_name": "Bowyer",
       "icon": "🏹",
       "branch": "crafting",
-      "ring": 3,
-      "prerequisites": ["toolmaking", "fiber_harvesting"],
+      "ring": 6,
+      "prerequisites": ["rope_weaving"],
       "unlocks": [
-        { "type": "manual_recipe", "id": "hunting_bow" }
+        { "type": "building", "id": "BOWYERS_WORKSHOP" },
+        { "type": "building_recipe", "id": "BOWYERS_WORKSHOP:bow_with_rope" }
       ],
       "cost": null
     },
 
-    {
-      "node_id": "spinning",
-      "display_name": "Spinning",
-      "icon": "🧶",
-      "branch": "textiles",
-      "ring": 3,
-      "prerequisites": ["fiber_harvesting"],
-      "unlocks": [
-        { "type": "manual_recipe", "id": "cloth" }
-      ],
-      "cost": null
-    },
     {
       "node_id": "weaving",
       "display_name": "Weaving",
       "icon": "🕸️",
       "branch": "textiles",
       "ring": 4,
-      "prerequisites": ["spinning", "shelter"],
+      "prerequisites": ["fiber_harvesting", "shelter"],
       "unlocks": [
         { "type": "building", "id": "WEAVER" }
-      ],
-      "cost": null
-    },
-    {
-      "node_id": "garment_making",
-      "display_name": "Garment-making",
-      "icon": "👕",
-      "branch": "textiles",
-      "ring": 5,
-      "prerequisites": ["spinning"],
-      "unlocks": [
-        { "type": "manual_recipe", "id": "clothing" }
       ],
       "cost": null
     },
@@ -533,7 +530,7 @@
       "icon": "🧵",
       "branch": "textiles",
       "ring": 6,
-      "prerequisites": ["weaving", "garment_making"],
+      "prerequisites": ["weaving"],
       "unlocks": [
         { "type": "building", "id": "TAILOR" }
       ],
@@ -746,6 +743,7 @@
       "ring": 5,
       "prerequisites": ["weaving", "spindle"],
       "unlocks": [
+        { "type": "manual_recipe", "id": "rope" },
         { "type": "building_recipe", "id": "WEAVER:twist_rope" }
       ],
       "cost": null
@@ -759,19 +757,6 @@
       "prerequisites": ["net_weaving", "rope_weaving"],
       "unlocks": [
         { "type": "building_recipe", "id": "WEAVER:craft_net_from_rope" }
-      ],
-      "cost": null
-    },
-    {
-      "node_id": "rope_bow",
-      "display_name": "Rope-strung Bow",
-      "icon": "🏹",
-      "branch": "crafting",
-      "ring": 5,
-      "prerequisites": ["bowyer", "rope_weaving"],
-      "unlocks": [
-        { "type": "building", "id": "BOWYERS_WORKSHOP" },
-        { "type": "building_recipe", "id": "BOWYERS_WORKSHOP:bow_with_rope" }
       ],
       "cost": null
     }

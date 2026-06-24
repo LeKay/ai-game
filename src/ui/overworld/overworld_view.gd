@@ -44,6 +44,7 @@ var _hover_tile: Vector2i = Vector2i(-1, -1)
 var _selected_tile: Vector2i = Vector2i(-1, -1)    ## Tile shown in the inspection panel.
 var _open: bool = false
 var _pick_mode: bool = false                       ## True while choosing a new game's start.
+var _was_paused: bool = false                      ## Pause state before the view opened; restored on close.
 
 ## One-pixel-per-tile biome image, drawn as a single nearest-filtered rect so rendering cost
 ## is independent of OVERWORLD_SIZE (a 256x256 grid is one draw call, not 65k).
@@ -72,7 +73,7 @@ var _faction_icon: TextureRect = null   ## Faction emblem shown at the top of th
 var _title_label: Label = null
 var _biome_label: Label = null
 var _fertility_label: Label = null
-var _fertility_icons: HFlowContainer = null  ## Per-fertility icon + name chips, below _fertility_label.
+var _fertility_icons: VBoxContainer = null  ## Per-fertility icon + name chips, below _fertility_label.
 var _note_label: Label = null
 var _start_button: Button = null
 
@@ -149,6 +150,8 @@ func open() -> void:
 	InputContext.push_context(InputContext.Context.UI_ACTIVE)
 	_fit_to_view()
 	_hide_panel()
+	if not _pick_mode:
+		_enter_overlay_mode()
 	queue_redraw()
 
 
@@ -162,6 +165,22 @@ func open_for_pick() -> void:
 	open()
 
 
+## Opens the view in blocking pick mode before generation has run — shows a loading message.
+## Caller must await one frame, then call OverworldSystem.generate(); the overworld_generated
+## signal will trigger a redraw that replaces the loading text with the biome map.
+func open_for_loading() -> void:
+	_pick_mode = true
+	if _open:
+		queue_redraw()
+		return
+	_open = true
+	visible = true
+	InputContext.push_context(InputContext.Context.UI_ACTIVE)
+	_fit_to_view()
+	_hide_panel()
+	queue_redraw()
+
+
 func close() -> void:
 	if not _open:
 		return
@@ -172,6 +191,26 @@ func close() -> void:
 	_dragging = false
 	_hide_panel()
 	InputContext.pop_context()
+	_exit_overlay_mode()
+
+
+func _enter_overlay_mode() -> void:
+	_was_paused = TickSystem.is_paused()
+	TickSystem.set_pause(true)
+	for node: Node in get_tree().get_nodes_in_group(&"hud"):
+		if node.has_method(&"enter_overworld_mode"):
+			node.enter_overworld_mode()
+	for node: Node in get_tree().get_nodes_in_group(&"fertility_indicator"):
+		node.visible = false
+
+
+func _exit_overlay_mode() -> void:
+	TickSystem.set_pause(_was_paused)
+	for node: Node in get_tree().get_nodes_in_group(&"hud"):
+		if node.has_method(&"exit_overworld_mode"):
+			node.exit_overworld_mode()
+	for node: Node in get_tree().get_nodes_in_group(&"fertility_indicator"):
+		node.visible = true
 
 
 # --- Pan / zoom / hover / click ----------------------------------------------
@@ -182,6 +221,10 @@ func _handle_view_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
+		# Don't grab clicks meant for HUD controls layered above the map (e.g. the ✕ close
+		# button). _input() runs before GUI, so without this the press would start a map drag.
+		if _is_over_external_ui():
+			return
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
 			_zoom_at(mb.position, _ZOOM_STEP)
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
@@ -204,6 +247,9 @@ func _handle_view_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
+		# When not mid-drag, let HUD controls above the map receive hover (don't eat the motion).
+		if not _dragging and _is_over_external_ui():
+			return
 		if _dragging:
 			_drag_travel += mm.relative.length()
 			_view_offset -= mm.relative / _view_zoom
@@ -213,6 +259,16 @@ func _handle_view_input(event: InputEvent) -> void:
 			_hover_tile = tile
 			queue_redraw()
 		get_viewport().set_input_as_handled()
+
+
+## True when the mouse is over a GUI control that isn't this view (or one of its children) — i.e.
+## a HUD element layered above the map. Used to yield clicks/hover to that control instead of
+## starting a map drag, since _input() runs before GUI input.
+func _is_over_external_ui() -> bool:
+	var hovered := get_viewport().gui_get_hovered_control()
+	if hovered == null:
+		return false
+	return hovered != self and not is_ancestor_of(hovered)
 
 
 func _zoom_at(screen_pos: Vector2, factor: float) -> void:
@@ -324,9 +380,8 @@ func _build_panel() -> void:
 	_biome_label = _make_label(vbox, 14)
 	_fertility_label = _make_label(vbox, 14)
 	_fertility_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_fertility_icons = HFlowContainer.new()
-	_fertility_icons.add_theme_constant_override("h_separation", 10)
-	_fertility_icons.add_theme_constant_override("v_separation", 4)
+	_fertility_icons = VBoxContainer.new()
+	_fertility_icons.add_theme_constant_override("separation", 4)
 	vbox.add_child(_fertility_icons)
 	_note_label = _make_label(vbox, 13)
 	_note_label.modulate = _COLOR_START
@@ -437,33 +492,41 @@ func _biome_text(tile) -> String:
 			return "Ocean"
 
 
-## Fertilities whose UI label/icon differ from the fertility id itself. The "bees" fertility
-## yields the "honey" resource, so it is presented as Honey (with the honey icon) in the UI.
-const _FERTILITY_RESOURCE_ID: Dictionary = {
-	&"bees": &"honey",
-}
+const _WILD_DEER_ICON := "res://assets/ui/icons/various/ui_icon_wild_deer.png"
 const _FERTILITY_ICON_PX: int = 20
 
 ## Rebuilds the per-fertility chip row (icon + display name) under the fertility header.
+## Special cases: "wild" → Wildlife + deer icon; "bees" → Honey + honey icon.
 func _set_fertility_chips(fertilities: Array) -> void:
 	for child in _fertility_icons.get_children():
 		child.queue_free()
 	_fertility_icons.visible = not fertilities.is_empty()
-	for f in fertilities:
-		var res_id: StringName = _FERTILITY_RESOURCE_ID.get(f, StringName(f))
+	for f: StringName in fertilities:
 		var chip := HBoxContainer.new()
 		chip.add_theme_constant_override("separation", 4)
-		var def := ResourceRegistry.get_definition(res_id)
-		if def != null:
-			var icon := TextureRect.new()
-			icon.texture = ResourceRegistry.get_icon_texture(res_id, _FERTILITY_ICON_PX)
-			icon.custom_minimum_size = Vector2(_FERTILITY_ICON_PX, _FERTILITY_ICON_PX)
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST  # crisp pixel-art icon
-			chip.add_child(icon)
+		var icon := TextureRect.new()
+		icon.custom_minimum_size = Vector2(_FERTILITY_ICON_PX, _FERTILITY_ICON_PX)
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		var label := Label.new()
 		label.add_theme_font_size_override("font_size", 14)
-		label.text = def.display_name if def != null else String(f).capitalize()
+		match f:
+			&"wild":
+				label.text = "Wildlife"
+				if ResourceLoader.exists(_WILD_DEER_ICON):
+					icon.texture = load(_WILD_DEER_ICON)
+			&"bees":
+				label.text = "Honey"
+				icon.texture = ResourceRegistry.get_icon_texture(&"honey", _FERTILITY_ICON_PX)
+			_:
+				var def := ResourceRegistry.get_definition(f)
+				if def != null:
+					label.text = def.display_name
+					icon.texture = ResourceRegistry.get_icon_texture(f, _FERTILITY_ICON_PX)
+				else:
+					label.text = String(f).capitalize()
+		if icon.texture != null:
+			chip.add_child(icon)
 		chip.add_child(label)
 		_fertility_icons.add_child(chip)
 
@@ -473,6 +536,9 @@ func _set_fertility_chips(fertilities: Array) -> void:
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), _COLOR_BACKDROP)
 	if not OverworldSystem.is_generated():
+		var font := ThemeDB.fallback_font
+		draw_string(font, Vector2(0.0, size.y * 0.5), "Generating world...",
+			HORIZONTAL_ALIGNMENT_CENTER, size.x, 24, Color.WHITE)
 		return
 	if _biome_tex == null:
 		_rebuild_biome_texture()

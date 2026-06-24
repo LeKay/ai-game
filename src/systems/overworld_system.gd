@@ -715,11 +715,17 @@ func select_start(coord: Vector2i) -> bool:
 ## its biome (FOREST/MOUNTAIN bias the terrain), its river edges (facing an overworld RIVER) and
 ## its lake edges (facing an overworld LAKE → a freshwater band). Each water feature is carved
 ## only on the edges that actually border that kind of water on the overworld.
+## force_water: true on the start tile when it has no river, lake or coast adjacency — ensures
+## a small freshwater patch always exists on the map the player settles on.
 func generate_tactical_map(grid: WorldGrid, coord: Vector2i) -> bool:
 	var tile := get_tile(coord)
 	if tile == null or _is_water(tile.biome):
 		return false
-	grid.generate(tile.tile_seed, tile.fertilities, tile.coast_edges, _biome_to_profile(tile.biome), tile.river_edges, tile.lake_edges)
+	var force_water: bool = (tile.is_start
+		and tile.river_edges.is_empty()
+		and tile.lake_edges.is_empty()
+		and tile.coast_edges.is_empty())
+	grid.generate(tile.tile_seed, tile.fertilities, tile.coast_edges, _biome_to_profile(tile.biome), tile.river_edges, tile.lake_edges, force_water)
 	return true
 
 

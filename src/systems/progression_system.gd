@@ -755,12 +755,11 @@ func _prettify(id: String) -> String:
 
 # --- State management / Save-Load --------------------------------------------
 
-## Resets to game-start state: only the root Hearth is unlocked and the player holds
+## Resets to game-start state: nothing is unlocked (not even the root Hearth — unlocking it is the
+## player's first action, which grants the "build a Collection Point" task) and the player holds
 ## starting_points progression points.
 func reset_to_initial() -> void:
 	_unlocked.clear()
-	if _nodes.has(ROOT_NODE_ID):
-		_unlocked[ROOT_NODE_ID] = true
 	progression_points = starting_points
 	points_changed.emit(progression_points)
 
@@ -788,9 +787,10 @@ func serialize() -> Dictionary:
 ## Restores unlock state + points from a serialized payload. Accepts the current Dictionary
 ## form ({unlocked:[ids], points:int}) and the legacy bare Array of node-id strings (points
 ## then default to starting_points). Unknown ids are skipped (a node may have been removed
-## since the save). The root Hearth is always re-asserted so an old/empty save never leaves
-## the tree fully locked. NOTE: this does NOT emit node_unlocked, so the Task System does not
-## re-grant tasks on load — task status is restored separately by TaskSystem.deserialize().
+## since the save). The Hearth is NOT auto-asserted: a fresh/empty save legitimately starts with
+## nothing unlocked (the player must unlock the Hearth first). NOTE: this does NOT emit
+## node_unlocked, so the Task System does not re-grant tasks on load — task status is restored
+## separately by TaskSystem.deserialize().
 func deserialize(data: Variant) -> void:
 	var ids: Array = []
 	if data is Dictionary:
@@ -806,6 +806,4 @@ func deserialize(data: Variant) -> void:
 		var node_id := StringName(str(raw))
 		if _nodes.has(node_id):
 			_unlocked[node_id] = true
-	if _nodes.has(ROOT_NODE_ID):
-		_unlocked[ROOT_NODE_ID] = true
 	points_changed.emit(progression_points)

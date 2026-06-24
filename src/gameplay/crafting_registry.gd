@@ -22,9 +22,7 @@ const RECIPE_COST: Dictionary = {
 	&"pickaxe":     {&"stone": 3, &"wood": 1},
 	&"knife":       {&"wood": 2, &"stone": 1},
 	&"spindle":     {&"wood": 2, &"fiber": 2},
-	&"cloth":       {&"fiber": 4},
-	&"clothing":    {&"cloth": 3, &"fiber": 2},
-	&"hunting_bow": {&"wood": 2, &"fiber": 3},
+	&"rope":        {&"fiber": 4},
 }
 
 ## recipe_id → flat energy cost
@@ -33,9 +31,7 @@ const RECIPE_ENERGY_COST: Dictionary = {
 	&"pickaxe":     20,
 	&"knife":       20,
 	&"spindle":     15,
-	&"cloth":       20,
-	&"clothing":    25,
-	&"hunting_bow": 20,
+	&"rope":        15,
 }
 
 ## recipe_id → tick cost (1 tick ≈ 1 minute game-time).
@@ -44,9 +40,7 @@ const RECIPE_TICKS: Dictionary = {
 	&"pickaxe":     120,
 	&"knife":       90,
 	&"spindle":     90,
-	&"cloth":       180,
-	&"clothing":    240,
-	&"hunting_bow": 120,
+	&"rope":        90,
 }
 
 ## recipe_id → output { resource_id: StringName, quantity: int }
@@ -55,9 +49,7 @@ const RECIPE_OUTPUT: Dictionary = {
 	&"pickaxe":     {&"resource_id": &"pickaxe",     &"quantity": 1},
 	&"knife":       {&"resource_id": &"knife",       &"quantity": 1},
 	&"spindle":     {&"resource_id": &"spindle",     &"quantity": 1},
-	&"cloth":       {&"resource_id": &"cloth",       &"quantity": 1},
-	&"clothing":    {&"resource_id": &"clothing",    &"quantity": 1},
-	&"hunting_bow": {&"resource_id": &"hunting_bow", &"quantity": 1},
+	&"rope":        {&"resource_id": &"rope",        &"quantity": 1},
 }
 
 ## recipe_id → display name (shown in CraftingGrid)
@@ -66,13 +58,11 @@ const RECIPE_DISPLAY_NAME: Dictionary = {
 	&"pickaxe":     "Craft Pickaxe",
 	&"knife":       "Craft Knife",
 	&"spindle":     "Craft Spindle",
-	&"cloth":       "Weave Cloth",
-	&"clothing":    "Sew Clothing",
-	&"hunting_bow": "Craft Hunting Bow",
+	&"rope":        "Twist Rope",
 }
 
 ## Ordered list for display in CraftingGrid
-const RECIPE_ORDER: Array[StringName] = [&"axe", &"pickaxe", &"knife", &"spindle", &"cloth", &"clothing", &"hunting_bow"]
+const RECIPE_ORDER: Array[StringName] = [&"axe", &"pickaxe", &"knife", &"spindle", &"rope"]
 
 # ---- Signals ----------------------------------------------------------------
 

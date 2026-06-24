@@ -13,7 +13,10 @@ var _grid: Node = null
 
 
 func _ready() -> void:
-	layer = 50
+	# Just above the base gameplay HUD (layer 10) but below every overlay (perk panel 12,
+	# progression tree 20, task drawer 21, pause 64, debug 128) so those cleanly cover the icons.
+	layer = 11
+	add_to_group(&"fertility_indicator")
 
 
 ## Sets the WorldGrid and builds the indicator. Call after the map's fertility is set
@@ -43,22 +46,28 @@ func _rebuild() -> void:
 		hbox.add_child(_make_circle(fid))
 
 
+const _DEER_ICON := "res://assets/ui/icons/various/ui_icon_wild_deer.png"
+
 func _make_circle(fid: StringName) -> Control:
 	var c := Control.new()
 	c.custom_minimum_size = Vector2(CIRCLE_R * 2, CIRCLE_R * 2)
-	c.tooltip_text = str(fid).capitalize()
 	var bg := TextureRect.new()
 	bg.texture = TextureFactory.circle(CIRCLE_R, Color(0.0, 0.0, 0.0, 0.55))
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	c.add_child(bg)
-	# wild has no resource entry — use the same deer marker the forest overlay shows.
 	var tex: Texture2D
-	if fid == &"wild":
-		const DEER := "res://assets/ui/icons/various/ui_icon_wild_deer.png"
-		tex = (load(DEER) as Texture2D) if ResourceLoader.exists(DEER) else TextureFactory.circle(CIRCLE_R, Color(0.43, 0.32, 0.14))
-	else:
-		tex = ResourceRegistry.get_icon_texture(fid, CIRCLE_R)
+	match fid:
+		&"wild":
+			c.tooltip_text = "Wildlife"
+			if ResourceLoader.exists(_DEER_ICON):
+				tex = load(_DEER_ICON) as Texture2D
+		&"bees":
+			c.tooltip_text = "Honey"
+			tex = ResourceRegistry.get_icon_texture(&"honey", CIRCLE_R)
+		_:
+			c.tooltip_text = str(fid).capitalize()
+			tex = ResourceRegistry.get_icon_texture(fid, CIRCLE_R)
 	if tex != null:
 		var ic := TextureRect.new()
 		ic.texture = tex

@@ -34,7 +34,7 @@ const ANIM_CLOSE_SEC := 0.08
 const TABS: Array[String] = ["Inventory", "Crafting", "Buildings", "NPCs"]
 
 var _is_open:    bool = false
-var _active_tab: int  = 0
+var _active_tab: int  = 2  ## Default to Buildings — always unlocked at game start.
 
 ## Root Control — single fade target (CanvasLayer has no modulate).
 var _panel_root: Control
@@ -82,6 +82,10 @@ func _exit_tree() -> void:
 		BuildingRegistry.upgrade_installed.disconnect(_on_upgrade_changed_iv)
 	if BuildingRegistry.upgrade_removed.is_connected(_on_upgrade_changed_iv):
 		BuildingRegistry.upgrade_removed.disconnect(_on_upgrade_changed_iv)
+	if BuildingRegistry.building_placed.is_connected(_on_building_placed_iv):
+		BuildingRegistry.building_placed.disconnect(_on_building_placed_iv)
+	if BuildingRegistry.building_demolished.is_connected(_on_building_demolished_iv):
+		BuildingRegistry.building_demolished.disconnect(_on_building_demolished_iv)
 	if ProgressionSystem.node_unlocked.is_connected(_on_progression_unlocked):
 		ProgressionSystem.node_unlocked.disconnect(_on_progression_unlocked)
 	var npc_sys: Node = NPCSystem
@@ -344,6 +348,8 @@ func _connect_signals() -> void:
 	CraftingRegistry.recipe_crafted.connect(_on_crafting_completed)
 	BuildingRegistry.upgrade_installed.connect(_on_upgrade_changed_iv)
 	BuildingRegistry.upgrade_removed.connect(_on_upgrade_changed_iv)
+	BuildingRegistry.building_placed.connect(_on_building_placed_iv)
+	BuildingRegistry.building_demolished.connect(_on_building_demolished_iv)
 	ProgressionSystem.node_unlocked.connect(_on_progression_unlocked)
 	var npc_sys: Node = NPCSystem
 	if npc_sys != null:
@@ -382,6 +388,13 @@ func _open() -> void:
 	_panel_root.visible = true
 	if not CraftingRegistry.is_crafting():
 		TickSystem.set_pause(true)
+	if not _is_tab_unlocked(_active_tab):
+		for i: int in range(TABS.size()):
+			if _is_tab_unlocked(i):
+				_active_tab = i
+				break
+	_apply_tab_styles()
+	_refresh_zone3()
 	_refresh()
 	_animate_in()
 	inventory_opened.emit()
@@ -501,6 +514,8 @@ func _stop_pulse() -> void:
 # ── Tab handling ──────────────────────────────────────────────────────────────
 
 func _on_tab_pressed(idx: int) -> void:
+	if not _is_tab_unlocked(idx):
+		return
 	_active_tab = idx
 	_apply_tab_styles()
 	_refresh_zone3()
@@ -509,7 +524,11 @@ func _on_tab_pressed(idx: int) -> void:
 func _apply_tab_styles() -> void:
 	for i: int in range(_tab_buttons.size()):
 		var btn: Button = _tab_buttons[i]
-		var style       := StyleBoxFlat.new()
+		var unlocked := _is_tab_unlocked(i)
+		btn.visible = unlocked
+		if not unlocked:
+			continue
+		var style := StyleBoxFlat.new()
 		if i == _active_tab:
 			style.bg_color = COLOR_TAB_ACTIVE_BG
 			btn.add_theme_color_override("font_color", COLOR_TAB_ACTIVE_TEXT)
@@ -808,11 +827,57 @@ func _on_upgrade_changed_iv(_building_id: String, _upgrade_id: StringName) -> vo
 		_refresh_zone3()
 
 
-## A tech-tree node was unlocked — rebuild the active tab so newly-unlocked
-## buildings/recipes appear immediately (the build & craft tabs are gated lists).
+## A tech-tree node was unlocked — refresh tabs so newly-available ones become clickable,
+## then rebuild the active tab so newly-unlocked buildings/recipes appear immediately.
 func _on_progression_unlocked(_node_id: StringName) -> void:
+	_apply_tab_styles()
 	if _is_open:
 		_refresh_zone3()
+
+
+func _on_building_placed_iv(_building_id: String, _type: int, _tile: Vector2i) -> void:
+	_apply_tab_styles()
+
+
+func _on_building_demolished_iv(_building_id: StringName) -> void:
+	_apply_tab_styles()
+	if _is_open and not _is_tab_unlocked(_active_tab):
+		for i: int in range(TABS.size()):
+			if _is_tab_unlocked(i):
+				_active_tab = i
+				break
+		_refresh_zone3()
+
+
+# ── Tab gate helpers ──────────────────────────────────────────────────────────
+
+func _is_tab_unlocked(idx: int) -> bool:
+	if DebugSettings.unlock_all_progression:
+		return true
+	match idx:
+		0:  ## Inventory — requires a Collection Point on the map
+			return _has_collection_point()
+		1:  ## Crafting — requires Toolmaking node
+			return ProgressionSystem.is_unlocked(&"toolmaking")
+		3:  ## NPCs — requires Shelter node
+			return ProgressionSystem.is_unlocked(&"shelter")
+		_:
+			return true
+
+
+func _has_collection_point() -> bool:
+	for b: BuildingRegistry.BuildingInstance in BuildingRegistry.get_all_buildings():
+		if b.type == BuildingRegistry.BuildingType.COLLECTION_POINT:
+			return true
+	return false
+
+
+func _tab_lock_hint(idx: int) -> String:
+	match idx:
+		0:  return "Build a Collection Point first"
+		1:  return "Unlock Toolmaking in the Tech Tree"
+		3:  return "Unlock Shelter in the Tech Tree"
+		_:  return ""
 
 
 # ── NPC tab ───────────────────────────────────────────────────────────────────

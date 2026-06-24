@@ -93,6 +93,7 @@ static func production_types() -> Array[int]:
 		BuildingRegistry.BuildingType.WEAVER,
 		BuildingRegistry.BuildingType.TAILOR,
 		BuildingRegistry.BuildingType.SAWMILL,
+		BuildingRegistry.BuildingType.TRADING_POST,
 	]
 
 ## Production buildings that consume input (eligible for input-reduction perks).
@@ -102,6 +103,7 @@ static func input_processing_types() -> Array[int]:
 		BuildingRegistry.BuildingType.WEAVER,
 		BuildingRegistry.BuildingType.TAILOR,
 		BuildingRegistry.BuildingType.SAWMILL,
+		BuildingRegistry.BuildingType.TRADING_POST,
 	]
 
 ## Production building types whose Progression-Tree node is already unlocked — the only valid
@@ -125,6 +127,7 @@ static func building_type_name(t: int) -> String:
 		BuildingRegistry.BuildingType.WEAVER:         return "Weaver"
 		BuildingRegistry.BuildingType.TAILOR:         return "Tailor"
 		BuildingRegistry.BuildingType.SAWMILL:        return "Sawmill"
+		BuildingRegistry.BuildingType.TRADING_POST:   return "Trading Post"
 		_: return "Building"
 
 

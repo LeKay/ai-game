@@ -21,6 +21,11 @@ const CONNECTOR_COLOR := Color(0.5, 0.5, 0.55, 0.4)
 const BG_COLOR := Color(0.05, 0.06, 0.08, 0.92)
 const ZOOM_STEP: float = 1.1
 
+## Emitted when the overlay opens / closes (any path: button, Esc). Lets the HUD hide its edge
+## drawers while the full-screen tree is up.
+signal opened()
+signal closed()
+
 ## Fill color per branch — drives node + unlocked-edge tinting.
 const BRANCH_COLORS: Dictionary = {
 	&"core": Color("#B5894E"),
@@ -76,10 +81,12 @@ func open() -> void:
 	if not _did_initial_center:
 		_center_on_root()
 		_did_initial_center = true
+	opened.emit()
 
 
 func close() -> void:
 	visible = false
+	closed.emit()
 
 
 func toggle() -> void:
@@ -182,6 +189,7 @@ func _build_top_bar() -> void:
 	close_btn.offset_left = -52
 	close_btn.offset_top = 6
 	close_btn.offset_right = -12
+	close_btn.offset_bottom = 38  # 6 + 32 (min height); without this the offset-derived height is negative
 	close_btn.pressed.connect(close)
 	bar.add_child(close_btn)
 

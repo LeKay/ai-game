@@ -9,7 +9,7 @@ const _SEED_AMOUNTS: Dictionary = {
 	&"wood":  0,
 	&"stone": 0,
 	&"fiber": 0,
-	&"berry": 30,
+	&"berry": 0,
 	&"bread": 0,
 	&"plank": 0,
 }

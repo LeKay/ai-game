@@ -15,6 +15,18 @@ manual Clay mining, after Tooled Quarrying); new **Workbench** node (Crafting Be
 after Storage); Shelter made a structural prerequisite for all building nodes (except
 Gathering Hut); delivery-limits view filtered to unlocked resources; node tooltips added.
 Full GDD promotion + systems-index entry still pending.
+**Revised 2026-06-24**: tool/textile restructure. **Axe** and **Pickaxe** nodes removed —
+both manual recipes folded into **Toolmaking**, which now also grants the **Crafting Bench**
+upgrade (absorbing the removed **Workbench** node). **Toolmaking** now requires **Storage** +
+Stonecutting; **Storage** no longer requires Shelter (unlocks earlier). **Spindle** now
+depends on Toolmaking (not Weaving). Tool-gated material nodes (Tooled Logging, Sawmilling,
+Tooled Quarrying, Tooled Pottery, Tool Workshop) now require **Toolmaking** instead of
+Axe/Pickaxe. Cloth and Clothing are no longer hand-craftable: the **Spinning** and
+**Garment-making** nodes were removed (Weaving reparented to Fiber Harvesting, Tailoring to
+Weaving); cloth/clothing remain building-only (Weaver/Tailor). The fiber-based manual bow was
+removed and the **Bowyer** and **Rope-strung Bow** nodes **merged** into a single **Bowyer**
+node (prereq: Rope Weaving) unlocking Bowyer's Workshop + the rope bow recipe. New manual
+**Rope** recipe is gated by **Rope Weaving**.
 
 ---
 
@@ -82,10 +94,10 @@ Every piece of content unlocks in a consistent **two-step pattern**: first the
    prerequisite.
 
 4. **Cross-links.** Prerequisites may cross branches. Canonical examples:
-   - `Wood` + `Stone` (Materials) → unlock `Axe` and `Pickaxe` (Crafting).
-   - `Wood` + `Fiber` → unlock `Spindle`.
-   - `Axe` → unlock `Lumber Camp` and `Sawmill`; `Pickaxe` → `Stone Mason`;
-     `Spindle` → `Weaver` and `Tailor`.
+   - `Storage` + `Stone` (Materials) → unlock `Toolmaking` (Crafting), which grants Axe +
+     Pickaxe + the Crafting Bench upgrade.
+   - `Toolmaking` → unlock `Spindle`, `Tool Workshop`, `Sawmilling`, `Tooled Quarrying`.
+   - `Fiber` → `Weaving` → `Weaver`/`Tailor`.
    The UI draws the cross-link edge when the target node becomes available.
 
 5. **Dynamic reveal.** A node is hidden/dimmed until it becomes available, at which
@@ -132,36 +144,37 @@ Collection Point (depot) only.
 | 1 | Woodcutting | manual gather + clear **Wood** | Hearth |
 | 1 | Fiber Harvesting | manual gather + clear **Fiber** | Hearth |
 | 2 | Stonecutting | manual gather + clear **Stone** | Woodcutting |
-| 2 | Storage | **Storage Building** | Woodcutting + Shelter ⟵ |
-| 3 | Workbench | **Crafting Bench** upgrade (on Storage) | Storage |
+| 2 | Storage | **Storage Building** | Woodcutting |
 | 3 | Forestry | **Lumber Camp** (auto Wood) | Woodcutting + Shelter ⟵ |
 | 3 | Masonry | **Stone Mason** (auto Stone) | Stonecutting + Shelter ⟵ |
-| 4 | Tooled Quarrying | Stone Mason "with tool" recipe | Masonry + Pickaxe ⟵ |
+| 4 | Tooled Quarrying | Stone Mason "with tool" recipe | Masonry + Toolmaking ⟵ |
 | 5 | Prospecting | **Search** action + manual mine **Clay** | Tooled Quarrying |
-| 5 | Sawmilling | **Sawmill** → Plank | Forestry + Axe |
+| 5 | Sawmilling | **Sawmill** → Plank | Forestry + Toolmaking ⟵ |
 
 ### 🔨 Crafting / Handwerk
 | Ring | Node | Unlocks | Prerequisite |
 |---|---|---|---|
-| 3 | Toolmaking: Axe | manual-craft **Axe** | Wood + Stone ⟵ |
-| 3 | Toolmaking: Pickaxe | manual-craft **Pickaxe** | Wood + Stone ⟵ |
-| 4 | Tool Workshop | automates Axe / Pickaxe / Spindle | Axe + Pickaxe + Shelter ⟵ |
-| 5 | Spinning Tools: Spindle | manual-craft **Spindle** | Weaving ⟵ |
+| 3 | Toolmaking | manual-craft **Axe** + **Pickaxe** + **Crafting Bench** upgrade | Storage + Stonecutting ⟵ |
+| 3 | Toolmaking: Knife | manual-craft **Knife** | Toolmaking |
+| 4 | Tool Workshop | automates Axe / Pickaxe / Spindle | Toolmaking + Shelter ⟵ |
+| 5 | Spinning Tools: Spindle | manual-craft **Spindle** | Toolmaking |
+| 6 | Bowyer | **Bowyer's Workshop** + rope bow recipe | Rope Weaving ⟵ |
 
 ### 🧵 Textiles
 | Ring | Node | Unlocks | Prerequisite |
 |---|---|---|---|
-| 3 | Spinning | manual-craft **Cloth** (4 Fiber) | Fiber Harvesting |
-| 4 | Weaving | **Weaver** (Fiber + Spindle → Cloth) | Spinning + Shelter ⟵ |
-| 5 | Garment-making | manual-craft **Clothing** | Spinning |
-| 6 | Tailoring | **Tailor** → Clothing | Weaving + Garment-making |
+| 4 | Weaving | **Weaver** (Fiber + Spindle → Cloth) | Fiber Harvesting + Shelter ⟵ |
+| 5 | Rope Weaving | manual-craft **Rope** + **Weaver** twist-rope recipe | Weaving + Spindle ⟵ |
+| 6 | Tailoring | **Tailor** → Clothing | Weaving |
 
-> **Spindle moved after Weaving (2026-06-20).** The Spindle node is now a child of
-> **Weaving** (no longer its prerequisite). Weaving requires only Spinning (+ Shelter).
+> **Cloth/Clothing are building-only (2026-06-24).** The Spinning and Garment-making nodes
+> were removed; cloth and clothing are no longer hand-craftable (produced by Weaver/Tailor).
+> Spindle now depends on **Toolmaking** (no longer Weaving).
 
 **Critical-path spine (the "linear" reading):**
-Foraging → Woodcutting → Stonecutting → Axe / Pickaxe → Lumber Camp / Stone Mason →
-Tool Workshop → Spindle → Weaver → Farm → Mill → Bakery → Tailor → Hunting.
+Foraging → Woodcutting → Storage / Stonecutting → Toolmaking (Axe + Pickaxe + Crafting Bench)
+→ Lumber Camp / Stone Mason → Tool Workshop → Spindle → Weaver → Farm → Mill → Bakery →
+Tailor → Hunting.
 
 ---
 
