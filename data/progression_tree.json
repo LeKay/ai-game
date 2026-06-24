@@ -569,7 +569,7 @@
       "icon": "⬆️",
       "branch": "leadership",
       "ring": 1,
-      "prerequisites": ["hearth"],
+      "prerequisites": ["hearth", "shelter"],
       "requires_buildings": 3,
       "unlocks": [
         { "type": "npc_level_cap", "id": "2" }
