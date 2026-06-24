@@ -174,14 +174,12 @@
       "reward": { "type": "progression_point", "amount": 1 }
     },
 
-    "axe": {
-      "title": "Forge an Axe",
-      "requires": [ { "resource": "axe", "amount": 1 } ],
-      "reward": { "type": "progression_point", "amount": 1 }
-    },
-    "pickaxe": {
-      "title": "Forge a Pickaxe",
-      "requires": [ { "resource": "pickaxe", "amount": 1 } ],
+    "toolmaking": {
+      "title": "Forge Your First Tools",
+      "requires": [
+        { "resource": "axe", "amount": 1 },
+        { "resource": "pickaxe", "amount": 1 }
+      ],
       "reward": { "type": "progression_point", "amount": 1 }
     },
     "spindle": {

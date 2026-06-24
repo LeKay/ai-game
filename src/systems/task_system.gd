@@ -301,10 +301,26 @@ func _grant_reward(reward: Dictionary) -> void:
 # --- Signal handlers ---------------------------------------------------------
 
 ## A node was unlocked: grant its task (once) if one is authored. The root grants none.
+## After granting, if the player has no active tasks but the tree is not fully unlocked,
+## award a free progression point so they are never stuck without a path forward.
 func _on_node_unlocked(node_id: StringName) -> void:
 	if _defs.has(node_id) and not _status.has(node_id):
 		_status[node_id] = STATUS_ACTIVE
 		task_granted.emit(node_id)
+	_check_stuck_grant()
+
+
+## Awards one progression point when the player has zero active tasks, zero points, and the
+## tree still has locked nodes — prevents a dead-end without enabling point farming.
+func _check_stuck_grant() -> void:
+	if not get_active_tasks().is_empty():
+		return
+	if ProgressionSystem.progression_points > 0:
+		return
+	var all_ids := ProgressionSystem.get_all_node_ids()
+	var fully_unlocked := all_ids.all(func(id: StringName) -> bool: return ProgressionSystem.is_unlocked(id))
+	if not fully_unlocked:
+		ProgressionSystem.add_points(1)
 
 
 ## Inventory changed somewhere: every active task's fulfilment may have flipped — nudge the UI.
