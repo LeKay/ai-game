@@ -206,8 +206,9 @@
       "display_name": "Storage",
       "icon": "📦",
       "branch": "materials",
-      "ring": 4,
-      "prerequisites": ["woodcutting", "stonecutting"],
+      "ring": 3,
+      "prerequisites": ["woodcutting"],
+      "hidden_prerequisites": ["stonecutting"],
       "unlocks": [
         { "type": "building", "id": "STORAGE_BUILDING" }
       ],

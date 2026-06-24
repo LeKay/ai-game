@@ -89,11 +89,6 @@
       "requires": [ { "type": "building", "building": "STORAGE_BUILDING", "amount": 1 } ],
       "reward": { "type": "progression_point", "amount": 1 }
     },
-    "workbench": {
-      "title": "Lumber for the Bench",
-      "requires": [ { "resource": "wood", "amount": 10 } ],
-      "reward": { "type": "progression_point", "amount": 1 }
-    },
     "forestry": {
       "title": "Raise the Lumber Camp",
       "requires": [
@@ -204,22 +199,12 @@
       "reward": { "type": "progression_point", "amount": 1 }
     },
 
-    "spinning": {
-      "title": "Weave Cloth",
-      "requires": [ { "resource": "cloth", "amount": 2 } ],
-      "reward": { "type": "progression_point", "amount": 1 }
-    },
     "weaving": {
       "title": "Thread the Loom",
       "requires": [
         { "type": "building", "building": "WEAVER", "amount": 1 },
         { "type": "resource", "resource": "cloth", "amount": 5 }
       ],
-      "reward": { "type": "progression_point", "amount": 1 }
-    },
-    "garment_making": {
-      "title": "Sew a Garment",
-      "requires": [ { "resource": "clothing", "amount": 1 } ],
       "reward": { "type": "progression_point", "amount": 1 }
     },
     "tailoring": {
@@ -261,6 +246,82 @@
         { "type": "building", "building": "PRESERVATION_HOUSE", "amount": 1 },
         { "type": "resource", "resource": "preserved_food", "amount": 3 }
       ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+
+    "bow_hunting": {
+      "title": "Hunt with the Bow",
+      "requires": [ { "type": "resource", "resource": "meat", "amount": 8 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+
+    "knife": {
+      "title": "Forge a Knife",
+      "requires": [ { "type": "resource", "resource": "knife", "amount": 2 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "tooled_pottery": {
+      "title": "Tool the Kiln",
+      "requires": [ { "type": "resource", "resource": "pottery", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "charcoal_brickmaking": {
+      "title": "Fire Bricks with Charcoal",
+      "requires": [ { "type": "resource", "resource": "brick", "amount": 6 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "cooperage": {
+      "title": "Roll the First Barrels",
+      "requires": [
+        { "type": "building", "building": "COOPERAGE", "amount": 1 },
+        { "type": "resource", "resource": "barrel", "amount": 3 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "wheel_making": {
+      "title": "Turn the First Wheels",
+      "requires": [
+        { "type": "building", "building": "WHEEL_MAKER", "amount": 1 },
+        { "type": "resource", "resource": "wheel", "amount": 3 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "cart_workshop": {
+      "title": "Assemble a Cart",
+      "requires": [
+        { "type": "building", "building": "CART_WORKSHOP", "amount": 1 },
+        { "type": "resource", "resource": "cart", "amount": 1 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "trading_post": {
+      "title": "Open the Trading Post",
+      "requires": [ { "type": "building", "building": "TRADING_POST", "amount": 1 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "leather_furniture": {
+      "title": "Upholster the Workshop",
+      "requires": [ { "type": "resource", "resource": "furniture", "amount": 2 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "tooled_tanning": {
+      "title": "Tan with Knife",
+      "requires": [ { "type": "resource", "resource": "leather", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "net_weaving": {
+      "title": "Weave a Net",
+      "requires": [ { "type": "resource", "resource": "fishing_net", "amount": 2 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "rope_weaving": {
+      "title": "Twist the First Rope",
+      "requires": [ { "type": "resource", "resource": "rope", "amount": 4 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "rope_nets": {
+      "title": "Craft Rope Nets",
+      "requires": [ { "type": "resource", "resource": "fishing_net", "amount": 2 } ],
       "reward": { "type": "progression_point", "amount": 1 }
     },
 
