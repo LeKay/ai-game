@@ -425,6 +425,8 @@ Perspektive: leicht isometrisch (~60–70°), wie Resource-Overlay-Tiles.
 
 Kleines rustikales Holzlager. Dach von oben und schmaler Frontstreifen sichtbar.
 
+<!-- v2 — 2026-06-24: Building too large, filled entire tile; added explicit scale/margin constraint -->
+
 **Prompt:**
 ```
 A small rustic wooden storage barn perfectly centered in the tile with equal empty
@@ -435,6 +437,12 @@ Because of the slight angle, you can see both the sloped roof from above and a
 narrow strip of the front wall, giving the building clear visible height and
 mass.
 
+IMPORTANT — scale: the building occupies roughly 55 to 60 percent of the tile
+width and height. At least 8 pixels of fully transparent empty space must remain
+on every side (left, right, top, bottom). The building does NOT fill the tile —
+it sits as a small object in the center with clear surrounding space. This matches
+the same scale as other small buildings on the map, such as a house or lumber camp.
+
 The roof is a shallow pitched gable roof running left to right. The top surface
 of the roof is visible and covered in dark wooden planks — horizontal plank lines
 running parallel to the ridge. The ridge sits at the center top. The left slope
@@ -444,9 +452,11 @@ front wall strip is visible below the roof edge: two vertical plank lines in
 mid brown, and a small dark rectangular door opening (3×4 pixels) centered on
 the front face.
 
-The building footprint is roughly square, 18 to 20 pixels wide and 14 to 16
-pixels tall on the tile. The walls are made of horizontal wooden planks in warm
-mid brown. Everything outside the building is fully transparent.
+The walls are made of horizontal wooden planks in warm mid brown. Everything
+outside the building is fully transparent.
+
+Color palette: roof highlight #9A7A5A, roof mid #6B5240, roof shadow #3E2C1E,
+wall #7A6048, door #2A1E14.
 ```
 
 **Zielfarben:** Dach-Highlight `#9A7A5A` · Dach-Mitte `#6B5240` · Dach-Schatten `#3E2C1E` · Wand `#7A6048` · Tür `#2A1E14`
