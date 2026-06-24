@@ -62,6 +62,7 @@ var _overworld_close_override: Callable
 
 var _day_tick_count: int = 0
 var _route_lines: RouteLines = null
+var _start_selected: bool = false  ## True once OverworldSystem.start_selected has fired (or a save with a start is loaded).
 
 
 # --- Lifecycle ---------------------------------------------------------------
@@ -505,12 +506,14 @@ func _add_stubs() -> void:
 	# Delivery Tasks overlay — its own CanvasLayer, toggled by the 📋 HUD button.
 	_task_dialog = TaskDialog.new()
 	_task_dialog.name = "TaskDialog"
+	_task_dialog.visible = false
 	add_child(_task_dialog)
 
 	# Transport routes drawer — its own CanvasLayer, right-edge tab (mirrors the Tasks drawer).
 	# Lists active routes and hosts inline create/edit (RouteEditor cards); no separate dialog.
 	_transport_drawer = TransportDrawer.new()
 	_transport_drawer.name = "TransportDrawer"
+	_transport_drawer.visible = false
 	add_child(_transport_drawer)
 
 	# Map-select text prompt — shown during map-select mode over the gameplay view.
@@ -564,8 +567,9 @@ func _connect_systems() -> void:
 	# Hide the edge drawers (Tasks + Transport) while the full-screen progression tree is up.
 	if _progression_screen != null:
 		_progression_screen.opened.connect(func() -> void: _set_drawers_visible(false))
-		_progression_screen.closed.connect(func() -> void: _set_drawers_visible(true))
+		_progression_screen.closed.connect(func() -> void: if _start_selected: _set_drawers_visible(true))
 	WorldSaveManager.load_completed.connect(_on_save_load_completed)
+	OverworldSystem.start_selected.connect(_on_start_selected)
 
 
 func _refresh_initial_state() -> void:
@@ -580,6 +584,9 @@ func _refresh_initial_state() -> void:
 			_player_character.get_current_energy(),
 			_player_character.get_max_energy()
 		)
+	# Show drawers only if a start was already committed (save-game load case).
+	_start_selected = OverworldSystem.get_start_coord() != Vector2i(-1, -1)
+	_set_drawers_visible(_start_selected)
 
 
 # --- Signal handlers ---------------------------------------------------------
@@ -662,6 +669,11 @@ func _on_transport_route_deleted(route_id: StringName) -> void:
 
 func _on_save_load_completed() -> void:
 	_transport_drawer.refresh()
+
+
+func _on_start_selected(_coord: Vector2i) -> void:
+	_start_selected = true
+	_set_drawers_visible(true)
 
 
 ## Returns true while the player is selecting a building on the map for a route.

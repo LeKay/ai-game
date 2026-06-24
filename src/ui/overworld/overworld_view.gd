@@ -216,9 +216,13 @@ func _exit_overlay_mode() -> void:
 # --- Pan / zoom / hover / click ----------------------------------------------
 
 func _handle_view_input(event: InputEvent) -> void:
-	# Let the inspection panel handle events over its own rect (button clicks, etc.).
-	if _panel.visible and event is InputEventMouse and _panel.get_global_rect().has_point((event as InputEventMouse).position):
-		return
+	# Let the inspection panel and the start button handle events over their own rects.
+	if event is InputEventMouse:
+		var mp: Vector2 = (event as InputEventMouse).position
+		if _panel.visible and _panel.get_global_rect().has_point(mp):
+			return
+		if _start_button != null and _start_button.visible and _start_button.get_global_rect().has_point(mp):
+			return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		# Don't grab clicks meant for HUD controls layered above the map (e.g. the ✕ close
@@ -253,6 +257,7 @@ func _handle_view_input(event: InputEvent) -> void:
 		if _dragging:
 			_drag_travel += mm.relative.length()
 			_view_offset -= mm.relative / _view_zoom
+			_clamp_offset()
 			queue_redraw()
 		var tile := _screen_to_tile(mm.position)
 		if tile != _hover_tile:
@@ -279,6 +284,7 @@ func _zoom_at(screen_pos: Vector2, factor: float) -> void:
 	var world_before: Vector2 = _view_offset + screen_pos / _view_zoom
 	_view_zoom = new_zoom
 	_view_offset = world_before - screen_pos / _view_zoom
+	_clamp_offset()
 	queue_redraw()
 
 
@@ -291,6 +297,18 @@ func _fit_to_view() -> void:
 	_view_zoom = clampf(fit, _MIN_ZOOM, _MAX_ZOOM)
 	# Center the island in the viewport.
 	_view_offset = Vector2(world_px, world_px) * 0.5 - screen / (2.0 * _view_zoom)
+
+
+## Clamps _view_offset so the island never fully leaves the screen.
+## Allows panning at most half a screen's worth of world-space beyond each map edge.
+func _clamp_offset() -> void:
+	var n: int = OverworldSystem.OVERWORLD_SIZE
+	var ts: int = OverworldSystem.OVERWORLD_TILE_SIZE
+	var world_size: float = n * ts
+	var screen_world: Vector2 = size / _view_zoom
+	var pad: Vector2 = screen_world * 0.5
+	_view_offset.x = clampf(_view_offset.x, -pad.x, world_size - screen_world.x + pad.x)
+	_view_offset.y = clampf(_view_offset.y, -pad.y, world_size - screen_world.y + pad.y)
 
 
 func _screen_to_tile(screen_pos: Vector2) -> Vector2i:
@@ -386,11 +404,29 @@ func _build_panel() -> void:
 	_note_label = _make_label(vbox, 13)
 	_note_label.modulate = _COLOR_START
 
+	_build_start_button()
+
+
+func _build_start_button() -> void:
 	_start_button = Button.new()
+	_start_button.name = "StartHereBtn"
 	_start_button.text = "Start here"
 	_start_button.visible = false
+	_start_button.custom_minimum_size = Vector2(240, 52)
+	_start_button.add_theme_font_size_override("font_size", 18)
+	_start_button.focus_mode = Control.FOCUS_NONE
+	# Anchor bottom-center of the full view, clear of any bottom HUD elements.
+	_start_button.anchor_left   = 0.5
+	_start_button.anchor_right  = 0.5
+	_start_button.anchor_top    = 1.0
+	_start_button.anchor_bottom = 1.0
+	_start_button.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_start_button.offset_left   = -120
+	_start_button.offset_right  =  120
+	_start_button.offset_top    = -80
+	_start_button.offset_bottom = -28
 	_start_button.pressed.connect(_on_start_here_pressed)
-	vbox.add_child(_start_button)
+	add_child(_start_button)
 
 
 func _make_label(parent: Node, font_size: int) -> Label:
@@ -455,6 +491,8 @@ func _populate_panel(coord: Vector2i) -> void:
 func _hide_panel() -> void:
 	if _panel != null:
 		_panel.visible = false
+	if _start_button != null:
+		_start_button.visible = false
 	_selected_tile = Vector2i(-1, -1)
 
 
