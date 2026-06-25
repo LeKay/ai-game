@@ -1128,6 +1128,27 @@ func init_dependencies(grid: Node, player_character: Node) -> void:
 
 # ---- Placement API ----------------------------------------------------------
 
+## Returns the effective build cost for building_type, accounting for the
+## "first Collection Point is free" rule: if no COLLECTION_POINT exists yet
+## (or all were demolished), cost is {}; otherwise cost is half of
+## STORAGE_BUILDING cost (floor per resource). All other types use BUILD_COST.
+func get_effective_build_cost(building_type: int) -> Dictionary:
+	if building_type != BuildingType.COLLECTION_POINT:
+		return BUILD_COST.get(building_type, {})
+	var existing: int = 0
+	for b: BuildingInstance in _all_buildings:
+		if b.type == BuildingType.COLLECTION_POINT:
+			existing += 1
+	if existing == 0:
+		return {}
+	var half_cost: Dictionary = {}
+	for res_id: StringName in BUILD_COST[BuildingType.STORAGE_BUILDING]:
+		var qty: int = int(floor(float(BUILD_COST[BuildingType.STORAGE_BUILDING][res_id]) / 2.0))
+		if qty > 0:
+			half_cost[res_id] = qty
+	return half_cost
+
+
 ## Places a building at the given tile. Returns PlacementResult.
 ## On SUCCESS: resources deducted, building created, visual spawned, signal emitted.
 func initiate_build(building_type: int, tile: Vector2i) -> int:
@@ -1644,7 +1665,7 @@ func _check_bridge_connects(tile: Vector2i) -> int:
 func _check_resource_and_energy(building_type: int) -> int:
 	if DebugSettings.ignore_costs:
 		return PlacementResult.SUCCESS
-	var cost: Dictionary = BUILD_COST.get(building_type, {})
+	var cost: Dictionary = get_effective_build_cost(building_type)
 	for resource_id: StringName in cost:
 		if _get_total_resource(resource_id) < cost[resource_id]:
 			return PlacementResult.INSUFFICIENT_RESOURCES
@@ -1665,7 +1686,7 @@ func _deduct_build_cost(building_type: int) -> void:
 	var energy_cost: int = _calc_energy_cost(building_type)
 	if _player_character != null and energy_cost > 0:
 		_player_character.consume_energy(energy_cost)
-	var cost: Dictionary = BUILD_COST.get(building_type, {})
+	var cost: Dictionary = get_effective_build_cost(building_type)
 	for resource_id: StringName in cost:
 		_consume_resource_any(resource_id, cost[resource_id])
 
@@ -1892,7 +1913,7 @@ func _building_skips_input(instance: BuildingInstance) -> bool:
 
 ## Formula 7: placement energy cost = floor(sum(qty * ENERGY_PER_RESOURCE)).
 func _calc_energy_cost(building_type: int) -> int:
-	var cost: Dictionary = BUILD_COST.get(building_type, {})
+	var cost: Dictionary = get_effective_build_cost(building_type)
 	var total: int = 0
 	for resource_id: StringName in cost:
 		total += cost[resource_id]

@@ -950,6 +950,7 @@
 	  "display_name": "Pearl",
 	  "category": "production_good",
 	  "subcategory": "raw_material",
+	  "placeholder": true,
 	  "stack_limit": 99,
 	  "weight": 0.2,
 	  "base_value": 25,

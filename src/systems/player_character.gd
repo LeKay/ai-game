@@ -14,6 +14,7 @@ signal seed_planted(seed_type: StringName, tile: Vector2i)
 signal action_failed(action_id: int, reason: String)
 signal action_queued(action_id: int, position_in_queue: int, tile: Vector2i)
 signal action_queue_cleared()
+signal action_interrupted(tile: Vector2i)
 signal action_progress_update(progress: float, effective_tick_cost: int, effective_output: int)
 signal food_consumed(food_type: StringName, energy_restored: int)
 signal architect_mode_triggered()
@@ -808,6 +809,22 @@ func cancel_relocation() -> void:
 ## Returns true when a relocation drag is currently active.
 func is_relocating() -> bool:
 	return _relocation_drag.state == RelocationDrag.DragState.DRAGGING
+
+
+## Cancels the active action and any queued actions targeting `tile`.
+## Called when a building at `tile` is demolished while an action is running or queued.
+func cancel_actions_at_tile(tile: Vector2i) -> void:
+	var had_queued: bool = false
+	for i in range(_action_queue.size() - 1, -1, -1):
+		if _action_queue[i].get("tile") == tile:
+			_action_queue.remove_at(i)
+			had_queued = true
+	if had_queued:
+		action_queue_cleared.emit()
+	if _action_slot.state != ActionSlot.State.FREE and _active_tile == tile:
+		_action_slot.cancel()
+		_active_building_id = ""
+		action_interrupted.emit(tile)
 
 
 # ---- Tick handler -----------------------------------------------------------

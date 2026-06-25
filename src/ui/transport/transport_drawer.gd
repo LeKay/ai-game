@@ -97,6 +97,10 @@ func toggle() -> void:
 		open()
 
 
+func is_open() -> bool:
+	return _pinned
+
+
 func _is_editing() -> bool:
 	return _editing_route_id != &"" or _creating_new
 

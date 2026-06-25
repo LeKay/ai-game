@@ -45,6 +45,7 @@ signal game_exited()
 @onready var load_failed_overlay: Panel = %LoadFailedOverlay
 @onready var try_again_btn: Button = %TryAgain
 @onready var new_game_from_fail_btn: Button = %NewGameFromFail
+@onready var version_label: Label = %VersionLabel
 
 
 # ── State ────────────────────────────────────────────────────────────────────
@@ -61,6 +62,8 @@ func _ready() -> void:
 
 	# Check for save file per ADR-0006
 	check_save_file_state()
+
+	version_label.text = _read_version()
 
 	# Connect button signals
 	new_game_btn.pressed.connect(_on_new_game_pressed)
@@ -199,6 +202,24 @@ func _load_game_scene() -> void:
 		_try_push_ui_context()
 		_hide_overlays()
 		_is_transitioning = false
+
+
+## Reads version.json and returns a display string like "v0.1.72 (abc1234)".
+func _read_version() -> String:
+	const PATH := "res://version.json"
+	if not FileAccess.file_exists(PATH):
+		return "dev"
+	var f := FileAccess.open(PATH, FileAccess.READ)
+	if not f:
+		return "dev"
+	var data: Variant = JSON.parse_string(f.get_as_text())
+	if not data is Dictionary:
+		return "dev"
+	var major: int = data.get("major", 0)
+	var minor: int = data.get("minor", 1)
+	var build: int = data.get("build", 0)
+	var commit: String = data.get("commit", "")
+	return "v%d.%d.%d (%s)" % [major, minor, build, commit]
 
 
 ## Quit to desktop — clean process exit.

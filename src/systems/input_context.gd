@@ -252,7 +252,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# UI_ACTIVE: UI actions are consumed by Control nodes and never reach
 	# _unhandled_input(). Anything that does reach here is a world action
-	# arriving while UI is open — discard it.
+	# arriving while UI is open — consume it to block game hotkeys (e.g. I for inventory).
+	get_viewport().set_input_as_handled()
 
 
 func _is_global_action(event: InputEvent) -> bool:

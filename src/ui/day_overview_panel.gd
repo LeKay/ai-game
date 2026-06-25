@@ -41,6 +41,9 @@ func _ready() -> void:
 func _on_day_transition(_days: int) -> void:
 	if visible:
 		return
+	var hud: HUD = get_tree().get_first_node_in_group(&"hud") as HUD
+	if hud != null:
+		hud.close_all_panels_for_day_transition()
 	_populate()
 	show()
 	InputContext.push_context(InputContext.Context.UI_ACTIVE)
@@ -285,6 +288,9 @@ func _on_perk_choices_resolved() -> void:
 func _advance_day() -> void:
 	hide()
 	InputContext.pop_context()
+	var hud: HUD = get_tree().get_first_node_in_group(&"hud") as HUD
+	if hud != null:
+		hud.unlock_panels_after_day_transition()
 	TickSystem.set_pause(false)
 
 

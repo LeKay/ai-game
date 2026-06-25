@@ -8,6 +8,10 @@ class_name TileInteractionPanel extends CanvasLayer
 ## or close it (invalid/IMPASSABLE tile, AC6).
 signal world_click_at(screen_pos: Vector2)
 
+## Emitted when the player confirms an action (Harvest or Clear button pressed).
+## map_root stores this to enable shift-click repeat on matching tiles.
+signal action_confirmed(action_type: int)
+
 @onready var _click_guard: ColorRect = $ClickGuard
 @onready var _vbox: VBoxContainer = $Panel/VBox
 @onready var _energy_cost_label: Label = $Panel/VBox/CostRow/EnergyCostLabel
@@ -222,6 +226,7 @@ func _on_harvest_pressed() -> void:
 	var pc := get_tree().get_first_node_in_group(&"player_character") as PlayerCharacter
 	if pc != null:
 		pc.try_start_action(_current_action_type, _current_tile)
+	action_confirmed.emit(_current_action_type)
 	close()
 
 
@@ -231,6 +236,7 @@ func _on_clear_pressed() -> void:
 	var pc := get_tree().get_first_node_in_group(&"player_character") as PlayerCharacter
 	if pc != null:
 		pc.try_start_action(_current_clear_action_type, _current_tile)
+	action_confirmed.emit(_current_clear_action_type)
 	close()
 
 
@@ -252,6 +258,19 @@ func _populate_clear_section(pc: PlayerCharacter) -> void:
 	if not ProgressionSystem.is_gather_unlocked(_current_clear_action_type):
 		_set_clear_section_visible(false)
 		return
+	# Progression lock: the last stone tile on the map cannot be cleared.
+	if _current_clear_action_type == PlayerCharacter.ManualActionType.CLEAR_STONE:
+		var wg := get_parent().get_node_or_null("WorldGrid") as WorldGrid
+		if wg != null and wg.count_tile_type(WorldGrid.TileType.STONE) <= 1:
+			_set_clear_section_visible(true)
+			_clear_button.disabled = true
+			_clear_block_reason_label.visible = true
+			_clear_block_reason_label.text = "Last stone tile — cannot be removed"
+			_clear_energy_cost_label.text = ""
+			_clear_tick_cost_label.text = ""
+			_clear_output_label.text = ""
+			_clear_button.text = "Clear Tile"
+			return
 	_set_clear_section_visible(true)
 	var preview: Dictionary = pc.get_cost_preview(_current_clear_action_type)
 	var blocked: bool = preview.get("blocked", true)
@@ -306,6 +325,9 @@ func _populate_plant_section(pc: PlayerCharacter) -> void:
 		return
 	for child in _plant_container.get_children():
 		child.queue_free()
+	var plant_preview: Dictionary = pc.get_cost_preview(PlayerCharacter.ManualActionType.PLANT_SEED)
+	var plant_blocked: bool = plant_preview.get("blocked", false)
+	var plant_energy: int = plant_preview.get("energy_cost", 0)
 	const SEEDS: Array = [
 		[&"tree_seed",  "Plant Tree Seed"],
 		[&"grass_seed", "Plant Grass Seed"],
@@ -322,7 +344,8 @@ func _populate_plant_section(pc: PlayerCharacter) -> void:
 		if qty <= 0:
 			continue
 		var btn := Button.new()
-		btn.text = "%s (%d)" % [entry[1], qty]
+		btn.text = "%s (%d) ⚡%d" % [entry[1], qty, plant_energy]
+		btn.disabled = plant_blocked
 		var captured_seed: StringName = seed_id
 		var captured_tile: Vector2i = _current_tile
 		btn.pressed.connect(func() -> void:

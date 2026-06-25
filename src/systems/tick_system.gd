@@ -232,3 +232,13 @@ func deserialize(data: Dictionary) -> void:
 		raw_ip = true
 	_is_paused = bool(raw_ip)
 	set_process(not _is_paused)
+
+
+## Resets all tick state to game-start defaults. Called by WorldSaveManager.reset_new_game()
+## so a new session starts from day 1 with no time carried over from a previous loaded game.
+func reset() -> void:
+	_tick_count = 0
+	_tick_remainder = 0.0
+	_current_day = 1
+	_speed_multiplier = 1.0
+	set_pause(true)

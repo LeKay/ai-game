@@ -679,7 +679,7 @@ func _building_list() -> Array[Dictionary]:
 		# Progression gate (UI layer): hide building types not yet unlocked.
 		if not ProgressionSystem.is_building_unlocked(btype):
 			continue
-		var cost: Dictionary = BuildingRegistry.BUILD_COST.get(btype, {})
+		var cost: Dictionary = BuildingRegistry.get_effective_build_cost(btype)
 		var available: Dictionary = {}
 		var can_afford: bool = true
 		for res_id: StringName in cost:
@@ -836,6 +836,8 @@ func _on_progression_unlocked(_node_id: StringName) -> void:
 
 
 func _on_building_placed_iv(_building_id: String, _type: int, _tile: Vector2i) -> void:
+	if _type == BuildingRegistry.BuildingType.COLLECTION_POINT:
+		ProgressionSystem.set_flag(&"collection_point_ever_built")
 	_apply_tab_styles()
 
 
@@ -855,8 +857,8 @@ func _is_tab_unlocked(idx: int) -> bool:
 	if DebugSettings.unlock_all_progression:
 		return true
 	match idx:
-		0:  ## Inventory — requires a Collection Point on the map
-			return _has_collection_point()
+		0:  ## Inventory — unlocked permanently once any Collection Point has been built
+			return _has_collection_point() or ProgressionSystem.has_flag(&"collection_point_ever_built")
 		1:  ## Crafting — requires Toolmaking node
 			return ProgressionSystem.is_unlocked(&"toolmaking")
 		3:  ## NPCs — requires Shelter node

@@ -50,6 +50,7 @@ var _profession_lbl:  Label
 var _supply_grid:     GridContainer
 var _food_popup:      Control
 var _food_popup_flow: HFlowContainer
+var _feed_btn:        Button
 
 var _npc_id:       StringName = &""
 var _assigned_food: StringName = &""
@@ -101,6 +102,7 @@ func open_for_npc(npc_id: StringName, npc_state: int) -> void:
 	_refresh_efficiency()
 	_refresh_xp()
 	_refresh_supply()
+	_refresh_feed_btn()
 	if not NPCSystem.npc_renamed.is_connected(_on_npc_renamed):
 		NPCSystem.npc_renamed.connect(_on_npc_renamed)
 	if not NPCSystem.npc_xp_gained.is_connected(_on_npc_xp_gained):
@@ -495,6 +497,25 @@ func _npc_efficiency_tooltip(npc: NPCSystem.NPCInstance) -> String:
 	return "\n".join(lines)
 
 
+func _refresh_feed_btn() -> void:
+	if _feed_btn == null:
+		return
+	if _assigned_food == &"" or _food_amount <= 0:
+		_feed_btn.disabled = true
+		_feed_btn.text = "Feed now"
+		return
+	var in_stock: int = InventorySystem.get_global_quantity(_assigned_food)
+	_feed_btn.disabled = in_stock < _food_amount
+	_feed_btn.text = "Feed now (×%d)" % _food_amount
+
+
+func _on_feed_now_pressed() -> void:
+	if HungerSystem.feed_npc_now(_npc_id):
+		_refresh_efficiency()
+		_refresh_supply()
+		_refresh_feed_btn()
+
+
 func _on_food_amount_delta(delta: int) -> void:
 	if _assigned_food == &"":
 		return
@@ -502,6 +523,7 @@ func _on_food_amount_delta(delta: int) -> void:
 	food_amount_changed.emit(_npc_id, _food_amount)
 	_refresh_efficiency()
 	_refresh_supply()
+	_refresh_feed_btn()
 
 
 func _on_perk_amount_changed(index: int, delta: int) -> void:
@@ -539,9 +561,13 @@ func _on_food_selected(resource_id: StringName) -> void:
 		food_cleared.emit(_npc_id)
 	else:
 		_assigned_food = resource_id
+		var req := _food_required()
+		_food_amount = maxi(1, req)
 		food_assigned.emit(_npc_id, resource_id)
+		food_amount_changed.emit(_npc_id, _food_amount)
 	_refresh_efficiency()
 	_refresh_supply()
+	_refresh_feed_btn()
 
 # ── Animations ────────────────────────────────────────────────────────────────
 
@@ -708,6 +734,16 @@ func _build_ui() -> void:
 	_supply_grid.add_theme_constant_override("h_separation", 14)
 	_supply_grid.add_theme_constant_override("v_separation", 12)
 	scroll.add_child(_supply_grid)
+
+	_feed_btn = Button.new()
+	_feed_btn.text = "Feed now"
+	_feed_btn.disabled = true
+	_feed_btn.focus_mode = Control.FOCUS_ALL
+	_feed_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_feed_btn.tooltip_text = "Consume the assigned food from inventory and apply efficiency now."
+	_feed_btn.pressed.connect(_on_feed_now_pressed)
+	_apply_icon_btn_style(_feed_btn)
+	vbox.add_child(_feed_btn)
 
 	_build_food_popup()
 	_build_npc_rename_dialog()

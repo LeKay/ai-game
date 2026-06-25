@@ -360,6 +360,21 @@ func _process_deserialize_order(data: Dictionary) -> void:
 			system.deserialize(system_data)
 
 
+## Resets every persistent system to game-start defaults before a new game is generated.
+## Clears all global Autoload state (progression, tasks, time) and per-map state (buildings,
+## NPCs, inventory, logistics) so nothing from a previously loaded save bleeds through.
+## OverworldSystem is NOT reset here — _begin_new_game_start_pick calls generate() which clears it.
+func reset_new_game() -> void:
+	reset_map_state()
+	ProgressionSystem.reset_to_initial()
+	TaskSystem.deserialize({})
+	TickSystem.reset()
+	_map_states.clear()
+	_current_map_coord = Vector2i(-1, -1)
+	_pending_load_data = {}
+	_has_pending_load = false
+
+
 ## Scan for and delete orphaned .tmp files left by a crashed save operation.
 func _startup_cleanup() -> void:
 	DirAccess.make_dir_absolute(SAVE_PATH)

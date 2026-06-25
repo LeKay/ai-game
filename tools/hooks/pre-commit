@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Pre-commit hook: auto-updates version.json with current build number.
+# Install: run tools/install-hooks.sh (or tools/install-hooks.ps1 on Windows).
+
+set -e
+
+VERSION_FILE="version.json"
+
+if [ ! -f "$VERSION_FILE" ]; then
+  echo "[version] $VERSION_FILE not found — skipping version bump"
+  exit 0
+fi
+
+# Build number = commits before this one + 1
+PARENT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo 0)
+BUILD=$((PARENT_COUNT + 1))
+
+# On initial commit HEAD doesn't exist yet — short hash is unavailable until after commit
+COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "initial")
+DATE=$(date +%Y-%m-%d)
+
+python3 - <<PYEOF
+import json, sys
+
+with open("$VERSION_FILE", "r") as f:
+    d = json.load(f)
+
+d["build"]  = $BUILD
+d["commit"] = "$COMMIT"
+d["date"]   = "$DATE"
+
+with open("$VERSION_FILE", "w") as f:
+    json.dump(d, f, indent=2)
+    f.write("\n")
+
+print(f"  [version] v{d['major']}.{d['minor']}.{d['build']} ({d['commit']}) — {d['date']}")
+PYEOF
+
+git add "$VERSION_FILE"

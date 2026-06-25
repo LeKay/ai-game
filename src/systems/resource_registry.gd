@@ -39,6 +39,8 @@ class _ResourceDefinition:
 	var fallback_color: Color = Color(0.8, 0.8, 0.8)
 	## Eligible to be drawn as a perk's bound good (Perk System). Default false.
 	var perk_eligible: bool = false
+	## True for resources planned but not yet wired into progression (hidden from all UI lists).
+	var placeholder: bool = false
 
 
 func _ready() -> void:
@@ -108,7 +110,7 @@ func get_all_resource_ids() -> Array[StringName]:
 	var result: Array[StringName] = []
 	for id: StringName in _definitions:
 		var def: _ResourceDefinition = _definitions[id]
-		if not def.deprecated:
+		if not def.deprecated and not def.placeholder:
 			result.append(id)
 	result.sort()
 	return result
@@ -320,6 +322,15 @@ func _apply_optional_fields(def: _ResourceDefinition, entry: Dictionary) -> void
 	else:
 		push_warning("ResourceRegistry: 'deprecated' on resource '%s' is not a boolean (got %s), treating as false" % [def.id, type_string(typeof(raw_deprecated))])
 		def.deprecated = false
+
+	var raw_placeholder: Variant = entry.get("placeholder")
+	if raw_placeholder == null:
+		def.placeholder = false
+	elif raw_placeholder is bool:
+		def.placeholder = raw_placeholder
+	else:
+		push_warning("ResourceRegistry: 'placeholder' on resource '%s' is not a boolean (got %s), treating as false" % [def.id, type_string(typeof(raw_placeholder))])
+		def.placeholder = false
 
 	var raw_tags: Variant = entry.get("tags")
 	if raw_tags is Array:

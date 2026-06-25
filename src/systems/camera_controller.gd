@@ -181,9 +181,9 @@ func _apply_zoom(scroll_delta: float) -> void:
 	zoom = Vector2(new_scalar, new_scalar)
 
 
-## Clamps camera position so it cannot scroll outside the world tile bounds.
-## view_width/height = screen / zoom; if view exceeds map in a dimension, locks offset to 0
-## (left/top-anchored per spec — not centered). Called each _process frame and after zoom changes.
+## Clamps camera position so the map cannot fully leave the screen.
+## Allows panning at most half a viewport's worth of world-space beyond each map edge
+## (soft boundary — same behaviour as the overworld view).
 func _apply_boundary_clamp() -> void:
 	var screen: Vector2 = _get_screen_size()
 	if screen == Vector2.ZERO:
@@ -192,9 +192,10 @@ func _apply_boundary_clamp() -> void:
 	var max_world: float = float(GRID_SIZE * TILE_SIZE)
 	var view_width: float = screen.x / scalar
 	var view_height: float = screen.y / scalar
-	var clamp_x: float = 0.0 if view_width >= max_world else clamp(position.x, 0.0, max_world - view_width)
-	var clamp_y: float = 0.0 if view_height >= max_world else clamp(position.y, 0.0, max_world - view_height)
-	position = Vector2(clamp_x, clamp_y)
+	var pad_x: float = view_width * 0.5
+	var pad_y: float = view_height * 0.5
+	position.x = clamp(position.x, -pad_x, max_world - view_width + pad_x)
+	position.y = clamp(position.y, -pad_y, max_world - view_height + pad_y)
 
 
 ## Converts a screen-space position to the nearest tile coordinate.

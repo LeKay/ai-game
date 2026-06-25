@@ -153,3 +153,19 @@ unique_name_in_owner = true
 layout_mode = 2
 theme = ExtResource("4_menu_button_error")
 text = "New Game"
+
+[node name="VersionLabel" type="Label" parent="." unique_id=912345001]
+unique_name_in_owner = true
+anchor_left = 0.0
+anchor_top = 1.0
+anchor_right = 0.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = -22.0
+offset_right = 220.0
+offset_bottom = -4.0
+grow_horizontal = 1
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 0.6)
+theme_override_font_sizes/font_size = 11
+text = "v0.0.0"

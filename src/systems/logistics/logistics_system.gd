@@ -99,7 +99,8 @@ func create_route(
 
 	if route_type == LogisticsRoute.RouteType.OUTPUT:
 		var used: int = _count_routes_by_type(source_id, LogisticsRoute.RouteType.OUTPUT, true)
-		if used >= MAX_OUTPUT_SLOTS:
+		var max_slots: int = _get_max_output_slots(source_id)
+		if used >= max_slots:
 			return _failure("Building '%s' has no free output slots." % source_id)
 
 	elif route_type == LogisticsRoute.RouteType.INPUT:
@@ -724,6 +725,25 @@ func _get_max_input_slots(building_id: StringName) -> int:
 	var recipe: Dictionary = BuildingRegistry.get_active_recipe(instance)
 	var inputs: Array = recipe.get("inputs", [])
 	return maxi(inputs.size(), 1)
+
+
+## Returns the maximum number of OUTPUT routes allowed for building_id.
+## Derived from the number of distinct output resources in the building's active recipe —
+## mirrors _get_max_input_slots so each output resource type can have its own carrier.
+## Falls back to MAX_OUTPUT_SLOTS (1) for storage buildings and unknown types.
+func _get_max_output_slots(building_id: StringName) -> int:
+	if _building_registry == null:
+		return MAX_OUTPUT_SLOTS
+	var instance: Object = _building_registry.get_building_instance(str(building_id))
+	if instance == null:
+		return MAX_OUTPUT_SLOTS
+	if BuildingRegistry.STORAGE_CAPACITY.has(instance.type):
+		return MAX_OUTPUT_SLOTS
+	if not BuildingRegistry.is_production_building(instance.type):
+		return MAX_OUTPUT_SLOTS
+	var recipe: Dictionary = BuildingRegistry.get_active_recipe(instance)
+	var outputs: Dictionary = recipe.get("output", {})
+	return maxi(outputs.size(), 1)
 
 
 ## Deletes routes that are no longer compatible with a building's new active recipe.

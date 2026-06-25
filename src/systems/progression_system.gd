@@ -53,6 +53,7 @@ var _branch_angles_deg: Dictionary = {}  # StringName -> float
 
 var _nodes: Dictionary = {}        # StringName -> ProgressionTreeNode (insertion order preserved)
 var _unlocked: Dictionary = {}     # StringName -> true (set of unlocked node ids)
+var _flags: Dictionary = {}        # StringName -> true (persistent one-way flags, independent of tree nodes)
 
 ## Current progression-point balance. Spent in unlock() (when node_cost_enabled), earned via
 ## add_points() from completed delivery tasks. Initialised to starting_points by reset_to_initial().
@@ -435,6 +436,16 @@ func is_unlocked(node_id: StringName) -> bool:
 	return _unlocked.has(node_id)
 
 
+## Sets a one-way persistent flag (survives save/load, never cleared except on new game).
+func set_flag(flag: StringName) -> void:
+	_flags[flag] = true
+
+
+## Returns true if the flag was ever set.
+func has_flag(flag: StringName) -> bool:
+	return _flags.has(flag)
+
+
 ## True when every prerequisite (visible AND hidden) is unlocked, any building-count gate is
 ## satisfied, and the node itself is not yet unlocked. Hidden prerequisites gate reveal/unlock
 ## exactly like visible ones but are not drawn — see ProgressionTreeNode.hidden_prerequisites.
@@ -760,6 +771,7 @@ func _prettify(id: String) -> String:
 ## starting_points progression points.
 func reset_to_initial() -> void:
 	_unlocked.clear()
+	_flags.clear()
 	progression_points = starting_points
 	points_changed.emit(progression_points)
 
@@ -781,7 +793,10 @@ func serialize() -> Dictionary:
 	for node_id: StringName in _nodes:  # iterate in graph order for determinism
 		if _unlocked.has(node_id):
 			ids.append(str(node_id))
-	return {"unlocked": ids, "points": progression_points}
+	var flags: Array = []
+	for flag: StringName in _flags:
+		flags.append(str(flag))
+	return {"unlocked": ids, "points": progression_points, "flags": flags}
 
 
 ## Restores unlock state + points from a serialized payload. Accepts the current Dictionary
@@ -806,4 +821,7 @@ func deserialize(data: Variant) -> void:
 		var node_id := StringName(str(raw))
 		if _nodes.has(node_id):
 			_unlocked[node_id] = true
+	_flags.clear()
+	for raw: Variant in data.get("flags", []):
+		_flags[StringName(str(raw))] = true
 	points_changed.emit(progression_points)

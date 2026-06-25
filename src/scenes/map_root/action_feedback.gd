@@ -146,3 +146,14 @@ func _on_action_completed(action_id: int, output: Array) -> void:
 		_badges._spawn_badge(_active_action_tile, ids, _root, 0.0, true, Time.get_ticks_msec())
 		for j in range(prev_len, _badges._resource_icons.size()):
 			_badges._resource_icons[j].resource_idx = existing_count + (j - prev_len)
+
+
+## Called when the building at the active action tile is demolished mid-action.
+## Frees the progress indicator and restores tick-pause state.
+func _on_action_interrupted(_tile: Vector2i) -> void:
+	if _action_indicator != null:
+		_action_indicator.queue_free()
+		_action_indicator = null
+	_active_action_tile = Vector2i(-1, -1)
+	if _drag._pending_transports.is_empty():
+		TickSystem.set_pause(_drag._was_paused_before_action)

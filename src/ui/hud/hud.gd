@@ -63,6 +63,7 @@ var _overworld_close_override: Callable
 var _day_tick_count: int = 0
 var _route_lines: RouteLines = null
 var _start_selected: bool = false  ## True once OverworldSystem.start_selected has fired (or a save with a start is loaded).
+var _day_transitioning: bool = false  ## True while DayOverviewPanel is shown; blocks panel-opening buttons.
 
 
 # --- Lifecycle ---------------------------------------------------------------
@@ -610,7 +611,67 @@ func _on_energy_changed(current: int, max_energy: int) -> void:
 	_update_energy_bar(current, max_energy)
 
 
+## Closes all open panels and disables panel-opening buttons during a day transition.
+## Called by DayOverviewPanel before it shows.
+func close_all_panels_for_day_transition() -> void:
+	_day_transitioning = true
+	if _building_detail_panel != null:
+		_building_detail_panel.close()
+	if _npc_detail_panel != null:
+		_npc_detail_panel.close()
+	if _progression_screen != null:
+		_progression_screen.close()
+	_set_drawers_visible(false)
+	if _progression_btn != null:
+		_progression_btn.disabled = true
+	if _map_btn != null:
+		_map_btn.disabled = true
+	if _route_toggle_btn != null:
+		_route_toggle_btn.disabled = true
+
+
+## Closes all panels that are currently open. Returns true if anything was closed.
+## Called by PauseMenu on Escape so windows are dismissed before the pause menu opens.
+func close_open_panels() -> bool:
+	var any_open := false
+	if _overworld_bar != null and _overworld_bar.visible:
+		any_open = true
+		_on_overworld_close_pressed()
+	if _progression_screen != null and _progression_screen.visible:
+		any_open = true
+		_progression_screen.close()
+	if _npc_detail_panel != null and _npc_detail_panel.visible:
+		any_open = true
+		_npc_detail_panel.close()
+	if _building_detail_panel != null and _building_detail_panel.visible:
+		any_open = true
+		_building_detail_panel.close()
+	if _task_dialog != null and _task_dialog.is_open():
+		any_open = true
+		_task_dialog.close()
+	if _transport_drawer != null and _transport_drawer.is_open():
+		any_open = true
+		_transport_drawer.close()
+	return any_open
+
+
+## Re-enables panel-opening buttons after the day transition completes.
+## Called by DayOverviewPanel when the player clicks "Next Day".
+func unlock_panels_after_day_transition() -> void:
+	_day_transitioning = false
+	if _start_selected:
+		_set_drawers_visible(true)
+	if _progression_btn != null:
+		_progression_btn.disabled = false
+	if _map_btn != null:
+		_map_btn.disabled = false
+	if _route_toggle_btn != null:
+		_route_toggle_btn.disabled = false
+
+
 func _on_progression_btn_pressed() -> void:
+	if _day_transitioning:
+		return
 	if _progression_screen != null:
 		_progression_screen.toggle()
 
@@ -730,6 +791,8 @@ func _on_play_pause_pressed() -> void:
 
 
 func _on_map_btn_pressed() -> void:
+	if _day_transitioning:
+		return
 	if _overworld_view != null and _overworld_view.has_method("toggle"):
 		_overworld_view.toggle()
 

@@ -57,8 +57,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		close()
 		get_viewport().set_input_as_handled()
 	elif InputContext.get_current() == InputContext.Context.WORLD_ACTIVE:
-		open()
-		get_viewport().set_input_as_handled()
+		var hud_nodes := get_tree().get_nodes_in_group(&"hud")
+		var hud := hud_nodes[0] as HUD if not hud_nodes.is_empty() else null
+		if hud != null and hud.close_open_panels():
+			get_viewport().set_input_as_handled()
+		else:
+			open()
+			get_viewport().set_input_as_handled()
 
 
 # ── Open / close ─────────────────────────────────────────────────────────────

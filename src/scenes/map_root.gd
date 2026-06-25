@@ -20,6 +20,8 @@ var _terrain_renderer: TerrainRenderer
 
 var _interaction_panel: TileInteractionPanel = null
 var _last_action_tile: Vector2i = Vector2i(-1, -1)
+## Last action type the player explicitly confirmed via the tile panel (for shift-click repeat).
+var _last_confirmed_action: int = -1
 
 
 var _inventory_screen: InventoryScreen = null
@@ -71,6 +73,7 @@ func _ready() -> void:
 	_interaction_panel = _TILE_PANEL_SCENE.instantiate() as TileInteractionPanel
 	add_child(_interaction_panel)
 	_interaction_panel.world_click_at.connect(_on_panel_world_click)
+	_interaction_panel.action_confirmed.connect(func(a: int) -> void: _last_confirmed_action = a)
 	_registry.connect("building_placed", _on_building_placed)
 	_registry.building_state_changed.connect(_on_building_state_changed)
 	_registry.building_construction_complete.connect(_on_building_construction_complete)
@@ -103,16 +106,19 @@ func _ready() -> void:
 		_terrain_renderer.sync(grid, background_layer, terrain_layer)
 		_resource_badges._spawn_resource_badges()
 	else:
-		# New game: the player picks a start tile on the overworld first. The tactical map is
-		# generated from that tile in _on_new_game_start_selected (deferred so every node's
-		# _ready — including the overworld view — has run before the picker opens).
-		# generate() is called one frame after opening the view so a loading message renders first.
+		# New game: reset all Autoload state so nothing from a previously loaded save bleeds
+		# through. OverworldSystem is reset inside _begin_new_game_start_pick via generate().
+		WorldSaveManager.reset_new_game()
+		# The player picks a start tile on the overworld first. The tactical map is generated
+		# from that tile in _on_new_game_start_selected (deferred so every node's _ready —
+		# including the overworld view — has run before the picker opens).
 		call_deferred(&"_begin_new_game_start_pick")
 	_player.action_started.connect(_action_feedback._on_action_started)
 	_player.action_queued.connect(_action_feedback._on_action_queued)
 	_player.action_completed.connect(_action_feedback._on_action_completed)
 	_player.action_progress_update.connect(_action_feedback._on_action_progress_update)
 	_player.action_queue_cleared.connect(_action_feedback._on_action_queue_cleared)
+	_player.action_interrupted.connect(_action_feedback._on_action_interrupted)
 	_drag_controller._setup_drag_overlays()
 	_inventory_screen = InventoryScreen.new()
 	_inventory_screen.name = "InventoryScreen"
@@ -321,7 +327,16 @@ func _apply_visiting_hud_mode() -> void:
 
 ## Handles a confirmed right-click on a valid grid tile.
 ## Opens the Tile Interaction Panel for harvestable terrain or CONSTRUCTING buildings.
+## Shift+right-click repeats the last confirmed action on a matching tile without the panel.
 func _on_tile_clicked(tile: Vector2i, screen_pos: Vector2) -> void:
+	if Input.is_key_pressed(KEY_SHIFT) and _last_confirmed_action >= 0:
+		var terrain: WorldGrid.TileType = grid.get_terrain(tile)
+		var primary: int = _terrain_to_action(terrain)
+		var clear: int = _terrain_to_clear_action(terrain)
+		if _last_confirmed_action == primary or _last_confirmed_action == clear:
+			_player.try_start_action(_last_confirmed_action, tile)
+			return
+
 	var building_id: String = grid.get_building(tile)
 	if building_id != "":
 		var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_instance_at_tile(tile)
@@ -437,6 +452,7 @@ func _on_building_demolished(building_id: StringName) -> void:
 	var tile: Vector2i = _building_layer.remove_building(str(building_id))
 	if tile != Vector2i(-1, -1):
 		PathSystem.update_neighbors(tile)
+		_player.cancel_actions_at_tile(tile)
 
 
 func _on_building_state_changed(building_id: String, _new_state: int, _reason: String) -> void:
@@ -549,3 +565,14 @@ func _terrain_to_action(terrain: WorldGrid.TileType) -> int:
 		WorldGrid.TileType.EMPTY:       return PlayerCharacter.ManualActionType.FORAGE
 		WorldGrid.TileType.IMPASSABLE:  return -1
 		_:                              return -1
+
+
+## Maps WorldGrid.TileType to the clear ManualActionType for that terrain (−1 if none).
+func _terrain_to_clear_action(terrain: WorldGrid.TileType) -> int:
+	match terrain:
+		WorldGrid.TileType.TREE:  return PlayerCharacter.ManualActionType.CLEAR_TREE
+		WorldGrid.TileType.STONE: return PlayerCharacter.ManualActionType.CLEAR_STONE
+		WorldGrid.TileType.BERRY: return PlayerCharacter.ManualActionType.CLEAR_BERRY
+		WorldGrid.TileType.GRASS: return PlayerCharacter.ManualActionType.CLEAR_GRASS
+		WorldGrid.TileType.WHEAT: return PlayerCharacter.ManualActionType.CLEAR_WHEAT
+		_: return -1

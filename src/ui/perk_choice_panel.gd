@@ -23,6 +23,7 @@ const COLOR_TEXT_DIM    := Color("#A8A49C")
 var _root: Control
 var _header: Label
 var _card_row: HBoxContainer
+var _close_btn: Button
 
 var _current_npc: StringName = &""
 ## When true, only ONE choice (for the NPC passed to begin_for_npc) is resolved and the panel
@@ -87,10 +88,9 @@ func _show_next() -> void:
 func _render(npc_name: String, level: int, cards: Array) -> void:
 	for child in _card_row.get_children():
 		child.queue_free()
-	var remaining: int = NPCSystem.get_total_pending_perk_choices()
 	var job: String = NPCSystem.get_npc_job_name(_current_npc)
 	var who: String = "%s (%s)" % [npc_name, job] if job != "" else npc_name
-	_header.text = "%s — Level %d: Choose a perk   (remaining: %d)" % [who, level, remaining]
+	_header.text = "%s — Level %d: Choose a perk" % [who, level]
 	for card: Dictionary in cards:
 		_card_row.add_child(_make_card(card))
 
@@ -101,6 +101,12 @@ func _on_card_chosen(card: Dictionary) -> void:
 		_finish()  # one choice per button press — never auto-open the next
 	else:
 		_show_next()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _root.visible and event.is_action_pressed(&"ui_cancel"):
+		_finish()
+		get_viewport().set_input_as_handled()
 
 
 func _finish() -> void:
@@ -138,6 +144,21 @@ func _build_ui() -> void:
 	_card_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	_card_row.add_theme_constant_override("separation", CARD_GAP)
 	vbox.add_child(_card_row)
+
+	_close_btn = Button.new()
+	_close_btn.text = "✕"
+	_close_btn.flat = true
+	_close_btn.add_theme_font_size_override("font_size", 20)
+	_close_btn.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+	_close_btn.add_theme_color_override("font_hover_color", COLOR_TEXT)
+	_close_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_close_btn.offset_left  = -48.0
+	_close_btn.offset_top   = 8.0
+	_close_btn.offset_right = -8.0
+	_close_btn.offset_bottom = 48.0
+	_close_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_close_btn.pressed.connect(_finish)
+	_root.add_child(_close_btn)
 
 
 func _make_card(card: Dictionary) -> Control:

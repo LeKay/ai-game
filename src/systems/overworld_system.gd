@@ -28,6 +28,20 @@ const _ISLAND_NOISE_OCTAVES: int = 3
 ## Large seed offsets so the overworld RNG/noise never aligns with tactical-map seeds.
 const _ISLAND_NOISE_SEED_OFFSET: int = 1000000
 
+## --- Neighborhood influence (terrain band blending + fertility boosting) ---
+## All 8 neighbors (4 orthogonal + 4 diagonal) contribute to the biome mix.
+const _ALL_8_OFFSETS: Array[Vector2i] = [
+	Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0),
+	Vector2i(1, -1), Vector2i(1, 1), Vector2i(-1, 1), Vector2i(-1, -1),
+]
+## Max fraction of terrain-band shift per neighbor biome. 0.5 keeps own biome dominant
+## even when all 8 neighbors are a different biome.
+const _NEIGHBORHOOD_MAX_BLEND: float = 0.5
+## Extra fertility-roll weight added per neighbor-fraction unit (see _compute_neighborhood_fertility_bias).
+const _NEIGHBOR_WILD_WEIGHT: int = 12    ## forest neighbors → wild
+const _NEIGHBOR_MARBLE_WEIGHT: int = 16  ## mountain neighbors → marble
+const _NEIGHBOR_CROP_WEIGHT: int = 6     ## plains neighbors → field crops
+
 ## --- Biome classification (height + moisture) ---
 ## Non-coast land splits into MOUNTAIN / FOREST / plains INLAND from two independent noise
 ## fields. Elevation gets a radial term (interior = higher) so mountains cluster inland.
@@ -568,6 +582,52 @@ func _is_ocean_or_outside(coord: Vector2i) -> bool:
 	return (_tiles[coord] as OverworldTile).biome == Biome.OCEAN
 
 
+## Counts each of the 8 neighbours' biome classes into {BIOME_FOREST, BIOME_MOUNTAIN, BIOME_PLAINS}.
+## RIVER/LAKE/OCEAN neighbours are ignored (they contribute 0 to any class).
+func _count_neighbor_biomes(coord: Vector2i) -> Dictionary:
+	var counts: Dictionary = {
+		WorldGrid.BIOME_FOREST: 0,
+		WorldGrid.BIOME_MOUNTAIN: 0,
+		WorldGrid.BIOME_PLAINS: 0,
+	}
+	for off: Vector2i in _ALL_8_OFFSETS:
+		match get_biome(coord + off):
+			Biome.FOREST:               counts[WorldGrid.BIOME_FOREST]   += 1
+			Biome.MOUNTAIN:             counts[WorldGrid.BIOME_MOUNTAIN] += 1
+			Biome.INLAND, Biome.COAST:  counts[WorldGrid.BIOME_PLAINS]   += 1
+	return counts
+
+
+## Terrain-band blend fractions (0.0–_NEIGHBORHOOD_MAX_BLEND) passed to WorldGrid.generate()
+## as neighborhood_bias, shifting elevation cutoffs toward dominant-neighbour biomes.
+func _compute_neighborhood_bias(coord: Vector2i) -> Dictionary:
+	var counts := _count_neighbor_biomes(coord)
+	var bias: Dictionary = {}
+	for biome_class: int in counts:
+		bias[biome_class] = (float(counts[biome_class]) / float(_ALL_8_OFFSETS.size())) * _NEIGHBORHOOD_MAX_BLEND
+	return bias
+
+
+## Extra fertility-roll weights driven by neighbour biome counts. Added on top of the tile's
+## own biome weights so, e.g., a plains tile next to many forest tiles has a higher wild chance.
+func _compute_neighborhood_fertility_bias(coord: Vector2i) -> Dictionary:
+	var counts := _count_neighbor_biomes(coord)
+	var total: float = float(_ALL_8_OFFSETS.size())
+	var ff: float = float(counts[WorldGrid.BIOME_FOREST])   / total
+	var mf: float = float(counts[WorldGrid.BIOME_MOUNTAIN]) / total
+	var pf: float = float(counts[WorldGrid.BIOME_PLAINS])   / total
+	var extra: Dictionary = {}
+	if ff > 0.0:
+		extra[&"wild"] = roundi(ff * _NEIGHBOR_WILD_WEIGHT)
+	if mf > 0.0:
+		extra[&"marble"] = roundi(mf * _NEIGHBOR_MARBLE_WEIGHT)
+	if pf > 0.0:
+		var crop_bonus: int = roundi(pf * _NEIGHBOR_CROP_WEIGHT)
+		for crop: StringName in [&"flax", &"hops", &"grapes", &"olives", &"bees"]:
+			extra[crop] = crop_bonus
+	return extra
+
+
 ## Rolls FERTILITIES_PER_TILE fertilities for every land tile from WorldGrid.FERTILITY_POOL,
 ## seeded by each tile's own permanent seed (deterministic, independent per tile).
 func _roll_all_fertilities() -> void:
@@ -575,15 +635,13 @@ func _roll_all_fertilities() -> void:
 		var tile: OverworldTile = _tiles[coord]
 		if _is_water(tile.biome):
 			continue
-		tile.fertilities = _roll_fertility(tile.tile_seed, tile.biome)
+		tile.fertilities = _roll_fertility(tile.tile_seed, tile.biome, _compute_neighborhood_fertility_bias(coord))
 
 
 ## Weighted draw of FERTILITIES_PER_TILE from the shared fertility pool, seeded by the tile's
-## own permanent seed and biased by its biome. Delegates to WorldGrid.roll_fertility so single-map
-## and overworld stay consistent (precious deposits — silver/gold/gemstones — are rare via
-## FERTILITY_WEIGHTS; coast/mountain/forest restrictions applied via the biome class).
-func _roll_fertility(tile_seed: int, biome: int) -> Array[StringName]:
-	return WorldGrid.roll_fertility(tile_seed, FERTILITIES_PER_TILE, _fertility_biome_class(biome))
+## own permanent seed and biased by its biome and neighbour composition.
+func _roll_fertility(tile_seed: int, biome: int, extra_weights: Dictionary = {}) -> Array[StringName]:
+	return WorldGrid.roll_fertility(tile_seed, FERTILITIES_PER_TILE, _fertility_biome_class(biome), extra_weights)
 
 
 ## Maps an overworld Biome onto the WorldGrid.BIOME_* class that drives fertility weighting.
@@ -701,7 +759,7 @@ func select_start(coord: Vector2i) -> bool:
 	if _start_coord != Vector2i(-1, -1):
 		var prev: OverworldTile = _tiles[_start_coord]
 		prev.is_start = false
-		prev.fertilities = _roll_fertility(prev.tile_seed, prev.biome)  # restore rolled set
+		prev.fertilities = _roll_fertility(prev.tile_seed, prev.biome, _compute_neighborhood_fertility_bias(_start_coord))
 	var tile: OverworldTile = _tiles[coord]
 	tile.is_start = true
 	tile.fertilities = WorldGrid.STARTING_FERTILITY.duplicate()
@@ -725,7 +783,7 @@ func generate_tactical_map(grid: WorldGrid, coord: Vector2i) -> bool:
 		and tile.river_edges.is_empty()
 		and tile.lake_edges.is_empty()
 		and tile.coast_edges.is_empty())
-	grid.generate(tile.tile_seed, tile.fertilities, tile.coast_edges, _biome_to_profile(tile.biome), tile.river_edges, tile.lake_edges, force_water)
+	grid.generate(tile.tile_seed, tile.fertilities, tile.coast_edges, _biome_to_profile(tile.biome), tile.river_edges, tile.lake_edges, force_water, _compute_neighborhood_bias(coord))
 	return true
 
 

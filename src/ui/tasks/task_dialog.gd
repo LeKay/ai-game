@@ -87,6 +87,10 @@ func toggle() -> void:
 		open()
 
 
+func is_open() -> bool:
+	return _pinned
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not _target_open:
 		return

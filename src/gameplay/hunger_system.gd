@@ -165,6 +165,40 @@ func _get_food_nutrition(food_id: StringName) -> float:
 	return def.nutrition
 
 
+## Immediately feeds this NPC: consumes their assigned food from inventory and applies the
+## efficiency modifier now, without waiting for the next day transition.
+## Returns true if the food was consumed successfully; false if not enough stock or no assignment.
+func feed_npc_now(npc_id: StringName) -> bool:
+	if _inventory == null or _npc == null:
+		return false
+	var entry: Dictionary = _food_assignments.get(npc_id, {})
+	var food_id: StringName = entry.get(&"resource_id", &"")
+	var amount: int = entry.get(&"amount", 1)
+	if food_id == &"" or amount <= 0:
+		return false
+	if not _try_consume_across_containers(food_id, amount):
+		return false
+	_last_consumed[npc_id] = true
+	var consumed_nutrition: float = _get_food_nutrition(food_id) * float(amount)
+	var perk_nutrition: float = 0.0
+	var floor_eff: float = 0.0
+	var eff_cap_bonus: float = 0.0
+	if _npc.has_method("npc_perk_bonus"):
+		perk_nutrition = _npc.npc_perk_bonus(npc_id, PerkRegistry.EFFECT_NUTRITION_REDUCE)
+		floor_eff = _npc.npc_perk_bonus(npc_id, PerkRegistry.EFFECT_UNFED_FLOOR)
+		eff_cap_bonus = _npc.npc_perk_bonus(npc_id, PerkRegistry.EFFECT_NPC_EFF_CAP)
+	var level: int = 1
+	var inst: Object = _npc.get_npc_instance(npc_id)
+	if inst != null:
+		level = int(inst.level)
+	var modifier: float = EfficiencyFormulas.calculate_food_modifier(
+			consumed_nutrition + perk_nutrition, level, eff_cap_bonus)
+	if floor_eff > 0.0:
+		modifier = maxf(modifier, floor_eff / EfficiencyFormulas.BASE_NPC_EFFICIENCY)
+	npc_food_efficiency_changed.emit(npc_id, modifier)
+	return true
+
+
 ## Serialise food assignments to a JSON-compatible dictionary.
 func serialize() -> Dictionary:
 	var assignments: Dictionary = {}

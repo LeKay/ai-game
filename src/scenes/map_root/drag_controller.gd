@@ -144,7 +144,26 @@ func _update_drag_overlays() -> void:
 		path, path_color, _drag_path_phase)
 
 
+func _is_mouse_over_building_panel() -> bool:
+	if _root._hud == null:
+		return false
+	var panel := _root._hud.get_node_or_null("BuildingDetailPanel") as BuildingDetailPanel
+	if panel == null:
+		return false
+	return panel.contains_global_point(get_viewport().get_mouse_position())
+
+
 func _update_storage_drag_overlays() -> void:
+	# Hide all overlays while the mouse is still inside the source panel.
+	if _is_mouse_over_building_panel():
+		_drag_cost_label.visible = false
+		_drag_energy_label.visible = false
+		_drag_path_line.visible = false
+		_drag_path_dst_marker.visible = false
+		for dot: Sprite2D in _drag_path_dots:
+			dot.visible = false
+		return
+
 	var cursor_world: Vector2 = get_global_mouse_position()
 	var hovered_tile: Vector2i = _root.grid.world_to_tile(cursor_world)
 
@@ -476,6 +495,13 @@ func _finish_storage_drag() -> void:
 	_drag_collected_count = 1
 	_drag_hold_timer = 0.0
 	_drag_count_label.visible = false
+
+	# Cancel if released inside the building detail panel — item stays in storage.
+	if _is_mouse_over_building_panel():
+		icon_node.queue_free()
+		InventorySystem.try_deposit(container_id, res_id, batch_count)
+		get_viewport().set_input_as_handled()
+		return
 
 	if _root.grid.is_in_bounds(target_tile):
 		var building_id: String = _root.grid.get_building(target_tile)

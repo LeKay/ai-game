@@ -230,6 +230,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+## True if global_point lies within the visible window (the inner DraggableWindow,
+## not the zero-sized outer Control). Used by the drag controller to cancel a
+## storage drag that is released inside the panel.
+func contains_global_point(global_point: Vector2) -> bool:
+	return visible and _panel != null and _panel.get_global_rect().has_point(global_point)
+
+
 ## Opens the panel for the given building_id. Animates in if already hidden.
 ## If the same building is already shown, closes the panel (toggle behaviour).
 func open_for(building_id: String) -> void:
@@ -579,7 +586,10 @@ func _refresh_progress(instance: BuildingRegistry.BuildingInstance) -> void:
 	var label_prefix: String
 	if is_constructing:
 		total = instance.build_time
-		current = mini(instance.accumulated_ticks, total)
+		if _player != null and _player.get_active_building_id() == _current_building_id:
+			current = int(_player.get_action_progress() * float(total))
+		else:
+			current = mini(instance.accumulated_ticks, total)
 		label_prefix = "Construction"
 	else:
 		total = instance.production_cycle_duration
@@ -636,7 +646,10 @@ func _refresh_storage_zone(instance: BuildingRegistry.BuildingInstance) -> void:
 			resources[slot.resource_id] = resources.get(slot.resource_id, 0) + slot.quantity
 	var items: Array[Dictionary] = []
 	for res_id: StringName in resources:
-		items.append({&"resource_id": res_id, &"quantity": resources[res_id]})
+		var entry := {&"resource_id": res_id, &"quantity": resources[res_id]}
+		if PlayerCharacter.is_food(res_id):
+			entry[&"subtitle"] = "eat"
+		items.append(entry)
 	items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a[&"resource_id"]) < str(b[&"resource_id"])
 	)
@@ -819,8 +832,8 @@ func _build_limit_row(res_id: StringName, current_limit: int, cap: int) -> Contr
 			var cur: int = BuildingRegistry.get_storage_limit(bid, res_id)
 			if cur < 0:
 				return
-			BuildingRegistry.set_storage_limit(bid, res_id, maxi(0, cur - step))
-			var next: int = BuildingRegistry.get_storage_limit(bid, res_id)
+			var next: int = -1 if cur - step <= 0 else cur - step
+			BuildingRegistry.set_storage_limit(bid, res_id, next)
 			limit_lbl.text = "∞" if next < 0 else str(next)
 	)
 	plus_btn.pressed.connect(func() -> void:
@@ -841,6 +854,48 @@ func _build_limit_row(res_id: StringName, current_limit: int, cap: int) -> Contr
 	row.add_child(limit_lbl)
 	row.add_child(plus_btn)
 	return row
+
+
+func _on_storage_item_clicked(resource_id: StringName) -> void:
+	if not PlayerCharacter.is_food(resource_id):
+		return
+	if _current_building_id == "":
+		return
+	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(_current_building_id)
+	if instance == null or instance.assigned_container_id == &"":
+		return
+	var player: PlayerCharacter = get_tree().get_first_node_in_group(&"player_character") as PlayerCharacter
+	if player == null:
+		return
+	var consume_result := InventorySystem.try_consume(instance.assigned_container_id, resource_id, 1)
+	if consume_result != InventoryContainer.ConsumeResult.SUCCESS:
+		return
+	if not player.consume_food(resource_id):
+		InventorySystem.try_deposit(instance.assigned_container_id, resource_id, 1)
+		return
+	var energy_amount: int = PlayerCharacter.food_energy_value(resource_id)
+	_spawn_storage_eat_float("+%d ⚡" % energy_amount)
+
+
+func _spawn_storage_eat_float(text: String) -> void:
+	var mouse_pos := get_viewport().get_mouse_position()
+	var label := Label.new()
+	label.text     = text
+	label.position = mouse_pos + Vector2(-20.0, -32.0)
+	label.add_theme_font_size_override("font_size", 20)
+	label.add_theme_color_override("font_color", Color("#4CAF50"))
+	label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.9))
+	label.add_theme_constant_override("outline_size", 4)
+	# BuildingDetailPanel is a Control, not a CanvasLayer, so local coords ≠ screen coords.
+	# Adding to the HUD CanvasLayer puts the label in screen space where viewport mouse pos applies.
+	var hud := get_tree().get_first_node_in_group(&"hud") as CanvasLayer
+	var parent: Node = hud if hud != null else self
+	parent.add_child(label)
+	var tween := parent.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(label, "position:y", label.position.y - 52.0, 1.4)
+	tween.tween_property(label, "modulate:a", 0.0, 1.4)
+	tween.finished.connect(label.queue_free)
 
 
 func _on_storage_item_drag_started(resource_id: StringName) -> void:
@@ -1022,6 +1077,7 @@ func _refresh_transport_zone(instance: BuildingRegistry.BuildingInstance) -> voi
 
 func _populate_transport_flow(flow: HFlowContainer, routes: Array[LogisticsRoute], role: String) -> void:
 	for child in flow.get_children():
+		flow.remove_child(child)
 		child.queue_free()
 	for route: LogisticsRoute in routes:
 		var res_id := _get_route_display_resource(route)
@@ -1188,6 +1244,8 @@ func _rebuild_recipe_view(instance: BuildingRegistry.BuildingInstance) -> void:
 		var recipe_unlocked: bool = ProgressionSystem.is_building_recipe_unlocked(
 				instance.type, recipe.get("id", &""))
 		var is_available: bool = recipe_unlocked and (all_available or (i in available))
+		if not is_available:
+			continue
 		_build_recipe_card(recipe, i, is_active, is_available)
 
 
@@ -1418,15 +1476,18 @@ func _open_recruit_dialog() -> void:
 	if npc_sys == null:
 		return
 
-	# Populate food picker.
+	# Populate food picker — only show food items unlocked via progression.
 	_recruit_food_option.clear()
-	var food_ids: Array[StringName] = ResourceRegistry.get_food_resource_ids()
-	for fid: StringName in food_ids:
+	var all_food_ids: Array[StringName] = ResourceRegistry.get_food_resource_ids()
+	var unlocked_food_ids: Array[StringName] = all_food_ids.filter(
+		func(fid: StringName) -> bool: return ProgressionSystem.is_resource_unlocked(fid)
+	)
+	for fid: StringName in unlocked_food_ids:
 		var glyph: String = ResourceRegistry.get_glyph(fid)
 		_recruit_food_option.add_item("%s %s" % [glyph, str(fid).capitalize()])
 		_recruit_food_option.set_item_metadata(_recruit_food_option.item_count - 1, fid)
 	# Default to berry if available, otherwise first entry.
-	var berry_idx: int = food_ids.find(&"berry")
+	var berry_idx: int = unlocked_food_ids.find(&"berry")
 	_recruit_food_option.selected = maxi(0, berry_idx)
 
 	_refresh_recruit_costs()
@@ -1947,6 +2008,7 @@ func _build_storage_zone(parent: VBoxContainer) -> void:
 
 	_storage_item_grid = ItemGrid.new()
 	_storage_item_grid.name = "StorageItemGrid"
+	_storage_item_grid.item_clicked.connect(_on_storage_item_clicked)
 	_storage_item_grid.item_drag_started.connect(_on_storage_item_drag_started)
 	_storage_normal_zone.add_child(_storage_item_grid)
 

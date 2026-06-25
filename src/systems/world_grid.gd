@@ -186,6 +186,13 @@ const BIOME_PLAINS: int = 0
 const BIOME_FOREST: int = 1
 const BIOME_MOUNTAIN: int = 2
 const BIOME_COAST: int = 3
+## Maps BIOME_* classes to the TerrainProfile used for band blending in _blend_bands().
+const _BIOME_CLASS_TO_PROFILE: Dictionary = {
+	BIOME_FOREST:   TerrainProfile.FOREST,
+	BIOME_MOUNTAIN: TerrainProfile.MOUNTAIN,
+	BIOME_PLAINS:   TerrainProfile.PLAINS,
+	BIOME_COAST:    TerrainProfile.PLAINS,
+}
 ## Mineable-deposit fertilities → the pit TileType reveal converts the tile to. The single
 ## source of truth for "which fertilities are hidden deposits" (clay's mechanic, generalized).
 const DEPOSIT_TILE_TYPE: Dictionary = {
@@ -284,13 +291,13 @@ const _ORTHO_OFFSETS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector
 ## overworld tile has no river/lake/coast adjacency and the random lake roll misses.
 func generate(world_seed: int, fertility_override: Array = [], coast_edges: Array = [],
 		terrain_profile: int = TerrainProfile.PLAINS, river_edges: Array = [], lake_edges: Array = [],
-		force_water: bool = false) -> void:
+		force_water: bool = false, neighborhood_bias: Dictionary = {}) -> void:
 	assert(not _generation_done, "generate() called after terrain was locked")
 
 	var terrain: Array
 	var succeeded := false
 	for attempt in range(5):
-		terrain = _sample_noise(world_seed + attempt, terrain_profile)
+		terrain = _sample_noise(world_seed + attempt, terrain_profile, neighborhood_bias)
 		terrain = _smooth_terrain(terrain, world_seed + attempt)
 		terrain = _cleanup_clusters(terrain)
 		terrain = _carve_water(terrain, world_seed + attempt, coast_edges, river_edges, lake_edges, force_water)
@@ -488,11 +495,12 @@ func _set_fertility(world_seed: int, override_set: Array) -> void:
 ## Shared by WorldGrid (single-map) and OverworldSystem (per-tile) so the two stay consistent.
 ## biome (BIOME_*) applies biome-aware boosts and hard restrictions on top of base weights;
 ## BIOME_ANY (the default) leaves base weights untouched (pre-addendum behaviour).
-static func roll_fertility(roll_seed: int, count: int, biome: int = BIOME_ANY) -> Array[StringName]:
+static func roll_fertility(roll_seed: int, count: int, biome: int = BIOME_ANY, extra_weights: Dictionary = {}) -> Array[StringName]:
 	var pool: Array[StringName] = FERTILITY_POOL.duplicate()
 	var weights: Array[int] = []
 	for id: StringName in pool:
-		weights.append(_biome_fertility_weight(id, int(FERTILITY_WEIGHTS.get(id, 1)), biome))
+		var w: int = _biome_fertility_weight(id, int(FERTILITY_WEIGHTS.get(id, 1)), biome)
+		weights.append(maxi(0, w + int(extra_weights.get(id, 0))))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = roll_seed
 	var result: Array[StringName] = []
@@ -528,6 +536,8 @@ static func _biome_fertility_weight(id: StringName, base: int, biome: int) -> in
 			return base * 3 if biome == BIOME_MOUNTAIN else base
 		&"flax", &"hops", &"grapes", &"olives", &"bees":
 			return base * 2 if biome == BIOME_PLAINS else base
+		&"wild":
+			return base * 3 if biome == BIOME_FOREST else base
 	return base
 
 
@@ -580,6 +590,11 @@ func find_nearest_any_hidden(tile: Vector2i, max_radius: int) -> Dictionary:
 	return {"tile": best_tile, "id": best_id}
 
 
+## Returns the number of tiles of the given TileType currently on this map.
+func count_tile_type(tile_type: int) -> int:
+	return _count_type_in_terrain(tile_type)
+
+
 ## Reveals the hidden deposit at tile, converting the terrain to its pit TileType (clay → CLAY,
 ## iron → IRON, …). Requires the tile to be EMPTY with no resources — any existing resource must
 ## be cleared first (spec). Returns the revealed resource id, or &"" if blocked / no deposit here.
@@ -604,7 +619,7 @@ func reveal_hidden_deposit(tile: Vector2i) -> StringName:
 ## Uses FastNoiseLite (Godot 4.x noise class — FastNoise does not exist in Godot 4).
 ## terrain_profile selects the elevation band cutoffs (_ELEV_BANDS) so forest/mountain maps
 ## skew toward trees / stone+peaks respectively; PLAINS reproduces the original thresholds.
-func _sample_noise(noise_seed: int, terrain_profile: int = TerrainProfile.PLAINS) -> Array:
+func _sample_noise(noise_seed: int, terrain_profile: int = TerrainProfile.PLAINS, neighborhood_bias: Dictionary = {}) -> Array:
 	var elevation := FastNoiseLite.new()
 	elevation.noise_type = FastNoiseLite.TYPE_PERLIN
 	elevation.seed = noise_seed
@@ -621,7 +636,7 @@ func _sample_noise(noise_seed: int, terrain_profile: int = TerrainProfile.PLAINS
 	moisture.fractal_octaves = 3
 	moisture.frequency = 0.08
 
-	var bands: Array = _ELEV_BANDS[terrain_profile]
+	var bands: Array = _blend_bands(terrain_profile, neighborhood_bias)
 	var terrain: Array = []
 	for x in range(GRID_SIZE):
 		var row: Array[int] = []
@@ -644,6 +659,21 @@ func _sample_noise(noise_seed: int, terrain_profile: int = TerrainProfile.PLAINS
 				tile_type = TileType.IMPASSABLE  # rocky peak (mountain profile only)
 			terrain[x].append(tile_type)
 	return terrain
+
+
+## Returns the elevation bands for `base_profile` blended toward neighbor-biome profiles
+## proportionally to the fractions in `bias` (keys: BIOME_* → 0.0–0.5). Applied sequentially;
+## own biome stays dominant because the max blend per neighbor type is capped at 0.5.
+static func _blend_bands(base_profile: int, bias: Dictionary) -> Array:
+	var bands: Array = (_ELEV_BANDS[base_profile] as Array).duplicate()
+	for biome_class: int in _BIOME_CLASS_TO_PROFILE:
+		var weight: float = float(bias.get(biome_class, 0.0))
+		if weight <= 0.0:
+			continue
+		var target: Array = _ELEV_BANDS[_BIOME_CLASS_TO_PROFILE[biome_class]]
+		for i in range(bands.size()):
+			bands[i] = lerpf(float(bands[i]), float(target[i]), weight)
+	return bands
 
 
 ## Step 2: 2 smoothing iterations. Adopts dominant 8-neighbor type with 60% probability.
