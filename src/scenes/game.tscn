@@ -1,27 +1,41 @@
-[gd_scene load_steps=1 format=3]
+[gd_scene load_steps=9 format=3]
 
-[node name="GameWorld" type="Control"]
+[ext_resource type="PackedScene" path="res://src/scenes/map_root.tscn" id="1_maproot"]
+[ext_resource type="Script" path="res://src/systems/camera_controller.gd" id="2_camera"]
+[ext_resource type="PackedScene" path="res://src/ui/hud/hud.tscn" id="3_hud"]
+[ext_resource type="Script" path="res://src/ui/hud/build_placement_overlay.gd" id="5_bpo"]
+[ext_resource type="PackedScene" path="res://src/ui/DayOverviewPanel.tscn" id="6_dop"]
+[ext_resource type="Script" path="res://src/ui/perk_choice_panel.gd" id="7_perk"]
+[ext_resource type="Script" path="res://src/ui/overworld/overworld_view.gd" id="8_overworld"]
+[ext_resource type="PackedScene" path="res://src/ui/screens/pause_menu.tscn" id="9_pause"]
 
-[node name="Viewport" type="ColorRect" parent="."]
+[node name="GameWorld" type="Node2D"]
+
+[node name="CameraController" type="Camera2D" parent="."]
+script = ExtResource("2_camera")
+
+[node name="MapRoot" parent="." instance=ExtResource("1_maproot")]
+
+[node name="HUD" parent="." instance=ExtResource("3_hud")]
+
+[node name="BuildPlacementOverlay" type="CanvasLayer" parent="."]
+script = ExtResource("5_bpo")
+
+[node name="DayOverviewPanel" parent="." instance=ExtResource("6_dop")]
+
+[node name="PerkChoicePanel" type="CanvasLayer" parent="."]
+script = ExtResource("7_perk")
+
+[node name="OverworldLayer" type="CanvasLayer" parent="."]
+layer = 5
+
+[node name="OverworldView" type="Control" parent="OverworldLayer"]
+layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color( 0.2, 0.3, 0.2, 1 )
+script = ExtResource("8_overworld")
 
-[node name="Placeholder" type="Label" parent="."]
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -100.0
-offset_top = -15.0
-offset_right = 100.0
-offset_bottom = 15.0
-layout_mode = 1
-theme_override_font_sizes/font_size = 18
-theme_override_color/font_color = Color( 0.94, 0.93, 0.9, 1 )
-text = "Game World"
-horizontal_alignment = 1
+[node name="PauseMenu" parent="." instance=ExtResource("9_pause")]

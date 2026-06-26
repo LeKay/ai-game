@@ -1,9 +1,181 @@
 # Recipe Database System
 
-> **Status**: In Design
+> **Status**: Partially Implemented — design target; see implementation note (2026-06-13)
 > **Author**: User + Claude (Sonnet 4.5)
-> **Last Updated**: 2026-05-05
+> **Last Updated**: 2026-06-13
 > **Implements Pillar**: Pillar 2 (Information Transparency), Pillar 3 (Optimization Over Expansion)
+>
+> **Implementation note (2026-06-16):** The centralized `res://data/recipes.json`
+> registry described below is **not yet built**. The current implementation splits
+> recipes across two code tables:
+> - **Manual crafting** — `src/gameplay/crafting_registry.gd` (`CraftingRegistry`
+>   Autoload): five recipes — `axe` (3 Wood + 2 Stone, 20 Energy, 120 ticks → 1 Axe),
+>   `pickaxe` (3 Stone + 1 Wood, 20 Energy, 120 ticks → 1 Pickaxe),
+>   `spindle` (2 Wood + 2 Fiber, 15 Energy, 90 ticks → 1 Spindle),
+>   `cloth` (4 Fiber, 20 Energy, 180 ticks → 1 Cloth), and `clothing`
+>   (3 Cloth + 2 Fiber, 25 Energy, 240 ticks → 1 Clothing). Crafting advances the world
+>   clock via `advance_ticks_manual` — it is not instant (balancing 2026-06-11).
+>   No tool-charge inputs on the manual path.
+> - **Building production** — `BuildingRegistry.RECIPES` (see `design/gdd/building-system.md`):
+>   cycle recipes as arrays per building type (index 0 = main recipe, index 1+ = fallback).
+>   Buildings with fallback recipes expose a recipe selector in BuildingDetailPanel.
+>   Current building recipes: Lumber Camp (requires Axe), Stone Mason (requires Pickaxe),
+>   Gathering Hut, Tool Workshop (3 recipes: Axe/Pickaxe/Spindle), **Weaver**
+>   (Fiber+Spindle→Cloth, 250/750 ticks), **Tailor** (Cloth+Spindle→Clothing, 300/900 ticks),
+>   **Sawmill** (2 Wood + 1 Axe → 3 Plank, 250 ticks),
+>   **Farm** (WHEAT-adjacent gathering → 5 Wheat, 250 ticks; efficiency scales with adjacent WHEAT count),
+>   **Mill** (2 Wheat → 3 Flour, 250 ticks), **Bakery** (2 Flour → 4 Bread, 300 ticks).
+>   **Clay Pit** (1 Pickaxe → 5 Clay, 250 ticks; requires adjacent CLAY terrain),
+>   **Pottery Kiln** with_tool (2 Clay + 1 Pickaxe → 3 Pottery, 300 ticks) /
+>   bare_hands fallback (2 Clay → 1 Pottery, 900 ticks).
+>   **Tannery** with_knife (2 Hide + 1 Knife → 3 Leather, 250 ticks) /
+>   bare_hands fallback (2 Hide → 1 Leather, 750 ticks). Gated behind `tannery`
+>   progression node (prereqs: tailoring + hunting + knife).
+>   **Tailor** gains 3rd recipe leather_garments (2 Leather + 1 Spindle → 2 Clothing, 300 ticks).
+>   **Tool Workshop** gains craft_knife (2 Wood + 1 Stone → 1 Knife, 375 ticks).
+>   New tool resource: `knife` (wood ×2 + stone ×1; manual craft 90 ticks).
+>   New intermediate resource: `leather` (production_good / intermediate).
+>   New trade_good resource: `pottery` (perk_eligible; NPC comfort good like clothing).
+>   New intermediate resource: `flour` (production_good / intermediate).
+>   **Hunting Bow chain (2026-06-20):** New tool resource `hunting_bow` (wood ×2 + fiber ×3).
+>   Manual craft: `hunting_bow` (120 ticks, 20 energy). New building **Bowyer's Workshop**
+>   (`BOWYERS_WORKSHOP`): `craft_bow` (wood ×2 + fiber ×3 → hunting_bow ×1, 375 ticks, NPC).
+>   Hunting Lodge recipe split: `hunt_with_bow` (primary, hunting_bow ×1 → meat ×3 + hide ×2,
+>   300 ticks) and `hunt` (bare hands fallback, no inputs → meat ×2 + hide ×1, 450 ticks).
+>   Progression: `bowyer` node (crafting branch, prereqs: woodcutting + fiber_harvesting) unlocks
+>   BOWYERS_WORKSHOP + manual hunting_bow recipe; `bow_hunting` node (food branch, prereqs:
+>   hunting + bowyer) unlocks `HUNTING_LODGE:hunt_with_bow`.
+>   **Furniture chain (2026-06-21):** New production_good resource `furniture` (🪑, base_value 14).
+>   New building **Carpenter's Workshop** (`CARPENTER`): two recipes —
+>   `with_leather` (primary, plank ×2 + leather ×1 → furniture ×3, 350 ticks, NPC) and
+>   `bare_planks` (fallback, plank ×2 → furniture ×1, 500 ticks, NPC).
+>   Progression: `carpenter` node (materials branch, prereq: sawmilling) unlocks CARPENTER +
+>   `CARPENTER:bare_planks`; `leather_furniture` node (materials branch, prereqs: carpenter +
+>   tannery) unlocks `CARPENTER:with_leather`. Furniture is ungated as production_good for now;
+>   use in housing/comfort system TBD.
+>   **Rope chain (2026-06-23):** New intermediate+trade_good resource `rope` (🪢, base_value 8,
+   tags: trade_good). New building **Rope Maker** (`ROPE_MAKER`): two recipes —
+   `with_spindle` (primary, fiber ×3 + spindle ×1 → rope ×2, 250 ticks, NPC) and
+   `bare_hands` (fallback, fiber ×4 → rope ×1, 750 ticks, NPC; ~8× lower throughput
+   rate — keeps production alive without tool supply but strongly incentivises spindle use).
+   Bridge BUILD_COST updated: wood ×8 → wood ×6 + rope ×2 (rope as lashing material).
+   Weaver gains 4th recipe `craft_net_from_rope` (rope ×2 → fishing_net ×2, 250 ticks —
+   ~2.4× more efficient than the fiber-based net recipe).
+   Bowyer's Workshop gains 2nd recipe `bow_with_rope` (wood ×2 + rope ×1 → hunting_bow ×2,
+   300 ticks — ~2.5× more efficient than `craft_bow`; rope acts as bowstring material).
+   Progression: `rope_making` node (textiles branch, prereq: fiber_harvesting) unlocks
+   ROPE_MAKER + `ROPE_MAKER:bare_hands`; `tooled_rope_making` node (textiles branch,
+   prereqs: rope_making + spindle) unlocks `ROPE_MAKER:with_spindle`; `rope_nets` node
+   (textiles branch, prereqs: net_weaving + rope_making) unlocks `WEAVER:craft_net_from_rope`;
+   `rope_bow` node (crafting branch, prereqs: bowyer + rope_making) unlocks
+   `BOWYERS_WORKSHOP:bow_with_rope`. Bridge gating updated: `bridge_building` node now
+   also requires `rope_making` as prereq (consistent with BUILD_COST change).
+   **Fishing chain (2026-06-21):** New tool resource `fishing_net` (🕸️, fiber ×4 at Weaver, 300
+>   ticks). New food resource `fish` (🐟, nutrition 3, base_value 3). New building
+>   **Fishing Hut** (`FISHING_HUT`): single recipe `with_net` (fishing_net ×1 → fish ×5, 250
+>   ticks, NPC required). Mandatory adjacency requirement: ≥1 adjacent WATER tile (BLOCKED_BY_ADJACENCY
+>   without it). Efficiency scales with adjacent water tile count via standard F2 adjacency formula
+>   (+5% per tile) — placed on a peninsula with 3 water neighbours runs at +15% above base.
+>   No bare-hands fallback by design: the fishing hut is a net-only operation.
+>   Progression: `net_weaving` node (textiles branch, prereq: weaving) unlocks
+>   `WEAVER:craft_fishing_net`; `fishing` node (food branch, prereqs: shelter + net_weaving)
+>   unlocks FISHING_HUT + `FISHING_HUT:with_net`. Cross-branch dependency (textiles → food)
+>   ensures player has established a fiber supply before fishing is available.
+>   **Brick chain (2026-06-21):** New construction resource `brick` (🔥, base_value 6,
+>   construction_material tag). New building **Brick Kiln** (`BRICK_KILN`): single recipe
+>   `fire_bricks` (clay ×2 + fiber ×1 → brick ×3, 375 ticks, NPC required, no tool).
+>   No fallback recipe by design: both inputs (clay, fiber) are readily available without tools.
+>   No terrain adjacency requirement — processes delivered clay.
+>   Build cost: wood ×8 + stone ×8 + clay ×5. Build time: 900 ticks (~0.6 days).
+>   Balancing: ~3.8 cycles/day at base efficiency; 2 Clay Pits comfortably supply 1 Kiln.
+>   Progression: `brickmaking` node (materials branch, prereq: clay_extraction, ring 7)
+>   unlocks BRICK_KILN. Placed parallel to `pottery` node — both are clay-processing branches.
+>   **BRICK_KILN gains second recipe (2026-06-21):** `fire_bricks_charcoal`
+>   (clay ×2 + charcoal ×1 → brick ×4, 300 ticks) — unlocked via `charcoal_brickmaking`
+>   progression node (prereqs: charcoal_burning + brickmaking). Charcoal recipe is ~67%
+>   more efficient than the fiber recipe (4/300 vs. 3/375 brick/tick).
+>   **Charcoal chain (2026-06-21):** New intermediate resource `charcoal` (⬛, base_value 6,
+>   tags: burnable + fuel). New building **Charcoal Kiln** (`CHARCOAL_KILN`): single recipe
+>   `burn_charcoal` (wood ×3 → charcoal ×3, 375 ticks, NPC required, no tool).
+>   Mandatory placement constraint: ≥1 adjacent WATER tile (BLOCKED_BY_ADJACENCY without it) —
+>   thematic/placement only, does NOT grant an efficiency bonus (ADJACENCY_PLACEMENT_ONLY).
+>   No fallback recipe: wood is readily available, no tools needed.
+>   Build cost: wood ×10 + stone ×8. Build time: 800 ticks (~0.55 days).
+>   Balancing: ~3.8 cycles/day at base efficiency; one Lumber Camp (~29 wood/day)
+>   comfortably supplies 2 Charcoal Kilns (~11.5 charcoal/day each).
+>   Charcoal is a future-proof fuel resource — primarily consumed by the upgraded Brick Kiln
+>   recipe; reserved for smithy, glassworks, and other high-heat buildings in later content.
+>   Progression: `charcoal_burning` node (materials branch, prereq: forestry, ring 4)
+>   unlocks CHARCOAL_KILN; `charcoal_brickmaking` node (materials branch, prereqs:
+>   charcoal_burning + brickmaking, ring 8) unlocks `BRICK_KILN:fire_bricks_charcoal`.
+>   **Coastal Salt chain (2026-06-21):** New trade_good resource `salt` (🧂, base_value 18,
+>   perk_eligible). New building **Salt Works** (`SALT_WORKS`): single recipe `evaporate`
+>   (no material inputs → salt ×2, 700 base_cycle_ticks, NPC required). The building
+>   requires at least one adjacent COAST tile (new TileType.COAST, distinct from river/lake
+>   WATER); adjacency count contributes to efficiency via F3 (+5% per tile, same as FISHING_HUT
+>   with water). No fallback recipe by design — evaporation is inherently bare-hands and slow.
+>   Build cost: wood ×12 + stone ×8. Build time: 900 ticks (~0.6 days). Energy: 28.
+>   Balancing: base_cycle_ticks=700; at efficiency 0.80 (1 COAST + lv1 worker) → effective
+>   ~875 ticks/cycle → ~1.6 cycles/day → ~3.3 salt/day. Salt is intentionally scarce and
+>   slow — thematic: natural solar evaporation of seawater takes days. Salt's primary use
+>   is as a trade good and food preservative (see Preserved Food chain below, 2026-06-21).
+>   TileType change: coastal water is now tagged as COAST (ordinal 9) by `_carve_coast()`;
+>   rivers and lakes remain WATER. COAST is impassable/non-buildable like WATER.
+>   Progression: `salt_works` node (materials branch, prereq: prospecting, ring 6) unlocks
+>   SALT_WORKS + `SALT_WORKS:evaporate`.
+>   **Preserved Food chain (2026-06-21):** New trade_good resource `preserved_food` (🥫,
+>   base_value 35, no nutrition). New building **Preservation House** (`PRESERVATION_HOUSE`):
+>   two recipes — `preserve_meat` (meat ×2 + salt ×1 + pottery ×1 → preserved_food ×3,
+>   375 ticks) and `preserve_fish` (fish ×2 + salt ×1 + pottery ×1 → preserved_food ×2,
+>   375 ticks). Pottery is consumed per cycle (not a durable tool). No fallback recipe — the
+>   pottery-demand is intentional design. Build cost: wood ×10 + stone ×6. Build time: 900
+>   ticks (~0.6 days). Energy: 25. Balancing: 375 ticks → ~3.8 cycles/day at efficiency 1.0;
+>   preserve_meat rate: 3/375 = 0.008/tick; preserve_fish: 2/375 = 0.005/tick. Input value
+>   vs output value: meat recipe 2.56× margin, fish recipe 1.79× margin. Progression:
+>   `food_preservation` node (food branch, prereqs: hunting + fishing, hidden prereqs:
+>   pottery + salt_works) unlocks PRESERVATION_HOUSE + both recipes.
+>   **Barrel chain (2026-06-24):** New trade_good resource `barrel` (🛢️, base_value 18,
+>   movement_cost 6.0, stack_limit 20). New building **Cooperage** (`COOPERAGE`): single
+>   recipe `craft_barrels` (plank ×3 → barrel ×2, 300 ticks, NPC required, no tool slot).
+>   Rate: 2/300 = 0.0067/tick → ~9.6 barrels/day @ eff 1.0. One Sawmill (~17 planks/day)
+>   pairs with one Cooperage (~14 planks/day demand). Barrels are trade goods intended to
+>   be consumed by a future Trading Post building. BUILD_COST: wood ×10 + stone ×5;
+>   BUILD_TIME: 1000 ticks; BUILD_ENERGY: 28. No terrain adjacency requirement.
+>   Progression: `cooperage` node (materials branch, prereq: sawmilling, ring 6) unlocks
+>   COOPERAGE + `COOPERAGE:craft_barrels`.
+>   **Wheel & Cart chain (2026-06-24):** Two new trade_good resources: `wheel` (🛞,
+>   base_value 12, stack_limit 20) and `cart` (🛒, base_value 22, stack_limit 10,
+>   movement_cost 6.0). New building **Wheel Maker** (`WHEEL_MAKER`): single recipe
+>   `craft_wheels` (wood ×3 → wheel ×2, 300 ticks, NPC required). Rate: 2/300 = 0.0067/tick
+>   → ~10 wheels/day @ eff 1.0. New building **Cart Workshop** (`CART_WORKSHOP`): single
+>   recipe `assemble_cart` (plank ×4 + wheel ×2 → cart ×1, 375 ticks, NPC required). Rate:
+>   1/375 = 0.0027/tick → ~4 carts/day @ eff 1.0. Supply chain: one Sawmill feeds planks;
+>   one Wheel Maker feeds wheels; one Cart Workshop consumes both. Both buildings are trade
+>   goods intended to be consumed by a future Trading Post. BUILD_COST: WHEEL_MAKER wood ×8 +
+>   stone ×3 (700 ticks, 22 energy); CART_WORKSHOP wood ×10 + stone ×5 + plank ×3 (800 ticks,
+>   25 energy). No terrain adjacency requirement for either. Progression: `wheel_making` node
+>   (materials branch, prereq: forestry, ring 5) unlocks WHEEL_MAKER + `WHEEL_MAKER:craft_wheels`;
+>   `cart_workshop` node (materials branch, prereqs: wheel_making + sawmilling, ring 7) unlocks
+>   CART_WORKSHOP + `CART_WORKSHOP:assemble_cart`.
+>   **Progression revision (2026-06-24):** Manual crafting now has **five** recipes —
+>   `axe`, `pickaxe`, `knife`, `spindle`, and new `rope` (4 Fiber, 15 Energy, 90 ticks →
+>   1 Rope). The manual `cloth`, `clothing`, and `hunting_bow` recipes were **removed** —
+>   those goods are now only producible via buildings (Weaver→Cloth, Tailor→Clothing,
+>   Bowyer's Workshop→Hunting Bow). Tree changes: `axe` + `pickaxe` nodes deleted, their
+>   recipes folded into `toolmaking` (which now also grants the `crafting_bench` upgrade,
+>   absorbing the deleted `workbench` node); `toolmaking` prereqs are now `storage` +
+>   `stonecutting` (storage no longer requires shelter, so it unlocks earlier). `spindle`
+>   moved to depend on `toolmaking` (was `weaving`). Textiles `spinning` + `garment_making`
+>   nodes deleted (cloth/clothing no longer hand-craftable); `weaving` reparented to
+>   `fiber_harvesting`, `tailoring` to `weaving`. The fiber-based manual bow was dropped and
+>   the `bowyer` and `rope_bow` nodes **merged** into one `bowyer` node (prereq:
+>   `rope_weaving`) that unlocks BOWYERS_WORKSHOP + `bow_with_rope`. New manual `rope` recipe
+>   is gated by the `rope_weaving` node. Tool-dependent material nodes (`tooled_logging`,
+>   `sawmilling`, `tooled_quarrying`, `tooled_pottery`, `tool_workshop`) now require
+>   `toolmaking` instead of `axe`/`pickaxe`.
+> Migrating both tables into the JSON registry below remains the design goal
+> (data-driven content rule); treat the rest of this document as the target design,
+> not the implemented state.
 
 ## Overview
 
@@ -140,7 +312,7 @@ Recipes can have unlock conditions that gate their availability. Conditions are 
       "category": "processing",
       "inputs": [
         {"resource_id": "wood", "quantity": 1},
-        {"resource_id": "tool", "charge_cost": 5.0}
+        {"resource_id": "axe", "charge_cost": 5.0}
       ],
       "outputs": [
         {"resource_id": "plank", "quantity": 5}
@@ -285,10 +457,10 @@ When a recipe input specifies `charge_cost`, the system selects which storage sl
 
 **Example:**
 ```
-Recipe: "Produce Planks" requires tool with charge_cost: 5.0
+Recipe: "Produce Planks" requires axe with charge_cost: 5.0
 Storage contains:
-  - Slot A: tool, current_charge = 12.0 (e.g. 1 tool at 12/100)
-  - Slot B: tool, current_charge = 435.0 (e.g. 5 tools at 87/100 each)
+  - Slot A: axe, current_charge = 12.0 (e.g. 1 axe at 12/100)
+  - Slot B: axe, current_charge = 435.0 (e.g. 5 axes at 87/100 each)
   - Slot C: wood, current_charge = 300.0 — EXCLUDED (wrong resource_id)
 
 Filtered candidates: [Slot A (12.0), Slot B (435.0)]
@@ -333,7 +505,7 @@ Used to compare manual vs. building recipes producing the same output, and by AI
 **Example:**
 ```
 Recipe: "Sawmill Planks"
-Inputs: 1 Wood (value: 2 gold), 1 Tool charge -5 (ignore charge cost for efficiency)
+Inputs: 1 Wood (value: 2 gold), 1 Axe charge -5 (ignore charge cost for efficiency)
 Outputs: 5 Planks (value: 3 gold each)
 Tick cost: 50
 
@@ -342,7 +514,7 @@ V_in = 1 × 2 = 2 gold
 η = 15 / (50 + 2) = 15 / 52 = 0.288
 
 Compare to manual recipe "Chop Tree":
-Inputs: 1 Tool charge -10
+Inputs: 1 Axe charge -10
 Outputs: 5 Wood (value: 2 gold each)
 Tick cost: 80
 
@@ -602,7 +774,7 @@ The Recipe Database System has the following designer-adjustable values:
 
 4. **GIVEN** a building recipe in loop mode with inputs for 3 iterations (6 Wood available, recipe consumes 2 Wood/iteration), **WHEN** NPC assigned and recipe started, **THEN** recipe executes exactly 3 times (consuming all 6 Wood), then stops with status "Inputs Exhausted"
 
-5. **GIVEN** a recipe input with `charge_cost: 5.0` for tool, **WHEN** storage has Slot A (tool, current_charge 12.0) and Slot B (tool, current_charge 435.0), **THEN** system selects Slot A (lowest charge) and reduces it from 12.0 to 7.0
+5. **GIVEN** a recipe input with `charge_cost: 5.0` for axe, **WHEN** storage has Slot A (axe, current_charge 12.0) and Slot B (axe, current_charge 435.0), **THEN** system selects Slot A (lowest charge) and reduces it from 12.0 to 7.0
 
 6. **GIVEN** a milestone requiring 50 Wood + 30 Stone, **WHEN** player stockpiles exactly 50 Wood and 30 Stone, **THEN** milestone unlocks and all gated recipes become available permanently
 
@@ -616,11 +788,11 @@ The Recipe Database System has the following designer-adjustable values:
 
 ### Item Charge Consumption (Blocking)
 
-11. **GIVEN** a recipe input with `charge_cost: 20.0` for tool AND the only slot has current_charge 15.0 (insufficient), **WHEN** player attempts to execute recipe, **THEN** recipe transitions to Unavailable AND slot is NOT modified AND status message shows "Insufficient charge"
+11. **GIVEN** a recipe input with `charge_cost: 20.0` for axe AND the only slot has current_charge 15.0 (insufficient), **WHEN** player attempts to execute recipe, **THEN** recipe transitions to Unavailable AND slot is NOT modified AND status message shows "Insufficient charge"
 
 12. **GIVEN** a recipe input with `charge_cost: 15.0` AND a slot has exactly current_charge 15.0, **WHEN** recipe executes to completion, **THEN** slot.current_charge becomes 0.0 AND slot is cleared (resource_id = null, quantity = 0)
 
-13. **GIVEN** Slot A (tool, current_charge 50.0, slot_index 3) AND Slot B (tool, current_charge 50.0, slot_index 7), **WHEN** recipe needs charge_cost 10.0, **THEN** Slot A selected (lower slot_index as tiebreaker per Formula 1)
+13. **GIVEN** Slot A (axe, current_charge 50.0, slot_index 3) AND Slot B (axe, current_charge 50.0, slot_index 7), **WHEN** recipe needs charge_cost 10.0, **THEN** Slot A selected (lower slot_index as tiebreaker per Formula 1)
 
 ### Recipe Execution Failures (Blocking)
 

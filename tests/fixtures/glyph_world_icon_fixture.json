@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "last_updated": "2026-06-13",
+  "resources": [
+    {
+      "id": "wood",
+      "display_name": "Wood",
+      "category": "production_good",
+      "stack_limit": 99,
+      "icon_path": "assets/ui/icons/resources/wood.png",
+      "glyph": "🪵",
+      "world_icon_path": "res://assets/art/tiles/env_tile_resource_wood.png",
+      "fallback_color": [0.55, 0.28, 0.08]
+    },
+    {
+      "id": "bread",
+      "display_name": "Bread",
+      "category": "consumable",
+      "stack_limit": 50,
+      "icon_path": "assets/ui/icons/resources/bread.png",
+      "glyph": "🍞"
+    }
+  ]
+}

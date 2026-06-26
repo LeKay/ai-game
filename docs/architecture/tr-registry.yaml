@@ -849,3 +849,119 @@ requirements:
     status: active
     adr: ""
     notes: "UX spec exists at design/ux/transportation.md — no ADR needed for UI spec; see UX spec acceptance criteria for implementation guidance"
+
+  - id: TR-logistics-015
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "GridMap exposes get_tile_movement_cost(pos) -> float and is_tile_passable(pos) -> bool; resource tiles = 4.0, empty tiles = 1.0, buildings = INF"
+    domain: Feature
+    created: "2026-06-04"
+    revised: ""
+    status: active
+    adr: ADR-0013
+
+  - id: TR-logistics-016
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "LogisticsPathfinder implements A* with Manhattan heuristic; returns PathResult(path: Array[Vector2i], cost: float, found: bool)"
+    domain: Feature
+    created: "2026-06-04"
+    revised: ""
+    status: active
+    adr: ADR-0013
+
+  - id: TR-logistics-017
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "Route creation is blocked if A* finds no viable path; error message names source and destination"
+    domain: Feature
+    created: "2026-06-04"
+    revised: ""
+    status: active
+    adr: ADR-0013
+
+  - id: TR-logistics-018
+    system: logistics
+    gdd: design/gdd/logistics-system.md
+    requirement: "Cached route paths are invalidated and recalculated when terrain changes (building placed/demolished, resource added/removed); routes with no recalculated path transition to DEACTIVATED"
+    domain: Feature
+    created: "2026-06-04"
+    revised: ""
+    status: active
+    adr: ADR-0013
+
+  # --- EFFICIENCY SYSTEM ---
+
+  - id: TR-efficiency-001
+    system: efficiency
+    gdd: design/quick-specs/efficiency-system-2026-06-03.md
+    requirement: "NPC efficiency property (0.0–2.0, default 1.0) computed from hunger_modifier × satisfaction_modifier × equipment_modifier (F1)"
+    domain: Feature
+    created: "2026-06-03"
+    revised: ""
+    status: active
+    adr: ADR-0012
+
+  - id: TR-efficiency-002
+    system: efficiency
+    gdd: design/quick-specs/efficiency-system-2026-06-03.md
+    requirement: "Building efficiency (0.0–2.0, default 1.0) derived from 1.0 + Σ(worker.efficiency − 1.0) + upgrade_bonus (F2)"
+    domain: Feature
+    created: "2026-06-03"
+    revised: ""
+    status: active
+    adr: ADR-0012
+
+  - id: TR-efficiency-003
+    system: efficiency
+    gdd: design/quick-specs/efficiency-system-2026-06-03.md
+    requirement: "Production cycle ticks = max(1, floor(base_cycle_ticks / building.efficiency)) (F3); hunger debuff routed through efficiency, not direct multiplier"
+    domain: Feature
+    created: "2026-06-03"
+    revised: ""
+    status: active
+    adr: ADR-0012
+
+  - id: TR-efficiency-004
+    system: efficiency
+    gdd: design/quick-specs/efficiency-system-2026-06-03.md
+    requirement: "Carrier travel ticks = max(1, floor(base_travel_ticks / carrier.efficiency)) (F4)"
+    domain: Feature
+    created: "2026-06-03"
+    revised: ""
+    status: active
+    adr: ADR-0012
+
+  - id: TR-efficiency-005
+    system: efficiency
+    gdd: design/quick-specs/efficiency-system-2026-06-03.md
+    requirement: "All tuning values from assets/data/efficiency-config.json (no hardcoded values); UI thresholds: efficiency ≥ 1.0 green, 0.5–1.0 yellow, < 0.5 red"
+    domain: Feature
+    created: "2026-06-03"
+    revised: ""
+    status: active
+    adr: ADR-0012
+
+  # --- UI SYSTEM (Day Overview) ---
+
+  - id: TR-ui-006
+    system: ui
+    gdd: design/gdd/tick-system.md
+    requirement: "DayLedger Autoload: accumulates daily resource deposit/withdraw deltas and hunger consumption; freezes on day_transition for panel query"
+    domain: Presentation
+    created: "2026-06-03"
+    revised: ""
+    status: active
+    adr: ADR-0003
+    notes: "Supports Story 007 — data source for Day Overview Panel"
+
+  - id: TR-ui-007
+    system: ui
+    gdd: design/gdd/tick-system.md
+    requirement: "Day Overview Panel shown on day_transition: displays day number, NPC count, hunger consumption list, daily resource delta list; resumes game on dismiss"
+    domain: Presentation
+    created: "2026-06-03"
+    revised: ""
+    status: active
+    adr: ADR-0003
+    notes: "Depends on TR-ui-006 (DayLedger)"

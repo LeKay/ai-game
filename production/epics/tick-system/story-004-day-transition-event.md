@@ -49,16 +49,16 @@ var current_day: int = 1
 signal day_transition(days_elapsed: int)
 
 func _accumulate_ticks(ticks: int) -> void:
-    tick_count += ticks
-    while tick_count >= TICKS_PER_DAY:
-        tick_count -= TICKS_PER_DAY
-        current_day += 1
-        day_transition.emit(1)
-        set_pause(true)  # Auto-pause at day boundary
-    ticks_advanced.emit(ticks)
+	tick_count += ticks
+	while tick_count >= TICKS_PER_DAY:
+		tick_count -= TICKS_PER_DAY
+		current_day += 1
+		day_transition.emit(1)
+		set_pause(true)  # Auto-pause at day boundary
+	ticks_advanced.emit(ticks)
 
 func get_current_day() -> int:
-    return current_day
+	return current_day
 ```
 
 The `while` loop handles the theoretical case where a manual action pushes `tick_count` past multiple thousands. In practice with automatic accumulation, MAX_TICKS_PER_FRAME (100) prevents more than one day per frame. Each iteration subtracts TICKS_PER_DAY, preserving the remainder within the new day.

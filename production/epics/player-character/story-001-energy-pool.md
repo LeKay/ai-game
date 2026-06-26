@@ -1,7 +1,7 @@
 # Story 001: Energy Pool
 
 > **Epic**: Player Character System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Core
 > **Type**: Logic
 > **Manifest Version**: N/A — control manifest not yet created
@@ -40,16 +40,16 @@
 **EnergyPool class structure:**
 ```
 class EnergyPool:
-    - current: int       # [0, max], clamped on all operations
-    - max: int = 100    # configurable knob
-    - depletion_flag: bool  # true when current == 0
+	- current: int       # [0, max], clamped on all operations
+	- max: int = 100    # configurable knob
+	- depletion_flag: bool  # true when current == 0
 
-    Methods:
-    - try_spend(amount: int) -> bool       # check + deduct, returns false if insufficient
-    - spend_unchecked(amount: int) -> void  # deduct and clamp to 0
-    - restore(amount: int) -> void         # add and clamp to max
-    - get_depletion_modifier() -> DepletionMod
-    - is_depleted() -> bool
+	Methods:
+	- try_spend(amount: int) -> bool       # check + deduct, returns false if insufficient
+	- spend_unchecked(amount: int) -> void  # deduct and clamp to 0
+	- restore(amount: int) -> void         # add and clamp to max
+	- get_depletion_modifier() -> DepletionMod
+	- is_depleted() -> bool
 ```
 
 **Key rules:**
@@ -113,7 +113,7 @@ class EnergyPool:
 **Story Type**: Logic
 **Required evidence**: `tests/unit/player_character/energy_pool_test.gd` — must exist and pass
 
-**Status**: [ ] Not yet created
+**Status**: [x] `tests/unit/player_character/energy_pool_test.gd` — 15 tests, all 5 ACs covered
 
 ---
 
@@ -121,3 +121,14 @@ class EnergyPool:
 
 - Depends on: None
 - Unlocks: Story 002 (action dispatch needs EnergyPool), Story 004 (depletion/food needs EnergyPool)
+
+---
+
+## Completion Notes
+**Completed**: 2026-05-28
+**Criteria**: 5/5 passing (all auto-verified from implementation)
+**Deviations**:
+- ADVISORY: `max_energy = 100` and depletion multipliers (2.0/0.5) hardcoded — should be data-driven per coding standards. Address in Story 004 or config pass.
+- ADVISORY: ADR-0007 §Core Design references `res://src/core/player_character.gd`; actual path is `res://src/systems/player_character.gd`. ADR should be corrected.
+**Test Evidence**: Logic — `tests/unit/player_character/energy_pool_test.gd` (15 tests, 5 ACs covered)
+**Code Review**: APPROVED WITH SUGGESTIONS (lean mode — LP-CODE-REVIEW skipped)

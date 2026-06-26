@@ -1,10 +1,10 @@
 # Story 002: First-Fit Stacking Algorithm
 
 > **Epic**: Inventory/Storage System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Core
 > **Type**: Logic
-> **Manifest Version**: Not yet created
+> **Manifest Version**: 2026-05-14
 
 ## Context
 
@@ -213,3 +213,13 @@ func try_consume(container_id: StringName, resource_id: StringName, quantity: in
 
 - Depends on: Story 001 must be DONE (InventoryContainer, InventorySlot, and ResourceRegistry integration must exist)
 - Unlocks: Story 003 (transport completion calls try_deposit), Story 004 (consume_food needs try_consume for the container scan pattern)
+
+## Completion Notes
+**Completed**: 2026-05-31
+**Criteria**: 7/7 passing
+**Deviations**:
+- ADVISORY: `stack_limit` and `max_charge` moved to caller parameters on `InventoryContainer.try_deposit` for testability — registry lookup stays in `InventorySystem.try_deposit`. ADR intent preserved.
+- ADVISORY: `max_charge` parameter added to `_first_fit_allocate`; `current_charge` now initialised on deposit per ADR-0005 guarantee. Story pseudocode omitted this; ADR compliance improved.
+- ADVISORY: `try_consume` iteration bounded to active slots (capacity-bounded), consistent with `try_deposit`. Story pseudocode iterated all slots.
+**Test Evidence**: `tests/unit/inventory/first_fit_stacking_test.gd` — 27 tests (21 story ACs + 6 added: AC-26 unusable path, overflow boundary, charge-on-deposit ×2, rollback-charge)
+**Code Review**: Manual `/code-review` run this session; all required findings fixed (W-2 null crash, W-6 overflow consume, T-2 charge-on-deposit, T-1 AC-26 test). Lean mode — LP-CODE-REVIEW gate skipped.

@@ -36,6 +36,8 @@ The Player Character System is the player's interface with the game world — an
 | 003 | drag-drop-transport | Integration | Ready | ADR-0007 |
 | 004 | depletion-food | Logic | Ready | ADR-0007 |
 | 005 | architect-mode | Integration | Ready | ADR-0007 |
+| 006 | tile-harvest-interaction | UI | Ready | ADR-0007 |
+| 007 | resource-relocation-drag | Integration | Ready | — |
 
 ## Definition of Done
 

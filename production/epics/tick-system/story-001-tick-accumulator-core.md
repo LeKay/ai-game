@@ -55,16 +55,16 @@ var tick_count: int = 0
 signal ticks_advanced(delta_ticks: int)
 
 func _process(delta: float) -> void:
-    if is_paused:
-        return
-    if delta < 0.0:
-        delta = 0.0
-    var raw_ticks: float = delta * TICKS_PER_SECOND_BASE * speed_multiplier
-    raw_ticks += tick_remainder
-    var tick_delta: int = clampi(floori(raw_ticks), 0, MAX_TICKS_PER_FRAME)
-    tick_remainder = fmod(raw_ticks, 1.0)
-    if tick_delta > 0:
-        _accumulate_ticks(tick_delta)
+	if is_paused:
+		return
+	if delta < 0.0:
+		delta = 0.0
+	var raw_ticks: float = delta * TICKS_PER_SECOND_BASE * speed_multiplier
+	raw_ticks += tick_remainder
+	var tick_delta: int = clampi(floori(raw_ticks), 0, MAX_TICKS_PER_FRAME)
+	tick_remainder = fmod(raw_ticks, 1.0)
+	if tick_delta > 0:
+		_accumulate_ticks(tick_delta)
 ```
 
 The remainder is computed with `fmod(raw_ticks, 1.0)` — not `raw_ticks - tick_delta` — to avoid floating-point drift accumulation over long sessions.

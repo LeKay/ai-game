@@ -42,7 +42,9 @@ Every resource in the registry has the following attributes:
 - **`base_value`** (integer, gold) — Default trading price. Null = not tradeable.
 - **`max_charge`** (float, default 100.0) — Maximum charge per item unit. All items carry this value. A slot's total available charge equals `quantity × max_charge` when fully stocked. Productions can consume fractional charge amounts; the slot is emptied only when `current_charge <= 0`.
 - **`description`** (string, max 120 chars) — Tooltip flavor text.
-- **`tags`** (array of strings) — Gameplay flags (e.g., `["burnable"]`, `["tier_2_input"]`). Free-text.
+- **`tags`** (array of strings) — Gameplay flags (e.g., `["burnable"]`, `["food"]`). Free-text.
+- **`movement_cost`** (float, default 4.0) — Tile movement cost for pathfinding when the resource occupies a terrain tile (ADR-0013).
+- **`nutrition`** (float, default 0.0) — Nutrition per item for the Hunger System's efficiency curve (0 = inedible). Berry: 1, Bread: 5. Total daily nutrition = amount × nutrition; 5 nutrition = 100% NPC efficiency (see `design/gdd/hunger-system.md`, Formula 1).
 
 **2. Stack and Charge Rules**
 
@@ -74,16 +76,16 @@ Every resource in the registry has the following attributes:
       "tags": ["burnable", "construction_material"]
     },
     {
-      "id": "tool",
-      "display_name": "Tool",
+      "id": "axe",
+      "display_name": "Axe",
       "category": "production_good",
       "subcategory": "tool",
       "stack_limit": 10,
       "weight": 2.0,
-      "base_value": 30,
+      "base_value": 25,
       "max_charge": 100.0,
-      "icon_path": "assets/ui/icons/tools/tool.png",
-      "description": "A sturdy general-purpose tool for chopping, mining, and crafting.",
+      "icon_path": "assets/ui/icons/resources/axe.png",
+      "description": "A sharp axe for felling trees and cutting wood.",
       "tags": ["tool"]
     }
   ]
@@ -121,7 +123,7 @@ The Resource System is stateless — it's a data registry, not a simulation. Res
 | **Inventory/Storage** | Stores resource instances | Resource System → Inventory: schema lookup via `get_resource(id)` | Inventory validates operations against registry, stores `{resource_id, quantity, current_charge}` per slot |
 | **Production** | Recipes reference resources by `id` | Resource System → Production: filter `category: production_good` | Recipes deduct inputs or consume fractional charge (per-recipe `charge_cost`), add outputs |
 | **Manual Labor** | Harvesting yields resources | Resource System → Manual Labor: resource definitions for tiles | Manual actions add resource instances to player inventory |
-| **Hunger** | Daily consumption | Resource System → Hunger: filter `category: consumable` | Hunger deducts charge (= quantity × max_charge) from storage at day transition |
+| **Hunger** | Daily consumption | Resource System → Hunger: `nutrition` field via `get_definition(id)` | Hunger consumes whole items at day transition; efficiency credit = amount × `nutrition` (charge is NOT involved in feeding) |
 | **Trading** | Merchants stock tradeable resources | Resource System → Trading: filter `base_value != null` | Buy/sell prices = `base_value × merchant_markup` |
 | **HUD/UI** | Display resource info | Resource System → UI: `display_name`, `icon_path`, `description` | UI polls registry for display, shows charge bars for items with partial consumption |
 
@@ -296,7 +298,7 @@ The Resource System itself has no UI — it's a data provider. However, it defin
 
 **Icon Display (HUD System, Inventory UI, Tooltip UI):**
 - All resource icons must be 32×32 pixels (or scalable vector format)
-- Icon file path format: `assets/ui/icons/[category]/[id].png` (e.g., `assets/ui/icons/resources/wood.png`, `assets/ui/icons/tools/tool.png`)
+- Icon file path format: `assets/ui/icons/[category]/[id].png` (e.g., `assets/ui/icons/resources/wood.png`, `assets/ui/icons/resources/axe.png`)
 - Placeholder icon (`assets/ui/icons/placeholder.png`) shown when `icon_path` is missing or invalid
 - Icons should visually distinguish categories: warm colors for consumables, cool colors for production goods, metallic tones for tools
 

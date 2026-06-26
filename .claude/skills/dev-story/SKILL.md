@@ -1,7 +1,7 @@
----
+﻿---
 name: dev-story
-model: qwen-3.6-35b-sovereign
-description: "Read a story file and implement it. Loads the full context (story, GDD requirement, ADR guidelines, control manifest), routes to the right programmer agent for the system and engine, implements the code and test, and confirms each acceptance criterion. The core implementation skill — run after /story-readiness, before /code-review and /story-done."
+model: claude-sonnet-4-6
+description: "Read a story file and implement it. Loads the full context (story, GDD requirement, ADR guidelines, control manifest), routes to the right programmer agent for the system and engine, implements the code and test, and confirms each acceptance criterion. The core implementation skill â€” run after /story-readiness, before /code-review and /story-done."
 argument-hint: "[story-path]"
 user-invocable: true
 allowed-tools: Read, Glob, Grep, Write, Bash, Task, AskUserQuestion
@@ -11,15 +11,15 @@ allowed-tools: Read, Glob, Grep, Write, Bash, Task, AskUserQuestion
 
 This skill bridges planning and code. It reads a story file in full, assembles
 all the context a programmer needs, routes to the correct specialist agent, and
-drives implementation to completion — including writing the test.
+drives implementation to completion â€” including writing the test.
 
 **The loop for every story:**
 ```
-/qa-plan sprint           ← define test requirements before sprint begins
-/story-readiness [path]   ← validate before starting
-/dev-story [path]         ← implement it  (this skill)
-/code-review [files]      ← review it
-/story-done [path]        ← verify and close it
+/qa-plan sprint           â† define test requirements before sprint begins
+/story-readiness [path]   â† validate before starting
+/dev-story [path]         â† implement it  (this skill)
+/code-review [files]      â† review it
+/story-done [path]        â† verify and close it
 ```
 
 **After all sprint stories are done:** run `/team-qa sprint` to execute the full QA cycle and get a sign-off verdict before advancing the project stage.
@@ -33,7 +33,7 @@ drives implementation to completion — including writing the test.
 **If a path is provided**: read that file directly.
 
 **If no argument**: check `production/session-state/active.md` for the active
-story. If found, confirm: "Continuing work on [story title] — is that correct?"
+story. If found, confirm: "Continuing work on [story title] â€” is that correct?"
 If not found, ask: "Which story are we implementing?" Glob
 `production/epics/**/*.md` and list stories with Status: Ready.
 
@@ -45,29 +45,29 @@ If not found, ask: "Which story are we implementing?" Glob
 
 | File | Path | If missing |
 |------|------|------------|
-| TR registry | `docs/architecture/tr-registry.yaml` | **STOP** — "TR registry not found. Run `/create-epics` to generate it." |
-| Governing ADR | path from story's ADR field | **STOP** — "ADR file [path] not found. Run `/architecture-decision` to create it, or correct the filename in the story's ADR field." |
-| Control manifest | `docs/architecture/control-manifest.md` | **WARN and continue** — "Control manifest not found — layer rules cannot be checked. Run `/create-control-manifest`." |
+| TR registry | `docs/architecture/tr-registry.yaml` | **STOP** â€” "TR registry not found. Run `/create-epics` to generate it." |
+| Governing ADR | path from story's ADR field | **STOP** â€” "ADR file [path] not found. Run `/architecture-decision` to create it, or correct the filename in the story's ADR field." |
+| Control manifest | `docs/architecture/control-manifest.md` | **WARN and continue** â€” "Control manifest not found â€” layer rules cannot be checked. Run `/create-control-manifest`." |
 
 If the TR registry or governing ADR is missing, set the story status to **BLOCKED** in the session state and do not spawn any programmer agent.
 
-Read all of the following simultaneously — these are independent reads. Do not start implementation until all context is loaded:
+Read all of the following simultaneously â€” these are independent reads. Do not start implementation until all context is loaded:
 
 ### The story file
 Extract and hold:
 - **Story title, ID, layer, type** (Logic / Integration / Visual/Feel / UI / Config/Data)
-- **TR-ID** — the GDD requirement identifier
+- **TR-ID** â€” the GDD requirement identifier
 - **Governing ADR** reference
 - **Manifest Version** embedded in story header
-- **Acceptance Criteria** — every checkbox item, verbatim
-- **Implementation Notes** — the ADR guidance section in the story
+- **Acceptance Criteria** â€” every checkbox item, verbatim
+- **Implementation Notes** â€” the ADR guidance section in the story
 - **Out of Scope** boundaries
-- **Test Evidence** — the required test file path
-- **Dependencies** — what must be DONE before this story
+- **Test Evidence** â€” the required test file path
+- **Dependencies** â€” what must be DONE before this story
 
 ### The TR registry
 Read `docs/architecture/tr-registry.yaml`. Look up the story's TR-ID.
-Read the current `requirement` text — this is the source of truth for what the
+Read the current `requirement` text â€” this is the source of truth for what the
 GDD requires now. Do not rely on any inline text in the story file (may be stale).
 
 ### The governing ADR
@@ -88,8 +88,8 @@ If they differ, use `AskUserQuestion` before proceeding:
 - Prompt: "Story was written against manifest v[story-date]. Current manifest is v[current-date]. New rules may apply. How do you want to proceed?"
 - Options:
   - `[A] Update story manifest version and implement with current rules (Recommended)`
-  - `[B] Implement with old rules — I accept the risk of non-compliance`
-  - `[C] Stop here — I want to review the manifest diff first`
+  - `[B] Implement with old rules â€” I accept the risk of non-compliance`
+  - `[C] Stop here â€” I want to review the manifest diff first`
 
 If [A]: edit the story file's `Manifest Version:` field to the current manifest date before spawning the programmer. Then read the manifest carefully for new rules.
 If [B]: read the manifest carefully for new rules anyway, and note the version mismatch in the Phase 6 summary under "Deviations".
@@ -105,12 +105,12 @@ After extracting the **Dependencies** list from the story file, validate each:
    - Use `AskUserQuestion`:
      - Prompt: "Story '[current story]' depends on '[dependency title]' which is currently [status], not Complete. How do you want to proceed?"
      - Options:
-       - `[A] Proceed anyway — I accept the dependency risk`
-       - `[B] Stop — I'll complete the dependency first`
-       - `[C] The dependency is done but status wasn't updated — mark it Complete and continue`
+       - `[A] Proceed anyway â€” I accept the dependency risk`
+       - `[B] Stop â€” I'll complete the dependency first`
+       - `[C] The dependency is done but status wasn't updated â€” mark it Complete and continue`
    - If [B]: set story status to **BLOCKED** in session state and stop. Do not spawn any programmer agent.
    - If [C]: ask "May I update [dependency path] Status to Complete?" before continuing.
-   - If [A]: note in Phase 6 summary under "Deviations": "Implemented with incomplete dependency: [dependency title] — [status]."
+   - If [A]: note in Phase 6 summary under "Deviations": "Implemented with incomplete dependency: [dependency title] â€” [status]."
 
 If a dependency file cannot be found: warn "Dependency story not found: [path]. Verify the path or create the story file."
 
@@ -118,7 +118,7 @@ If a dependency file cannot be found: warn "Dependency story not found: [path]. 
 
 ### Engine reference
 Read `.claude/docs/technical-preferences.md`:
-- `Engine:` value — determines which programmer agents to use
+- `Engine:` value â€” determines which programmer agents to use
 - Naming conventions (class names, file names, signal/event names)
 - Performance budgets (frame budget, memory ceiling)
 - Forbidden patterns
@@ -130,22 +130,22 @@ Read `.claude/docs/technical-preferences.md`:
 Based on the story's **Layer**, **Type**, and **system name**, determine which
 specialist to spawn via Task.
 
-**Config/Data stories — skip agent spawning entirely:**
-If the story's Type is `Config/Data`, no programmer agent or engine specialist is needed. Jump directly to Phase 4 (Config/Data note). The implementation is a data file edit — no routing table evaluation, no engine specialist.
+**Config/Data stories â€” skip agent spawning entirely:**
+If the story's Type is `Config/Data`, no programmer agent or engine specialist is needed. Jump directly to Phase 4 (Config/Data note). The implementation is a data file edit â€” no routing table evaluation, no engine specialist.
 
 ### Primary agent routing table
 
 | Story context | Primary agent |
 |---|---|
-| Foundation layer — any type | `engine-programmer` |
-| Any layer — Type: UI | `ui-programmer` |
-| Any layer — Type: Visual/Feel | `gameplay-programmer` (implements) |
-| Core or Feature — gameplay mechanics | `gameplay-programmer` |
-| Core or Feature — AI behaviour, pathfinding | `ai-programmer` |
-| Core or Feature — networking, replication | `network-programmer` |
-| Config/Data — no code | No agent needed (see Phase 4 Config note) |
+| Foundation layer â€” any type | `engine-programmer` |
+| Any layer â€” Type: UI | `ui-programmer` |
+| Any layer â€” Type: Visual/Feel | `gameplay-programmer` (implements) |
+| Core or Feature â€” gameplay mechanics | `gameplay-programmer` |
+| Core or Feature â€” AI behaviour, pathfinding | `ai-programmer` |
+| Core or Feature â€” networking, replication | `network-programmer` |
+| Config/Data â€” no code | No agent needed (see Phase 4 Config note) |
 
-### Engine specialist — always spawn as secondary for code stories
+### Engine specialist â€” always spawn as secondary for code stories
 
 Read the `Engine Specialists` section of `.claude/docs/technical-preferences.md`
 to get the configured primary specialist. Spawn them alongside the primary agent
@@ -171,7 +171,7 @@ Spawn the chosen programmer agent(s) via Task with the full context package:
 Provide the agent with:
 1. The complete story file content
 2. The current GDD requirement text (from TR registry)
-3. The ADR Decision + Implementation Guidelines (verbatim — do not summarise)
+3. The ADR Decision + Implementation Guidelines (verbatim â€” do not summarise)
 4. The control manifest rules for this layer
 5. The engine naming conventions and performance budgets
 6. Any engine-specific notes from the ADR Engine Compatibility section
@@ -194,7 +194,7 @@ changed from/to.
 ### Visual/Feel stories
 
 Spawn `gameplay-programmer` to implement the code/animation calls. Note that
-Visual/Feel acceptance criteria cannot be auto-verified — the "does it feel right?"
+Visual/Feel acceptance criteria cannot be auto-verified â€” the "does it feel right?"
 check happens in `/story-done` via manual confirmation.
 
 ---
@@ -202,7 +202,7 @@ check happens in `/story-done` via manual confirmation.
 ## Phase 5: Write the Test
 
 For **Logic** and **Integration** stories, the test must be written as part of
-this implementation — not deferred to later.
+this implementation â€” not deferred to later.
 
 Remind the programmer agent:
 
@@ -241,13 +241,13 @@ Present a concise implementation summary:
 ## Implementation Complete: [Story Title]
 
 **Files changed**:
-- `src/[path]` — created / modified ([brief description])
-- `tests/[path]` — test file ([N] test functions)
+- `src/[path]` â€” created / modified ([brief description])
+- `tests/[path]` â€” test file ([N] test functions)
 
 **Acceptance criteria covered**:
-- [x] [criterion] — implemented in [file:function]
-- [x] [criterion] — covered by test [test_name]
-- [ ] [criterion] — DEFERRED: requires playtest (Visual/Feel)
+- [x] [criterion] â€” implemented in [file:function]
+- [x] [criterion] â€” covered by test [test_name]
+- [ ] [criterion] â€” DEFERRED: requires playtest (Visual/Feel)
 
 **Deviations from scope**: [None] or [list files touched outside story boundary]
 **Engine risks flagged**: [None] or [specialist finding]
@@ -263,10 +263,10 @@ Ready for: `/code-review [file1] [file2]` then `/story-done [story-path]`
 Silently append to `production/session-state/active.md`:
 
 ```
-## Session Extract — /dev-story [date]
-- Story: [story-path] — [story title]
+## Session Extract â€” /dev-story [date]
+- Story: [story-path] â€” [story title]
 - Files changed: [comma-separated list]
-- Test written: [path, or "None — Visual/Feel/Config story"]
+- Test written: [path, or "None â€” Visual/Feel/Config story"]
 - Blockers: [None, or description]
 - Next: /code-review [files] then /story-done [story-path]
 ```
@@ -279,39 +279,39 @@ Create `active.md` if it does not exist. Confirm: "Session state updated."
 
 If any spawned agent (via Task) returns BLOCKED, errors, or cannot complete:
 
-1. **Surface immediately**: Report "[AgentName]: BLOCKED — [reason]" to the user before continuing to dependent phases
+1. **Surface immediately**: Report "[AgentName]: BLOCKED â€” [reason]" to the user before continuing to dependent phases
 2. **Assess dependencies**: Check whether the blocked agent's output is required by subsequent phases. If yes, do not proceed past that dependency point without user input.
 3. **Offer options** via AskUserQuestion with choices:
    - Skip this agent and note the gap in the final report
    - Retry with narrower scope
    - Stop here and resolve the blocker first
-4. **Always produce a partial report** — output whatever was completed. Never discard work because one agent blocked.
+4. **Always produce a partial report** â€” output whatever was completed. Never discard work because one agent blocked.
 
 Common blockers:
-- Input file missing (story not found, GDD absent) → redirect to the skill that creates it
-- ADR status is Proposed → do not implement; run `/architecture-decision` first
-- Scope too large → split into two stories via `/create-stories`
-- Conflicting instructions between ADR and story → surface the conflict, do not guess
-- Manifest version mismatch → show diff to user, ask whether to proceed with old rules or update story first
+- Input file missing (story not found, GDD absent) â†’ redirect to the skill that creates it
+- ADR status is Proposed â†’ do not implement; run `/architecture-decision` first
+- Scope too large â†’ split into two stories via `/create-stories`
+- Conflicting instructions between ADR and story â†’ surface the conflict, do not guess
+- Manifest version mismatch â†’ show diff to user, ask whether to proceed with old rules or update story first
 
 ## Collaborative Protocol
 
-- **File writes are delegated** — all source code, test files, and evidence docs are written by sub-agents spawned via Task. Each sub-agent enforces the "May I write to [path]?" protocol individually. This orchestrator does not write files directly.
-- **Load before implementing** — do not start coding until all context is loaded
+- **File writes are delegated** â€” all source code, test files, and evidence docs are written by sub-agents spawned via Task. Each sub-agent enforces the "May I write to [path]?" protocol individually. This orchestrator does not write files directly.
+- **Load before implementing** â€” do not start coding until all context is loaded
   (story, TR-ID, ADR, manifest, engine prefs). Incomplete context produces code
   that drifts from design.
-- **The ADR is the law** — implementation must follow the ADR's Implementation
+- **The ADR is the law** â€” implementation must follow the ADR's Implementation
   Guidelines. If the guidelines conflict with what seems "better," flag it in the
   summary rather than silently deviating.
-- **Stay in scope** — the Out of Scope section is a contract. If implementing
+- **Stay in scope** â€” the Out of Scope section is a contract. If implementing
   the story requires touching an out-of-scope file, stop and surface it:
   "Implementing [criterion] requires modifying [file], which is out of scope.
   Shall I proceed or create a separate story?"
-- **Test is not optional for Logic/Integration** — do not mark implementation
+- **Test is not optional for Logic/Integration** â€” do not mark implementation
   complete without the test file existing
-- **Visual/Feel criteria are deferred, not skipped** — mark them as DEFERRED
+- **Visual/Feel criteria are deferred, not skipped** â€” mark them as DEFERRED
   in the summary; they will be manually verified in `/story-done`
-- **Ask before large structural decisions** — if the story requires an
+- **Ask before large structural decisions** â€” if the story requires an
   architectural pattern not covered by the ADR, surface it before implementing:
   "The ADR doesn't specify how to handle [case]. My plan is [X]. Proceed?"
 

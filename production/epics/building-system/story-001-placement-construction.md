@@ -1,7 +1,7 @@
 # Story 001: Placement and Construction
 
 > **Epic**: Building System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: Integration — ADR-0008
 > **Manifest Version**: N/A — control manifest not yet created
@@ -195,3 +195,12 @@ func validate_placement(x, y, building_id) -> PlacementResult:
 
 - Depends on: Story 001 of Grid/Map System (GridMap.validate_placement and place_building), Story 001 of Inventory System (try_consume), Story 001 of Player Character (consume_energy)
 - Unlocks: Story 002 (production requires buildings to exist in CONSTRUCTING/OPERATING state)
+
+---
+
+## Completion Notes
+**Completed**: 2026-05-31
+**Criteria**: 6/6 passing (all core logic auto-verified via code + integration tests; 2 UI sub-elements deferred — see deviations)
+**Deviations**: ADVISORY — `_spawn_visual()` stub; no PackedScene asset yet — MapRoot connects to `building_placed` signal when assets exist. ADVISORY — AC-01 scaffolding visual + AC-02 ghost red tint/tooltip are UI-layer concerns deferred to build-placement HUD story. ADVISORY — Manifest Version N/A (story predates manifest).
+**Test Evidence**: Integration — `tests/integration/building_system/placement_construction_test.gd` exists, 15 tests, all 6 ACs traced.
+**Code Review**: Complete (performed in session; fixes applied: `building_state_changed` reason param, `_all_buildings` type hint, energy null guard, ADR-0004 amended for TILE_SIZE + FastNoiseLite)

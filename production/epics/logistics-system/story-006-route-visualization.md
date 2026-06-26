@@ -1,7 +1,7 @@
 # Story 006: Route Visualization
 
 > **Epic**: Logistics System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Feature (Presentation)
 > **Type**: Visual/Feel
 > **Manifest Version**: 2026-05-14
@@ -145,3 +145,10 @@ func _update_route_line(route: LogisticsRoute):
 
 - Depends on: Story 001 (route model), Story 004 (building status integration — status values drive line colors)
 - Unlocks: None
+
+## Completion Notes
+**Completed**: 2026-06-03
+**Criteria**: 7/8 passing (AC-5 colorblind line patterns DEFERRED per user instruction)
+**Deviations**: DEFERRED — colorblind line patterns (solid/dashed/dotted) skipped; bug fix: Engine.has_singleton() replaced with direct autoload access
+**Test Evidence**: Visual/Feel — evidence doc at production/qa/evidence/route-visualization-evidence.md (sign-off pending)
+**Code Review**: Skipped (Lean mode)

@@ -1,6 +1,6 @@
----
+﻿---
 name: launch-checklist
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Complete launch readiness validation covering every department: code, content, store, marketing, community, infrastructure, legal, and go/no-go sign-offs."
 argument-hint: "[launch-date or 'dry-run']"
 user-invocable: true
@@ -215,11 +215,11 @@ Generated: [Date]
 [List items that have documented workarounds or accepted risk]
 
 ### Sign-Offs Required
-- [ ] Creative Director — Content and experience quality
-- [ ] Technical Director — Technical health and stability
-- [ ] QA Lead — Quality and test coverage
-- [ ] Producer — Schedule and overall readiness
-- [ ] Release Manager — Build and deployment readiness
+- [ ] Creative Director â€” Content and experience quality
+- [ ] Technical Director â€” Technical health and stability
+- [ ] QA Lead â€” Quality and test coverage
+- [ ] Producer â€” Schedule and overall readiness
+- [ ] Release Manager â€” Build and deployment readiness
 ```
 
 ---

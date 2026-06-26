@@ -2,7 +2,7 @@
 
 > **Status**: Draft
 > **Created**: 2026-05-05
-> **Last Updated**: 2026-05-12
+> **Last Updated**: 2026-06-13 (code↔doc sync: implementation statuses, 1440 ticks/day, Efficiency GDD)
 > **Source Concept**: design/gdd/game-concept.md
 
 ---
@@ -17,35 +17,37 @@
 
 | # | System Name | Category | Priority | Status | Design Doc | Depends On |
 |---|-------------|----------|----------|--------|------------|------------|
-| 1 | Tick System | Core | Vertical Slice | Approved | design/gdd/tick-system.md | None |
-| 2 | Resource System | Core | Vertical Slice | Approved | design/gdd/resource-system.md | None |
-| 3 | Input System | Core | Vertical Slice | Approved | design/gdd/input-system.md | None |
-| 4 | Recipe Database System | Economy | MVP | Designed | design/gdd/recipe-database.md | None |
-| 5 | Grid/Map System | Core | Vertical Slice | Approved | design/gdd/grid-map-system.md | Resource System |
-| 6 | Player Character System (inferred) | Core | Vertical Slice | Approved | design/gdd/player-character-system.md | Input System, Tick System |
-| 7 | Camera System (inferred) | Core | Vertical Slice | Approved | design/gdd/camera-system.md | Input System, Grid/Map System |
-| 8 | Inventory/Storage System | Economy | Vertical Slice | Approved | design/gdd/inventory-storage-system.md | Resource System |
+| 1 | Tick System | Core | Vertical Slice | Implemented | design/gdd/tick-system.md | None |
+| 2 | Resource System | Core | Vertical Slice | Implemented | design/gdd/resource-system.md | None |
+| 3 | Input System | Core | Vertical Slice | Implemented | design/gdd/input-system.md | None |
+| 4 | Recipe Database System | Economy | MVP | Partially Implemented (CraftingRegistry + PRODUCTION_TABLE; JSON registry pending) | design/gdd/recipe-database.md | None |
+| 5 | Grid/Map System | Core | Vertical Slice | Implemented | design/gdd/grid-map-system.md | Resource System |
+| 6 | Player Character System (inferred) | Core | Vertical Slice | Implemented | design/gdd/player-character-system.md | Input System, Tick System |
+| 7 | Camera System (inferred) | Core | Vertical Slice | Implemented | design/gdd/camera-system.md | Input System, Grid/Map System |
+| 8 | Inventory/Storage System | Economy | Vertical Slice | Implemented | design/gdd/inventory-storage-system.md | Resource System |
 | 9 | Settings System (inferred) | Meta | Full Vision | Not Started | — | Input System |
-| 10 | Building System | Gameplay | Vertical Slice | Approved | design/gdd/building-system.md | Grid/Map System, Resource System, Inventory/Storage System, Recipe Database System |
-| 11 | NPC System | Gameplay | Vertical Slice | Approved | design/gdd/npc-system.md | Building System, Inventory/Storage System |
-| 12 | Hunger System | Gameplay | Vertical Slice | Approved | design/gdd/hunger-system.md | NPC System, Player Character System, Inventory/Storage System |
+| 10 | Building System | Gameplay | Vertical Slice | Implemented | design/gdd/building-system.md | Grid/Map System, Resource System, Inventory/Storage System, Recipe Database System |
+| 11 | NPC System | Gameplay | Vertical Slice | Implemented | design/gdd/npc-system.md | Building System, Inventory/Storage System |
+| 12 | Hunger System | Gameplay | Vertical Slice | Implemented (per-NPC nutrition model) | design/gdd/hunger-system.md | NPC System, Player Character System, Inventory/Storage System |
 | 13 | Bevölkerungstier System | Progression | Core Experience | Not Started | — | NPC System, Hunger System, Inventory/Storage System |
-| 14 | Logistics System | Gameplay | Core Experience | Approved | design/gdd/logistics-system.md | NPC System, Building System, Grid/Map System, Tick System |
+| 14 | Logistics System | Gameplay | Core Experience | Implemented (shared-carrier model) | design/gdd/logistics-system.md | NPC System, Building System, Grid/Map System, Tick System |
+| 30 | Efficiency System | Gameplay | Core Experience | Implemented | design/gdd/efficiency-system.md | NPC System, Building System, Hunger System, Logistics System |
+| 31 | Experience System | Progression | Core Experience | Implemented (cosmetic — no gameplay modifier yet) | design/gdd/experience-system.md | NPC System, Logistics System |
 | 15 | Perk System | Progression | Core Experience | Not Started | — | Bevölkerungstier System, Inventory/Storage System |
 | 16 | Goal System | Progression | MVP | Not Started | — | NPC System, Gold Economy, Hunger System |
 | 17 | Gold Economy | Economy | Core Experience | Not Started | — | Inventory/Storage System, Trading System |
 | 18 | Trading System | Economy | Core Experience | Not Started | — | Inventory/Storage System, Tick System, Übermap System |
 | 19 | Übermap System | Gameplay | Core Experience | Not Started | — | Grid/Map System, NPC System, Tick System |
-| 20 | Save/Load System | Persistence | MVP | Not Started | — | ALL gameplay systems |
+| 20 | Save/Load System | Persistence | MVP | In Progress (stories 001–003 done; save_world_save_manager.gd) | — | ALL gameplay systems |
 | 21 | Audio System (inferred) | Audio | Core Experience | Not Started | — | Building System, Input System |
 | 22 | VFX/Feedback System (inferred) | UI | Core Experience | Not Started | — | Building System |
-| 23 | HUD System | UI | Vertical Slice | Approved | design/gdd/hud-system.md | Inventory/Storage System, Tick System |
+| 23 | HUD System | UI | Vertical Slice | Implemented | design/gdd/hud-system.md | Inventory/Storage System, Tick System |
 | 24 | Dashboard UI (inferred) | UI | MVP | Not Started | — | Building System |
 | 25 | Goal Tracking UI (inferred) | UI | MVP | Not Started | — | Goal System |
 | 26 | Trading UI (inferred) | UI | Core Experience | Not Started | — | Trading System, Gold Economy |
 | 27 | Settings/Pause Menu UI (inferred) | UI | MVP | Not Started | — | Settings System, Tick System, Save/Load System |
 | 28 | Tutorial System (inferred) | Meta | Core Experience | Not Started | — | ALL core gameplay systems |
-| 29 | Day Overview System | UI | MVP | Not Started | — | Tick System, Resource System |
+| 29 | Day Overview System | UI | MVP | Implemented (day_ledger.gd + DayOverviewPanel) | — | Tick System, Resource System |
 
 ---
 
@@ -81,7 +83,7 @@ Systems sorted by dependency order — design and build from top to bottom. Syst
 
 ### Layer 1: Foundation (Zero Dependencies)
 
-1. **Tick System** — Time is the basis for all gameplay (1000 ticks/day, variable speed)
+1. **Tick System** — Time is the basis for all gameplay (1440 ticks/day, variable speed)
 2. **Resource System** — Resource database (pure data, no logic dependencies)
 3. **Input System** — Hardware → Software bridge (mouse, keyboard, WASD)
 4. **Recipe Database System** — Data definitions for production chains (pure data)

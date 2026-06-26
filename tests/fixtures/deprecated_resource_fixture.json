@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "resources": [
+    {
+      "id": "berry",
+      "display_name": "Berry",
+      "category": "consumable",
+      "stack_limit": 50,
+      "icon_path": "assets/ui/icons/resources/berry.png"
+    },
+    {
+      "id": "old_tool",
+      "display_name": "Old Tool",
+      "category": "consumable",
+      "stack_limit": 1,
+      "icon_path": "assets/ui/icons/resources/old_tool.png",
+      "deprecated": true
+    }
+  ]
+}

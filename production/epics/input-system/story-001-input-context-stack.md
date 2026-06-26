@@ -1,7 +1,7 @@
 # Story 001: Input Context Stack and Action Dispatch
 
 > **Epic**: Input System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Foundation
 > **Type**: Logic
 > **Manifest Version**: N/A
@@ -109,7 +109,7 @@
 **Required evidence**:
 - Logic: `tests/unit/input/input_context_stack_test.gd` — must exist and pass
 
-**Status**: [ ] Not yet created
+**Status**: [x] `tests/unit/input/input_context_stack_test.gd` — 14/14 PASSED (2026-05-27)
 
 ---
 
@@ -117,3 +117,12 @@
 
 - Depends on: None
 - Unlocks: Story 002, Story 003, Story 004, Story 005
+
+## Completion Notes
+**Completed**: 2026-05-27
+**Criteria**: 6/8 passing (1 deferred — keybinding remapping requires runtime; 1 out of scope — conflict resolution → Story 003)
+**Test Evidence**: Logic: `tests/unit/input/input_context_stack_test.gd` — 14/14 PASSED
+**Code Review**: Complete (Lean mode) — dispatch loop early-return bug fixed; `static var` → `const` in input_actions.gd; PAUSED-context dispatch test added
+**Deviations**:
+- ADVISORY: `request_debounce()` implemented in Story 001 (marked Out of Scope → Story 002); compliant with ADR-0003; Story 002 should be updated to cover debounce testing/integration rather than initial implementation
+- ADVISORY: Debounce uses `DEBOUNCE_DELAY_MSEC: int = 250` vs ADR float representation — functionally equivalent, integer milliseconds preferred

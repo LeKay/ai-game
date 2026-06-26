@@ -1,6 +1,6 @@
----
+﻿---
 name: team-audio
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Orchestrate audio team: audio-director + sound-designer + technical-artist + gameplay-programmer for full audio pipeline from direction to implementation."
 argument-hint: "[feature or area to design audio for]"
 user-invocable: true
@@ -8,7 +8,7 @@ allowed-tools: Read, Glob, Grep, Write, Edit, Bash, Task, AskUserQuestion, TodoW
 ---
 
 If no argument is provided, output usage guidance and exit without spawning any agents:
-> Usage: `/team-audio [feature or area]` — specify the feature or area to design audio for (e.g., `combat`, `main menu`, `forest biome`, `boss encounter`). Do not use `AskUserQuestion` here; output the guidance directly.
+> Usage: `/team-audio [feature or area]` â€” specify the feature or area to design audio for (e.g., `combat`, `main menu`, `forest biome`, `boss encounter`). Do not use `AskUserQuestion` here; output the guidance directly.
 
 When this skill is invoked with an argument, orchestrate the audio team through a structured pipeline.
 
@@ -29,11 +29,11 @@ The user must approve before moving to the next step.
 ## How to Delegate
 
 Use the Task tool to spawn each team member as a subagent:
-- `subagent_type: audio-director` — Sonic identity, emotional tone, audio palette
-- `subagent_type: sound-designer` — SFX specifications, audio events, mixing groups
-- `subagent_type: technical-artist` — Audio middleware, bus structure, memory budgets
-- `subagent_type: [primary engine specialist]` — Validate audio integration patterns for the engine
-- `subagent_type: gameplay-programmer` — Audio manager, gameplay triggers, adaptive music
+- `subagent_type: audio-director` â€” Sonic identity, emotional tone, audio palette
+- `subagent_type: sound-designer` â€” SFX specifications, audio events, mixing groups
+- `subagent_type: technical-artist` â€” Audio middleware, bus structure, memory budgets
+- `subagent_type: [primary engine specialist]` â€” Validate audio integration patterns for the engine
+- `subagent_type: gameplay-programmer` â€” Audio manager, gameplay triggers, adaptive music
 
 Always provide full context in each agent's prompt (feature description, existing audio assets, design doc references).
 
@@ -93,11 +93,11 @@ Spawn the `gameplay-programmer` agent to:
 6. **Output a summary** with: audio event count, estimated asset count,
    implementation tasks, and any open questions between team members.
 
-Verdict: **COMPLETE** — audio design document produced and team pipeline finished.
+Verdict: **COMPLETE** â€” audio design document produced and team pipeline finished.
 
 If the pipeline stops because a dependency is unresolved (e.g., critical accessibility gap or missing GDD not resolved by the user):
 
-Verdict: **BLOCKED** — [reason]
+Verdict: **BLOCKED** â€” [reason]
 
 ## File Write Protocol
 
@@ -115,16 +115,16 @@ protocol. This orchestrator does not write files directly.
 
 If any spawned agent (via Task) returns BLOCKED, errors, or cannot complete:
 
-1. **Surface immediately**: Report "[AgentName]: BLOCKED — [reason]" to the user before continuing to dependent phases
+1. **Surface immediately**: Report "[AgentName]: BLOCKED â€” [reason]" to the user before continuing to dependent phases
 2. **Assess dependencies**: Check whether the blocked agent's output is required by subsequent phases. If yes, do not proceed past that dependency point without user input.
 3. **Offer options** via AskUserQuestion with choices:
    - Skip this agent and note the gap in the final report
    - Retry with narrower scope
    - Stop here and resolve the blocker first
-4. **Always produce a partial report** — output whatever was completed. Never discard work because one agent blocked.
+4. **Always produce a partial report** â€” output whatever was completed. Never discard work because one agent blocked.
 
 Common blockers:
-- Input file missing (story not found, GDD absent) → redirect to the skill that creates it
-- ADR status is Proposed → do not implement; run `/architecture-decision` first
-- Scope too large → split into two stories via `/create-stories`
-- Conflicting instructions between ADR and story → surface the conflict, do not guess
+- Input file missing (story not found, GDD absent) â†’ redirect to the skill that creates it
+- ADR status is Proposed â†’ do not implement; run `/architecture-decision` first
+- Scope too large â†’ split into two stories via `/create-stories`
+- Conflicting instructions between ADR and story â†’ surface the conflict, do not guess

@@ -1,6 +1,6 @@
----
+﻿---
 name: test-setup
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Scaffold the test framework and CI/CD pipeline for the project's engine. Creates the tests/ directory structure, engine-specific test runner configuration, and GitHub Actions workflow. Run once during Technical Setup phase before the first sprint begins."
 argument-hint: "[force]"
 user-invocable: true
@@ -30,9 +30,9 @@ A test framework installed at sprint four costs 3 sprints.
      "Engine not configured. Run `/setup-engine` first, then re-run `/test-setup`."
 
 2. **Check for existing test infrastructure**:
-   - Glob `tests/` — does the directory exist?
-   - Glob `tests/unit/` and `tests/integration/` — do subdirectories exist?
-   - Glob `.github/workflows/` — does a CI workflow file exist?
+   - Glob `tests/` â€” does the directory exist?
+   - Glob `tests/unit/` and `tests/integration/` â€” do subdirectories exist?
+   - Glob `.github/workflows/` â€” does a CI workflow file exist?
    - Glob `tests/gdunit4_runner.gd` (Godot) or `tests/EditMode/` (Unity) or
      `Source/Tests/` (Unreal) for engine-specific artifacts.
 
@@ -43,7 +43,7 @@ A test framework installed at sprint four costs 3 sprints.
      to regenerate. Proceeding will not overwrite existing test files."
 
 If the `force` argument is passed, skip the "already exists" early-exit and
-proceed — but still do not overwrite files that already exist at a given path.
+proceed â€” but still do not overwrite files that already exist at a given path.
 Only create files that are missing.
 
 ---
@@ -53,20 +53,20 @@ Only create files that are missing.
 Based on the engine detected and the existing state, present a plan:
 
 ```
-## Test Setup Plan — [Engine]
+## Test Setup Plan â€” [Engine]
 
 I will create the following (skipping any that already exist):
 
 tests/
-  unit/           — Isolated unit tests for formulas, state, and logic
-  integration/    — Cross-system tests and save/load round-trips
-  smoke/          — Critical path test list (15-minute manual gate)
-  evidence/       — Screenshot and manual test sign-off records
-  README.md       — Test framework documentation
+  unit/           â€” Isolated unit tests for formulas, state, and logic
+  integration/    â€” Cross-system tests and save/load round-trips
+  smoke/          â€” Critical path test list (15-minute manual gate)
+  evidence/       â€” Screenshot and manual test sign-off records
+  README.md       â€” Test framework documentation
 
-[Engine-specific files — see per-engine details below]
+[Engine-specific files â€” see per-engine details below]
 
-.github/workflows/tests.yml  — CI: run tests on every push to main
+.github/workflows/tests.yml  â€” CI: run tests on every push to main
 
 Estimated time: ~5 minutes to create all files.
 ```
@@ -104,19 +104,19 @@ tests/
 
 ## Running Tests
 
-[Engine-specific command — see below]
+[Engine-specific command â€” see below]
 
 ## Test Naming
 
 - **Files**: `[system]_[feature]_test.[ext]`
 - **Functions**: `test_[scenario]_[expected]`
-- **Example**: `combat_damage_test.gd` → `test_base_attack_returns_expected_damage()`
+- **Example**: `combat_damage_test.gd` â†’ `test_base_attack_returns_expected_damage()`
 
-## Story Type → Test Evidence
+## Story Type â†’ Test Evidence
 
 | Story Type | Required Evidence | Location |
 |---|---|---|
-| Logic | Automated unit test — must pass | `tests/unit/[system]/` |
+| Logic | Automated unit test â€” must pass | `tests/unit/[system]/` |
 | Integration | Integration test OR playtest doc | `tests/integration/[system]/` |
 | Visual/Feel | Screenshot + lead sign-off | `tests/evidence/` |
 | UI | Manual walkthrough OR interaction test | `tests/evidence/` |
@@ -136,7 +136,7 @@ A failed test suite blocks merging.
 Create `tests/gdunit4_runner.gd`:
 
 ```gdscript
-# GdUnit4 test runner — invoked by CI and /smoke-check
+# GdUnit4 test runner â€” invoked by CI and /smoke-check
 # Usage: godot --headless --script tests/gdunit4_runner.gd
 extends SceneTree
 
@@ -152,15 +152,15 @@ func _init() -> void:
 ```
 
 Create `tests/unit/.gdignore_placeholder` with content:
-`# Unit tests go here — one subdirectory per system (e.g., tests/unit/combat/)`
+`# Unit tests go here â€” one subdirectory per system (e.g., tests/unit/combat/)`
 
 Create `tests/integration/.gdignore_placeholder` with content:
-`# Integration tests go here — one subdirectory per system`
+`# Integration tests go here â€” one subdirectory per system`
 
 Note in the README: **Installing GdUnit4**
 ```
-1. Open Godot → AssetLib → search "GdUnit4" → Download & Install
-2. Enable the plugin: Project → Project Settings → Plugins → GdUnit4 ✓
+1. Open Godot â†’ AssetLib â†’ search "GdUnit4" â†’ Download & Install
+2. Enable the plugin: Project â†’ Project Settings â†’ Plugins â†’ GdUnit4 âœ“
 3. Restart the editor
 4. Verify: res://addons/gdunit4/ exists
 ```
@@ -185,7 +185,7 @@ Assembly definition required: `tests/PlayMode/PlayModeTests.asmdef`
 
 Note in the README: **Enabling Unity Test Framework**
 ```
-Window → General → Test Runner
+Window â†’ General â†’ Test Runner
 (Unity Test Framework is included by default in Unity 2019+)
 ```
 
@@ -195,7 +195,7 @@ Create `Source/Tests/README.md`:
 ```markdown
 # Unreal Automation Tests
 Tests use the UE Automation Testing Framework.
-Run via: Session Frontend → Automation → select "MyGame." tests
+Run via: Session Frontend â†’ Automation â†’ select "MyGame." tests
 Or headlessly: UnrealEditor -nullrhi -ExecCmds="Automation RunTests MyGame.; Quit"
 
 Test class naming: F[SystemName]Test
@@ -364,7 +364,7 @@ Create `tests/smoke/critical-paths.md`:
 
 <!-- Add the primary mechanic for each sprint here as it is implemented -->
 <!-- Example: "Player can move, jump, and the camera follows correctly" -->
-4. [Primary mechanic — update when first core system is implemented]
+4. [Primary mechanic â€” update when first core system is implemented]
 
 ## Data Integrity
 
@@ -402,23 +402,23 @@ Next steps:
    test evidence requirements
 4. `/smoke-check` before every QA hand-off
 
-Gate note: /gate-check Technical Setup → Pre-Production now requires:
+Gate note: /gate-check Technical Setup â†’ Pre-Production now requires:
 - tests/ directory with unit/ and integration/ subdirectories
 - .github/workflows/tests.yml
 - At least one example test file
 Run /test-setup and write one example test before advancing.
 
-Verdict: **COMPLETE** — test framework scaffolded and CI/CD wired up.
+Verdict: **COMPLETE** â€” test framework scaffolded and CI/CD wired up.
 ```
 
 ---
 
 ## Collaborative Protocol
 
-- **Never overwrite existing test files** — only create files that are missing.
+- **Never overwrite existing test files** â€” only create files that are missing.
   If a test runner file exists, leave it as-is.
-- **Always ask before creating files** — Phase 2 requires explicit approval.
-- **Engine detection is non-negotiable** — if the engine is not configured,
+- **Always ask before creating files** â€” Phase 2 requires explicit approval.
+- **Engine detection is non-negotiable** â€” if the engine is not configured,
   stop and redirect to `/setup-engine`. Do not guess.
 - **`force` flag skips the "already exists" early-exit but never overwrites.**
   It means "create any missing files even if the directory already exists."

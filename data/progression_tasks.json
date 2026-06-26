@@ -1,0 +1,377 @@
+{
+  "version": 1,
+  "last_updated": "2026-06-24",
+  "_comment": "Tasks granted on Progression Tree node unlock. Keyed by node_id. Each requirement is typed: { type: 'resource', resource, amount } (possession, consumed on Complete) or { type: 'building', building: '<BuildingType key>', amount } (cumulative builds, never consumed). A typeless entry with a 'resource' field is read as a resource requirement (legacy). Every requirement MUST be obtainable from that node's prerequisite closure (the node itself + all transitive prerequisites) or the player can soft-lock. CONVENTION (2026-06-24): every node that unlocks a building requires building it AND delivering the good it produces. Storage/Shelter/Bridge/Collection Point produce no good, so they are build-only. Building requirements count both manually-constructed buildings (construction-complete) and instant buildings like Collection Point/Road (counted on placement) — see TaskSystem._count_building. The Hearth (root) starts LOCKED; unlocking it grants the build-Collection-Point task as the player's first objective. Paving (ROAD) stays a plain delivery task for design reasons. See design/quick-specs/delivery-task-system-2026-06-20.md.",
+  "tasks": {
+    "hearth": {
+      "title": "Light the Hearth",
+      "requires": [ { "type": "building", "building": "COLLECTION_POINT", "amount": 1 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "foraging": {
+      "title": "First Harvest",
+      "requires": [ { "resource": "berry", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "gathering_hut": {
+      "title": "Raise the Gathering Hut",
+      "requires": [
+        { "type": "building", "building": "GATHERING_HUT", "amount": 1 },
+        { "type": "resource", "resource": "berry", "amount": 8 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "shelter": {
+      "title": "Raise a Shelter",
+      "requires": [ { "type": "building", "building": "RESIDENTIAL_HOUSE", "amount": 1 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "paving": {
+      "title": "Feed the Roadworks",
+      "requires": [ { "resource": "berry", "amount": 12 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "bridge_building": {
+      "title": "Bridge the Water",
+      "requires": [ { "type": "building", "building": "BRIDGE", "amount": 1 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "agriculture": {
+      "title": "Break New Ground",
+      "requires": [
+        { "type": "building", "building": "FARM", "amount": 1 },
+        { "type": "resource", "resource": "wheat", "amount": 8 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "milling": {
+      "title": "Raise the Mill",
+      "requires": [
+        { "type": "building", "building": "MILL", "amount": 1 },
+        { "type": "resource", "resource": "flour", "amount": 6 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "baking": {
+      "title": "Fire Up the Bakery",
+      "requires": [
+        { "type": "building", "building": "BAKERY", "amount": 1 },
+        { "type": "resource", "resource": "bread", "amount": 4 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "hunting": {
+      "title": "Establish the Hunt",
+      "requires": [
+        { "type": "building", "building": "HUNTING_LODGE", "amount": 1 },
+        { "type": "resource", "resource": "meat", "amount": 4 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+
+    "woodcutting": {
+      "title": "Gather Firewood",
+      "requires": [ { "resource": "wood", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "fiber_harvesting": {
+      "title": "Pull Fiber",
+      "requires": [ { "resource": "fiber", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "stonecutting": {
+      "title": "Quarry Stone",
+      "requires": [ { "resource": "stone", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "storage": {
+      "title": "Build the Stockpile",
+      "requires": [ { "type": "building", "building": "STORAGE_BUILDING", "amount": 1 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "forestry": {
+      "title": "Raise the Lumber Camp",
+      "requires": [
+        { "type": "building", "building": "LUMBER_CAMP", "amount": 1 },
+        { "type": "resource", "resource": "wood", "amount": 10 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "tooled_logging": {
+      "title": "Tooled Output",
+      "requires": [ { "resource": "wood", "amount": 18 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "masonry": {
+      "title": "Open the Quarry",
+      "requires": [
+        { "type": "building", "building": "STONE_MASON", "amount": 1 },
+        { "type": "resource", "resource": "stone", "amount": 10 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "tooled_quarrying": {
+      "title": "Tooled Quarry",
+      "requires": [ { "resource": "stone", "amount": 18 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "prospecting": {
+      "title": "Clay Deposits",
+      "requires": [ { "resource": "clay", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "clay_extraction": {
+      "title": "Dig the Clay Pit",
+      "requires": [
+        { "type": "building", "building": "CLAY_PIT", "amount": 1 },
+        { "type": "resource", "resource": "clay", "amount": 5 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "pottery": {
+      "title": "Light the Kiln",
+      "requires": [
+        { "type": "building", "building": "POTTERY_KILN", "amount": 1 },
+        { "type": "resource", "resource": "pottery", "amount": 3 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "brickmaking": {
+      "title": "Fire the Brick Kiln",
+      "requires": [
+        { "type": "building", "building": "BRICK_KILN", "amount": 1 },
+        { "type": "resource", "resource": "brick", "amount": 4 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "charcoal_burning": {
+      "title": "Stoke the Charcoal Kiln",
+      "requires": [
+        { "type": "building", "building": "CHARCOAL_KILN", "amount": 1 },
+        { "type": "resource", "resource": "charcoal", "amount": 4 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "sawmilling": {
+      "title": "Raise the Sawmill",
+      "requires": [
+        { "type": "building", "building": "SAWMILL", "amount": 1 },
+        { "type": "resource", "resource": "plank", "amount": 5 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "carpenter": {
+      "title": "Open the Carpenter's Shop",
+      "requires": [
+        { "type": "building", "building": "CARPENTER", "amount": 1 },
+        { "type": "resource", "resource": "furniture", "amount": 2 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+
+    "toolmaking": {
+      "title": "Forge Your First Tools",
+      "requires": [
+        { "resource": "axe", "amount": 1 },
+        { "resource": "pickaxe", "amount": 1 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "spindle": {
+      "title": "Spin the Thread",
+      "requires": [ { "resource": "cloth", "amount": 4 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "tool_workshop": {
+      "title": "Set Up the Tool Workshop",
+      "requires": [
+        { "type": "building", "building": "TOOL_WORKSHOP", "amount": 1 },
+        { "type": "resource", "resource": "axe", "amount": 2 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "bowyer": {
+      "title": "String the Bowyer's Bench",
+      "requires": [
+        { "type": "building", "building": "BOWYERS_WORKSHOP", "amount": 1 },
+        { "type": "resource", "resource": "hunting_bow", "amount": 2 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+
+    "weaving": {
+      "title": "Thread the Loom",
+      "requires": [
+        { "type": "building", "building": "WEAVER", "amount": 1 },
+        { "type": "resource", "resource": "cloth", "amount": 5 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "tailoring": {
+      "title": "Open the Tailor's Shop",
+      "requires": [
+        { "type": "building", "building": "TAILOR", "amount": 1 },
+        { "type": "resource", "resource": "clothing", "amount": 2 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "tannery": {
+      "title": "Run the Tannery",
+      "requires": [
+        { "type": "building", "building": "TANNERY", "amount": 1 },
+        { "type": "resource", "resource": "leather", "amount": 3 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+
+    "fishing": {
+      "title": "Cast from the Fishing Hut",
+      "requires": [
+        { "type": "building", "building": "FISHING_HUT", "amount": 1 },
+        { "type": "resource", "resource": "fish", "amount": 5 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "salt_works": {
+      "title": "Work the Salt Pans",
+      "requires": [
+        { "type": "building", "building": "SALT_WORKS", "amount": 1 },
+        { "type": "resource", "resource": "salt", "amount": 4 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "food_preservation": {
+      "title": "Stock the Preservation House",
+      "requires": [
+        { "type": "building", "building": "PRESERVATION_HOUSE", "amount": 1 },
+        { "type": "resource", "resource": "preserved_food", "amount": 3 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+
+    "bow_hunting": {
+      "title": "Hunt with the Bow",
+      "requires": [ { "type": "resource", "resource": "meat", "amount": 8 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+
+    "knife": {
+      "title": "Forge a Knife",
+      "requires": [ { "type": "resource", "resource": "knife", "amount": 2 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "tooled_pottery": {
+      "title": "Tool the Kiln",
+      "requires": [ { "type": "resource", "resource": "pottery", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "charcoal_brickmaking": {
+      "title": "Fire Bricks with Charcoal",
+      "requires": [ { "type": "resource", "resource": "brick", "amount": 6 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "cooperage": {
+      "title": "Roll the First Barrels",
+      "requires": [
+        { "type": "building", "building": "COOPERAGE", "amount": 1 },
+        { "type": "resource", "resource": "barrel", "amount": 3 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "wheel_making": {
+      "title": "Turn the First Wheels",
+      "requires": [
+        { "type": "building", "building": "WHEEL_MAKER", "amount": 1 },
+        { "type": "resource", "resource": "wheel", "amount": 3 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "cart_workshop": {
+      "title": "Assemble a Cart",
+      "requires": [
+        { "type": "building", "building": "CART_WORKSHOP", "amount": 1 },
+        { "type": "resource", "resource": "cart", "amount": 1 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "trading_post": {
+      "title": "Open the Trading Post",
+      "requires": [ { "type": "building", "building": "TRADING_POST", "amount": 1 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "leather_furniture": {
+      "title": "Upholster the Workshop",
+      "requires": [ { "type": "resource", "resource": "furniture", "amount": 2 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "tooled_tanning": {
+      "title": "Tan with Knife",
+      "requires": [ { "type": "resource", "resource": "leather", "amount": 5 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "net_weaving": {
+      "title": "Weave a Net",
+      "requires": [ { "type": "resource", "resource": "fishing_net", "amount": 2 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "rope_weaving": {
+      "title": "Twist the First Rope",
+      "requires": [ { "type": "resource", "resource": "rope", "amount": 4 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "rope_nets": {
+      "title": "Craft Rope Nets",
+      "requires": [ { "type": "resource", "resource": "fishing_net", "amount": 2 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+
+    "npc_level_2": {
+      "title": "Provision the Ranks",
+      "requires": [ { "resource": "berry", "amount": 10 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_3": {
+      "title": "Feed the Workforce",
+      "requires": [ { "resource": "berry", "amount": 18 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_4": {
+      "title": "Fill the Granary",
+      "requires": [ { "resource": "wheat", "amount": 10 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_5": {
+      "title": "Bread for the People",
+      "requires": [ { "resource": "bread", "amount": 6 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_6": {
+      "title": "Stock the Smokehouse",
+      "requires": [ { "resource": "meat", "amount": 8 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_7": {
+      "title": "The Baker's Levy",
+      "requires": [ { "resource": "bread", "amount": 10 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_8": {
+      "title": "The Hunter's Tithe",
+      "requires": [ { "resource": "meat", "amount": 12 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_9": {
+      "title": "Sustain the Settlement",
+      "requires": [ { "resource": "bread", "amount": 14 } ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    },
+    "npc_level_10": {
+      "title": "Bounty for All",
+      "requires": [
+        { "resource": "bread", "amount": 10 },
+        { "resource": "meat", "amount": 10 }
+      ],
+      "reward": { "type": "progression_point", "amount": 1 }
+    }
+  }
+}

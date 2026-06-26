@@ -1,7 +1,7 @@
 # Story 004: Coordinate Conversion
 
 > **Epic**: Grid/Map System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Core
 > **Type**: Logic
 > **Manifest Version**: Not yet created
@@ -20,7 +20,7 @@
 
 **Control Manifest Rules (this layer)**:
 - Required: N/A — no control manifest exists yet
-- Forbidden: Camera state read from inside GridMap; coordinate conversion duplicated in consuming systems
+- Forbidden: Camera state read from inside WorldGrid; coordinate conversion duplicated in consuming systems
 - Guardrail: Conversion must be exact — AC #12 and #13 assert specific pixel values with no tolerance
 
 ---
@@ -29,9 +29,9 @@
 
 *From GDD `design/gdd/grid-map-system.md`, scoped to this story:*
 
-- [ ] **AC-12**: Given TILE_SIZE = 48, when converting tile (5, 12) to pixel coordinates, then result is (264, 600) — the center of the tile
-- [ ] **AC-13**: Given TILE_SIZE = 48, when converting pixel (400, 300) to tile coordinates, then result is Vector2i(8, 6)
-- [ ] **AC-14**: Given screen_pos = (400, 300), camera_offset = (0, 0), camera_zoom = 1.0, TILE_SIZE = 48, when converting through world position, then result is Vector2i(8, 6)
+- [ ] **AC-12**: Given TILE_SIZE = 64, when converting tile (5, 12) to pixel coordinates, then result is (352, 800) — the center of the tile *(ADR specifies 48px; Story 001 implemented 64px — value adapted accordingly)*
+- [ ] **AC-13**: Given TILE_SIZE = 64, when converting pixel (400, 300) to tile coordinates, then result is Vector2i(6, 4) *(ADR specifies 48px; value adapted accordingly)*
+- [ ] **AC-14**: Given screen_pos = (400, 300), camera_offset = (0, 0), camera_zoom = 1.0, TILE_SIZE = 64, when converting through world position, then result is Vector2i(6, 4) *(ADR specifies 48px; value adapted accordingly)*
 
 ---
 
@@ -39,24 +39,24 @@
 
 *Derived from ADR-0004 Implementation Guidelines:*
 
-Add to `GridMap` class:
+Add to `WorldGrid` class:
 
 ```gdscript
 func tile_to_world(tile: Vector2i) -> Vector2:
-    # Returns the pixel center of the tile
-    return Vector2(tile) * TILE_SIZE + Vector2(TILE_SIZE / 2, TILE_SIZE / 2)
+	# Returns the pixel center of the tile
+	return Vector2(tile) * TILE_SIZE + Vector2(TILE_SIZE / 2, TILE_SIZE / 2)
 
 func world_to_tile(world_pos: Vector2) -> Vector2i:
-    # floor() maps any pixel within the tile to the tile's top-left corner
+	# floor() maps any pixel within the tile to the tile's top-left corner
     return Vector2i(floori(world_pos.x / TILE_SIZE), floori(world_pos.y / TILE_SIZE))
 ```
 
-**Mouse-to-tile conversion** (documentation only — GridMap provides the formula; Camera and Input systems call `world_to_tile` with the result):
+**Mouse-to-tile conversion** (documentation only — WorldGrid provides the formula; Camera and Input systems call `world_to_tile` with the result):
 ```
 world_pos = camera_offset + (screen_pos / camera_zoom)
 tile_coord = grid_map.world_to_tile(world_pos)
 ```
-GridMap does NOT own camera state. Consuming systems (Camera, Input) handle `camera_offset` and `camera_zoom` before calling `world_to_tile`.
+WorldGrid does NOT own camera state. Consuming systems (Camera, Input) handle `camera_offset` and `camera_zoom` before calling `world_to_tile`.
 
 **Exact pixel math** (AC #12 verification):
 ```
@@ -85,7 +85,7 @@ world_to_tile(Vector2(400, 300)):
 - Story 001: TILE_SIZE constant (defined there; referenced here)
 - Story 005: Spatial queries (get_tiles_in_radius, find_nearest) that use tile coordinates
 
-*Camera offset and zoom application are the responsibility of Camera System and Input System — not GridMap.*
+*Camera offset and zoom application are the responsibility of Camera System and Input System — not WorldGrid.*
 
 ---
 
@@ -93,23 +93,23 @@ world_to_tile(Vector2(400, 300)):
 
 *QL-STORY-READY skipped — Lean mode. Test cases written from GDD acceptance criteria.*
 
-- **AC-12**: tile_to_world exact pixel center
-  - Given: TILE_SIZE = 48
+- **AC-12**: tile_to_world exact pixel center *(64px tiles)*
+  - Given: TILE_SIZE = 64
   - When: `tile_to_world(Vector2i(5, 12))`
-  - Then: result == Vector2(264.0, 600.0)
-  - Edge cases: `tile_to_world(Vector2i(0, 0))` == Vector2(24, 24); `tile_to_world(Vector2i(29, 29))` == Vector2(1416, 1416)
+  - Then: result == Vector2(352.0, 800.0)
+  - Edge cases: `tile_to_world(Vector2i(0, 0))` == Vector2(32, 32); `tile_to_world(Vector2i(29, 29))` == Vector2(1888, 1888)
 
-- **AC-13**: world_to_tile floor conversion
-  - Given: TILE_SIZE = 48
+- **AC-13**: world_to_tile floor conversion *(64px tiles)*
+  - Given: TILE_SIZE = 64
   - When: `world_to_tile(Vector2(400, 300))`
-  - Then: result == Vector2i(8, 6)
-  - Edge cases: `world_to_tile(Vector2(0, 0))` == Vector2i(0, 0); `world_to_tile(Vector2(47.9, 47.9))` == Vector2i(0, 0); `world_to_tile(Vector2(48, 48))` == Vector2i(1, 1)
+  - Then: result == Vector2i(6, 4)
+  - Edge cases: `world_to_tile(Vector2(0, 0))` == Vector2i(0, 0); `world_to_tile(Vector2(63.9, 63.9))` == Vector2i(0, 0); `world_to_tile(Vector2(64, 64))` == Vector2i(1, 1)
 
-- **AC-14**: Mouse-to-tile with camera identity (no offset, no zoom)
-  - Given: TILE_SIZE = 48, camera_offset = Vector2(0, 0), camera_zoom = 1.0
+- **AC-14**: Mouse-to-tile with camera identity (no offset, no zoom) *(64px tiles)*
+  - Given: TILE_SIZE = 64, camera_offset = Vector2(0, 0), camera_zoom = 1.0
   - When: world_pos = camera_offset + (Vector2(400, 300) / camera_zoom) = Vector2(400, 300); `world_to_tile(world_pos)`
-  - Then: result == Vector2i(8, 6)
-  - Edge cases: With camera_zoom = 2.0 and screen_pos (400, 300): world_pos = (200, 150); tile = Vector2i(4, 3)
+  - Then: result == Vector2i(6, 4)
+  - Edge cases: With camera_zoom = 2.0 and screen_pos (400, 300): world_pos = (200, 150); tile = Vector2i(3, 2)
 
 - **Round-trip consistency**:
   - Given: Any tile at Vector2i(t_x, t_y) where 0 <= t_x, t_y <= 29
@@ -123,11 +123,20 @@ world_to_tile(Vector2(400, 300)):
 **Story Type**: Logic
 **Required evidence**: `tests/unit/grid/grid_coordinate_test.gd` — must exist and pass
 
-**Status**: [ ] Not yet created
+**Status**: [x] `tests/unit/grid/grid_coordinate_test.gd` — 12 tests, all ACs + round-trip + boundary covered
 
 ---
 
 ## Dependencies
 
-- Depends on: Story 001 must be DONE (TILE_SIZE constant and GridMap class must exist)
+- Depends on: Story 001 must be DONE (TILE_SIZE constant and WorldGrid class must exist)
 - Unlocks: Camera System stories (use `world_to_tile` for screen→tile conversion), Input System (mouse click → tile)
+
+---
+
+## Completion Notes
+**Completed**: 2026-05-28
+**Criteria**: 3/3 passing
+**Deviations**: TILE_SIZE=64 (vs ADR 48px, pre-existing user decision), class_name WorldGrid (vs ADR GridMap, pre-existing), FastNoiseLite (vs FastNoise, Story 002 scope)
+**Test Evidence**: Logic — `tests/unit/grid/grid_coordinate_test.gd` (12 tests)
+**Code Review**: Complete — CHANGES REQUIRED verdict resolved (return type fix + AC values corrected)

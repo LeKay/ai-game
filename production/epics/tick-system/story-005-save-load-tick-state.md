@@ -44,25 +44,25 @@ Add serialization methods to TickSystem:
 
 ```gdscript
 func serialize() -> Dictionary:
-    return {
-        "tick_count": tick_count,
-        "tick_remainder": tick_remainder,
-        "current_day": current_day,
-        "speed_multiplier": speed_multiplier,
-        "is_paused": is_paused
-    }
+	return {
+		"tick_count": tick_count,
+		"tick_remainder": tick_remainder,
+		"current_day": current_day,
+		"speed_multiplier": speed_multiplier,
+		"is_paused": is_paused
+	}
 
 func deserialize(data: Dictionary) -> void:
-    if not data.has_all(["tick_count", "tick_remainder", "current_day",
-                         "speed_multiplier", "is_paused"]):
-        push_error("TickSystem.deserialize(): missing required keys")
-        return
-    tick_count = int(data["tick_count"])
-    tick_remainder = float(data["tick_remainder"])
-    current_day = int(data["current_day"])
-    speed_multiplier = float(data["speed_multiplier"])
-    is_paused = bool(data["is_paused"])
-    set_process(not is_paused)
+	if not data.has_all(["tick_count", "tick_remainder", "current_day",
+						 "speed_multiplier", "is_paused"]):
+		push_error("TickSystem.deserialize(): missing required keys")
+		return
+	tick_count = int(data["tick_count"])
+	tick_remainder = float(data["tick_remainder"])
+	current_day = int(data["current_day"])
+	speed_multiplier = float(data["speed_multiplier"])
+	is_paused = bool(data["is_paused"])
+	set_process(not is_paused)
 ```
 
 The Save system (ADR-0006) calls `TickSystem.serialize()` as the first entry in the save dictionary (`"tick"` key) and `TickSystem.deserialize()` as the first call during load — before ResourceRegistry, GridMap, and all other systems.

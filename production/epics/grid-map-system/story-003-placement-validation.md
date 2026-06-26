@@ -1,7 +1,7 @@
 # Story 003: Building Placement Validation Gate
 
 > **Epic**: Grid/Map System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Core
 > **Type**: Logic
 > **Manifest Version**: Not yet created
@@ -16,7 +16,7 @@
 **ADR Decision Summary**: `validate_placement(tile, building_type) -> PlacementResult` is the single gate for all placement decisions. It checks: bounds → impassable → existing building → resource clearability. Never mutates state. `place_building` atomically validates then writes. No consuming system implements its own placement logic.
 
 **Engine**: Godot 4.6 | **Risk**: HIGH
-**Engine Notes**: No post-cutoff engine APIs used in this story (pure GDScript data manipulation). The `assert()` pattern for internal contracts is stable. `PackedScene` instantiation for buildings happens in the consuming Building System, not GridMap — GridMap only updates `_buildings` array data.
+**Engine Notes**: No post-cutoff engine APIs used in this story (pure GDScript data manipulation). The `assert()` pattern for internal contracts is stable. `PackedScene` instantiation for buildings happens in the consuming Building System, not WorldGrid — WorldGrid only updates `_buildings` array data.
 
 **Control Manifest Rules (this layer)**:
 - Required: N/A — no control manifest exists yet
@@ -49,35 +49,35 @@
 
 ```gdscript
 func validate_placement(tile: Vector2i, building_type: String) -> PlacementResult:
-    if not is_in_bounds(tile):
-        return PlacementResult.BLOCKED_BY_BOUNDS
-    if get_terrain(tile) == TileType.IMPASSABLE:
-        return PlacementResult.BLOCKED_BY_IMPASSABLE
-    if get_building(tile) != null:
-        return PlacementResult.BLOCKED_BY_BUILDING
-    var res := get_resource(tile)
-    if res != null and not res.clearable:
-        return PlacementResult.BLOCKED_BY_RESOURCE_TILE
-    return PlacementResult.SUCCESS
+	if not is_in_bounds(tile):
+		return PlacementResult.BLOCKED_BY_BOUNDS
+	if get_terrain(tile) == TileType.IMPASSABLE:
+		return PlacementResult.BLOCKED_BY_IMPASSABLE
+	if get_building(tile) != null:
+		return PlacementResult.BLOCKED_BY_BUILDING
+	var res := get_resource(tile)
+	if res != null and not res.clearable:
+		return PlacementResult.BLOCKED_BY_RESOURCE_TILE
+	return PlacementResult.SUCCESS
 
 func place_building(tile: Vector2i, building_id: String) -> PlacementResult:
-    var result := validate_placement(tile, building_id)
-    if result != PlacementResult.SUCCESS:
-        return result
-    # Atomically: update BuildingLayer, clear resource if clearable
-    _buildings[tile.x][tile.y] = building_id
-    var res := get_resource(tile)
-    if res != null and res.clearable:
-        _resources[tile.x][tile.y] = null
-    return PlacementResult.SUCCESS
+	var result := validate_placement(tile, building_id)
+	if result != PlacementResult.SUCCESS:
+		return result
+	# Atomically: update BuildingLayer, clear resource if clearable
+	_buildings[tile.x][tile.y] = building_id
+	var res := get_resource(tile)
+	if res != null and res.clearable:
+		_resources[tile.x][tile.y] = null
+	return PlacementResult.SUCCESS
 
 func remove_building(tile: Vector2i) -> bool:
-    if not is_in_bounds(tile):
-        return false
-    if get_building(tile) == null:
-        return false
-    _buildings[tile.x][tile.y] = null
-    return true
+	if not is_in_bounds(tile):
+		return false
+	if get_building(tile) == null:
+		return false
+	_buildings[tile.x][tile.y] = null
+	return true
 ```
 
 **Atomic validate-then-place**: `place_building` calls `validate_placement` internally as the final check. There is no "commit" phase separate from validation — they happen in one method call. This prevents race conditions where the tile changes between validate and place.
@@ -103,38 +103,38 @@ func remove_building(tile: Vector2i) -> bool:
 *QL-STORY-READY skipped — Lean mode. Test cases written from GDD acceptance criteria.*
 
 - **AC-5**: SUCCESS on empty tile
-  - Given: GridMap with tile (10, 10) = EMPTY, no resource, no building
+  - Given: WorldGrid with tile (10, 10) = EMPTY, no resource, no building
   - When: `validate_placement(Vector2i(10, 10), "lumber_yard")`
   - Then: returns `PlacementResult.SUCCESS`
 
 - **AC-6**: BLOCKED_BY_IMPASSABLE
-  - Given: GridMap with tile (2, 2) = IMPASSABLE
+  - Given: WorldGrid with tile (2, 2) = IMPASSABLE
   - When: `validate_placement(Vector2i(2, 2), "lumber_yard")`
   - Then: returns `PlacementResult.BLOCKED_BY_IMPASSABLE`
 
 - **AC-7**: BLOCKED_BY_BUILDING
-  - Given: GridMap with tile (7, 3) having `_buildings[7][3] = "house"`
+  - Given: WorldGrid with tile (7, 3) having `_buildings[7][3] = "house"`
   - When: `validate_placement(Vector2i(7, 3), "lumber_yard")`
   - Then: returns `PlacementResult.BLOCKED_BY_BUILDING`
 
 - **AC-8**: BLOCKED_BY_BOUNDS
-  - Given: GridMap (GRID_SIZE = 30)
+  - Given: WorldGrid (GRID_SIZE = 30)
   - When: `validate_placement(Vector2i(-1, 5), "lumber_yard")`
   - Then: returns `PlacementResult.BLOCKED_BY_BOUNDS`
   - Edge cases: (30, 0), (0, 30), (30, 30) all return BLOCKED_BY_BOUNDS; (29, 29) returns SUCCESS if empty
 
 - **AC-9 / AC-20**: BLOCKED_BY_RESOURCE_TILE for non-clearable stone
-  - Given: GridMap with tile (5, 5) having resource `{resource_id: "stone", clearable: false}`
+  - Given: WorldGrid with tile (5, 5) having resource `{resource_id: "stone", clearable: false}`
   - When: `validate_placement(Vector2i(5, 5), "lumber_yard")`
   - Then: returns `PlacementResult.BLOCKED_BY_RESOURCE_TILE`
 
 - **AC-10**: SUCCESS on clearable tree tile
-  - Given: GridMap with tile (5, 5) having resource `{resource_id: "wood", clearable: true}`, no building
+  - Given: WorldGrid with tile (5, 5) having resource `{resource_id: "wood", clearable: true}`, no building
   - When: `validate_placement(Vector2i(5, 5), "lumber_yard")`
   - Then: returns `PlacementResult.SUCCESS`
 
 - **AC-3 / AC-11 / AC-19**: place_building — updates BuildingLayer and clears clearable resource
-  - Given: GridMap with tile (5, 5) = TREE, `{resource_id: "wood", clearable: true}`, no building
+  - Given: WorldGrid with tile (5, 5) = TREE, `{resource_id: "wood", clearable: true}`, no building
   - When: `place_building(Vector2i(5, 5), "lumber_yard")`
   - Then: returns SUCCESS; `get_building(Vector2i(5, 5))` == `"lumber_yard"`; `get_resource(Vector2i(5, 5))` == null
 
@@ -156,5 +156,14 @@ func remove_building(tile: Vector2i) -> bool:
 
 ## Dependencies
 
-- Depends on: Story 001 must be DONE (GridMap class, arrays, enums, and read API must exist)
+- Depends on: Story 001 must be DONE (WorldGrid class, arrays, enums, and read API must exist)
 - Unlocks: Building System stories (which call `validate_placement` and `place_building`)
+
+---
+
+## Completion Notes
+**Completed**: 2026-05-31
+**Criteria**: 11/11 passing (all auto-verified via code inspection + unit tests)
+**Deviations**: ADVISORY — AC text references old `get_resource()` / null API; implementation correctly uses post-amendment `get_resources()` / empty Array. ADVISORY — Manifest Version not set (story predates manifest adoption; no new rules apply).
+**Test Evidence**: Logic — `tests/unit/grid/grid_placement_test.gd` exists, 11 tests, all ACs traced.
+**Code Review**: Complete (performed in session; fixes applied: `get_resources()` return type, ADR-0004 amended for TILE_SIZE=64 and FastNoiseLite)

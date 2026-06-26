@@ -1,6 +1,6 @@
----
+﻿---
 name: team-level
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Orchestrate level design team: level-designer + narrative-director + world-builder + art-director + systems-designer + qa-tester for complete area/level creation."
 argument-hint: "[level name or area to design]"
 user-invocable: true
@@ -27,13 +27,13 @@ The user must approve before moving to the next step.
 ## How to Delegate
 
 Use the Task tool to spawn each team member as a subagent:
-- `subagent_type: narrative-director` — Narrative purpose, characters, emotional arc
-- `subagent_type: world-builder` — Lore context, environmental storytelling, world rules
-- `subagent_type: level-designer` — Spatial layout, pacing, encounters, navigation
-- `subagent_type: systems-designer` — Enemy compositions, loot tables, difficulty balance
-- `subagent_type: art-director` — Visual theme, color palette, lighting, asset requirements
-- `subagent_type: accessibility-specialist` — Navigation clarity, colorblind safety, cognitive load
-- `subagent_type: qa-tester` — Test cases, boundary testing, playtest checklist
+- `subagent_type: narrative-director` â€” Narrative purpose, characters, emotional arc
+- `subagent_type: world-builder` â€” Lore context, environmental storytelling, world rules
+- `subagent_type: level-designer` â€” Spatial layout, pacing, encounters, navigation
+- `subagent_type: systems-designer` â€” Enemy compositions, loot tables, difficulty balance
+- `subagent_type: art-director` â€” Visual theme, color palette, lighting, asset requirements
+- `subagent_type: accessibility-specialist` â€” Navigation clarity, colorblind safety, cognitive load
+- `subagent_type: qa-tester` â€” Test cases, boundary testing, playtest checklist
 
 Always provide full context in each agent's prompt (game concept, pillars, existing level docs, narrative docs).
 
@@ -41,7 +41,7 @@ Always provide full context in each agent's prompt (game concept, pillars, exist
 
 ### Step 1: Narrative + Visual Direction (narrative-director + world-builder + art-director, parallel)
 
-Spawn all three agents simultaneously — issue all three Task calls before waiting for any result.
+Spawn all three agents simultaneously â€” issue all three Task calls before waiting for any result.
 
 Spawn the `narrative-director` agent to:
 - Define the narrative purpose of this area (what story beats happen here?)
@@ -54,11 +54,11 @@ Spawn the `world-builder` agent to:
 - Specify any world rules that affect gameplay in this area
 
 Spawn the `art-director` agent to:
-- Establish visual theme targets for this area — these are INPUTS to layout, not outputs of it
+- Establish visual theme targets for this area â€” these are INPUTS to layout, not outputs of it
 - Define the color temperature and lighting mood for this area (how does it differ from adjacent areas?)
 - Specify shape language direction (angular fortress? organic cave? decayed grandeur?)
 - Name the primary visual landmarks that will orient the player
-- Read `design/art/art-bible.md` if it exists — anchor all direction in the established art bible
+- Read `design/art/art-bible.md` if it exists â€” anchor all direction in the established art bible
 
 **The art-director's visual targets from Step 1 must be passed to the level-designer in Step 2** as explicit constraints. Layout decisions happen within the visual direction, not before it.
 
@@ -68,21 +68,21 @@ Spawn the `art-director` agent to:
 Spawn the `level-designer` agent with the full Step 1 output as context:
 - Narrative brief (from narrative-director)
 - Lore foundation (from world-builder)
-- **Visual direction targets (from art-director)** — layout must work within these targets, not contradict them
+- **Visual direction targets (from art-director)** â€” layout must work within these targets, not contradict them
 
 The level-designer should:
-- Design the spatial layout (critical path, optional paths, secrets) — ensuring primary routes align with the visual landmark targets from Step 1
-- Define pacing curve (tension peaks, rest areas, exploration zones) — coordinated with the emotional arc from narrative-director
+- Design the spatial layout (critical path, optional paths, secrets) â€” ensuring primary routes align with the visual landmark targets from Step 1
+- Define pacing curve (tension peaks, rest areas, exploration zones) â€” coordinated with the emotional arc from narrative-director
 - Place encounters with difficulty progression
 - Design environmental puzzles or navigation challenges
-- Define points of interest and landmarks for wayfinding — these must match the visual landmarks the art-director specified
+- Define points of interest and landmarks for wayfinding â€” these must match the visual landmarks the art-director specified
 - Specify entry/exit points and connections to adjacent areas
 
 **Adjacent area dependency check**: After the layout is produced, check `design/levels/` for each adjacent area referenced by the level-designer. If any referenced area's `.md` file does not exist, surface the gap:
 > "Level references [area-name] as an adjacent area but `design/levels/[area-name].md` does not exist."
 
 Use `AskUserQuestion` with options:
-- (a) Proceed with a placeholder reference — mark the connection as UNRESOLVED in the level doc and list it in the open cross-level dependencies section of the summary report
+- (a) Proceed with a placeholder reference â€” mark the connection as UNRESOLVED in the level doc and list it in the open cross-level dependencies section of the summary report
 - (b) Pause and run `/team-level [area-name]` first to establish that area
 
 Do NOT invent content for the missing adjacent area.
@@ -101,19 +101,19 @@ Spawn the `systems-designer` agent to:
 
 ### Step 4: Production Concepts + Accessibility (art-director + accessibility-specialist, parallel)
 
-**Note**: The art-director's directional pass (visual theme, color targets, mood) happened in Step 1. This pass is location-specific production concepts — given the finalized layout, what does each specific space look like?
+**Note**: The art-director's directional pass (visual theme, color targets, mood) happened in Step 1. This pass is location-specific production concepts â€” given the finalized layout, what does each specific space look like?
 
 Spawn the `art-director` agent with the finalized layout from Step 2:
 - Produce location-specific concept specs for key spaces (entrance, key encounter zones, landmarks, exits)
 - Specify which art assets are unique to this area vs. shared from the global pool
 - Define sight-line and lighting setups per key space (these are now layout-informed, not directional)
 - Specify VFX needs that are specific to this area's layout (weather volumes, particles, atmospheric effects)
-- Flag any locations where the layout creates visual direction conflicts with the Step 1 targets — surface these as production risks
+- Flag any locations where the layout creates visual direction conflicts with the Step 1 targets â€” surface these as production risks
 
 Spawn the `accessibility-specialist` agent in parallel to:
 - Review the level layout for navigation clarity (can players orient themselves without relying on color alone?)
 - Check that critical path signposting uses shape/icon/sound cues in addition to color
-- Review any puzzle mechanics for cognitive load — flag anything that requires holding more than 3 simultaneous states
+- Review any puzzle mechanics for cognitive load â€” flag anything that requires holding more than 3 simultaneous states
 - Check that key gameplay areas have sufficient contrast for colorblind players
 - Output: accessibility concerns list with severity (BLOCKING / RECOMMENDED / NICE TO HAVE)
 
@@ -148,8 +148,8 @@ All file writes (level design docs, narrative docs, test checklists) are delegat
 to sub-agents spawned via Task. Each sub-agent enforces the "May I write to [path]?"
 protocol. This orchestrator does not write files directly.
 
-Verdict: **COMPLETE** — level design document produced and all team outputs compiled.
-Verdict: **BLOCKED** — one or more agents blocked; partial report produced with unresolved items listed.
+Verdict: **COMPLETE** â€” level design document produced and all team outputs compiled.
+Verdict: **BLOCKED** â€” one or more agents blocked; partial report produced with unresolved items listed.
 
 ## Next Steps
 
@@ -161,16 +161,16 @@ Verdict: **BLOCKED** — one or more agents blocked; partial report produced wit
 
 If any spawned agent (via Task) returns BLOCKED, errors, or cannot complete:
 
-1. **Surface immediately**: Report "[AgentName]: BLOCKED — [reason]" to the user before continuing to dependent phases
+1. **Surface immediately**: Report "[AgentName]: BLOCKED â€” [reason]" to the user before continuing to dependent phases
 2. **Assess dependencies**: Check whether the blocked agent's output is required by subsequent phases. If yes, do not proceed past that dependency point without user input.
 3. **Offer options** via AskUserQuestion with choices:
    - Skip this agent and note the gap in the final report
    - Retry with narrower scope
    - Stop here and resolve the blocker first
-4. **Always produce a partial report** — output whatever was completed. Never discard work because one agent blocked.
+4. **Always produce a partial report** â€” output whatever was completed. Never discard work because one agent blocked.
 
 Common blockers:
-- Input file missing (story not found, GDD absent) → redirect to the skill that creates it
-- ADR status is Proposed → do not implement; run `/architecture-decision` first
-- Scope too large → split into two stories via `/create-stories`
-- Conflicting instructions between ADR and story → surface the conflict, do not guess
+- Input file missing (story not found, GDD absent) â†’ redirect to the skill that creates it
+- ADR status is Proposed â†’ do not implement; run `/architecture-decision` first
+- Scope too large â†’ split into two stories via `/create-stories`
+- Conflicting instructions between ADR and story â†’ surface the conflict, do not guess

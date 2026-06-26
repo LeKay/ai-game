@@ -6,7 +6,7 @@ goal: "Implement Foundation layer systems (Tick, Resource, Input) to establish t
 start: "2026-05-20"
 end: "2026-06-19"
 generated: "2026-05-19"
-updated: "2026-05-23"
+updated: "2026-05-28"  # res-06 marked done
 
 stories:
   - id: "tick-01"
@@ -29,13 +29,13 @@ stories:
     completed: "2026-05-22"
   - id: "tick-03"
     name: "Tick System: Day-transition signal + auto-pause"
-    file: "production/epics/tick-system/story-003-day-transition.md"
+    file: "production/epics/tick-system/story-004-day-transition-event.md"
     priority: must-have
-    status: ready-for-dev
+    status: done
     owner: ""
     estimate_days: 2
     blocker: ""
-    completed: ""
+    completed: "2026-05-23"
   - id: "tick-04"
     name: "Tick System: Manual action tick advancement"
     file: "production/epics/tick-system/story-003-manual-action-advancement.md"
@@ -65,79 +65,79 @@ stories:
     completed: "2026-05-23"
   - id: "res-01"
     name: "Resource System: JSON schema + ResourceRegistry singleton"
-    file: "production/epics/resource-system/story-001-resource-registry.md"
+    file: "production/epics/resource-system/story-001-json-loading-and-schema.md"
     priority: must-have
-    status: ready-for-dev
+    status: done
     owner: ""
     estimate_days: 2
     blocker: ""
-    completed: ""
+    completed: "2026-05-25"
   - id: "res-02"
     name: "Resource System: Schema validation + O(1) lookup"
     file: "production/epics/resource-system/story-002-schema-validation.md"
     priority: must-have
-    status: ready-for-dev
+    status: done
     owner: ""
     estimate_days: 1
     blocker: ""
-    completed: ""
+    completed: "2026-05-25"
   - id: "res-03"
     name: "Resource System: Resource categories + icon paths"
-    file: "production/epics/resource-system/story-003-resource-categories.md"
+    file: "production/epics/resource-system/story-003-lookup-api.md"
     priority: must-have
-    status: ready-for-dev
+    status: done
     owner: ""
     estimate_days: 2
     blocker: ""
-    completed: ""
+    completed: "2026-05-25"
   - id: "res-04"
     name: "Resource System: Startup loading sequence"
-    file: "production/epics/resource-system/story-004-startup-loading.md"
+    file: "production/epics/resource-system/story-004-category-filtering.md"
     priority: must-have
-    status: ready-for-dev
+    status: done
     owner: ""
     estimate_days: 1
     blocker: ""
-    completed: ""
+    completed: "2026-05-25"
   - id: "res-05"
-    name: "Resource System: Unit tests + smoke check"
-    file: "production/epics/resource-system/story-005-testing-smoke-check.md"
+    name: "Resource System: Version migration and deprecated resources"
+    file: "production/epics/resource-system/story-005-version-migration-and-deprecated.md"
     priority: must-have
-    status: ready-for-dev
+    status: done
     owner: ""
     estimate_days: 1
     blocker: ""
-    completed: ""
+    completed: "2026-05-28"
   - id: "inp-01"
     name: "Input System: InputContext stack + action dispatch"
-    file: "production/epics/input-system/story-001-context-stack.md"
+    file: "production/epics/input-system/story-001-input-context-stack.md"
     priority: must-have
-    status: ready-for-dev
+    status: done
     owner: ""
     estimate_days: 3
     blocker: ""
-    completed: ""
+    completed: "2026-05-27"
   - id: "inp-02"
     name: "Input System: Input debounce system"
     file: "production/epics/input-system/story-002-debounce-system.md"
     priority: must-have
-    status: ready-for-dev
+    status: done
     owner: ""
     estimate_days: 1
     blocker: ""
-    completed: ""
+    completed: "2026-05-27"
   - id: "inp-03"
     name: "Input System: Action rebinding + persistence"
-    file: "production/epics/input-system/story-003-rebinding-persistence.md"
+    file: "production/epics/input-system/story-003-action-rebinding.md"
     priority: must-have
-    status: ready-for-dev
+    status: done
     owner: ""
     estimate_days: 2
     blocker: ""
-    completed: ""
+    completed: "2026-05-28"
   - id: "inp-04"
     name: "Input System: Context transition on UI open/close"
-    file: "production/epics/input-system/story-004-context-transition.md"
+    file: "production/epics/input-system/story-004-ui-context-transition.md"
     priority: must-have
     status: ready-for-dev
     owner: ""
@@ -146,7 +146,7 @@ stories:
     completed: ""
   - id: "inp-05"
     name: "Input System: PAUSED/UI_ACTIVE discard logic"
-    file: "production/epics/input-system/story-005-paused-discarded-logic.md"
+    file: "production/epics/input-system/story-005-input-discard.md"
     priority: must-have
     status: ready-for-dev
     owner: ""
@@ -166,11 +166,11 @@ stories:
     name: "Resource System: Example resource definitions (Wood, Stone, Berry)"
     file: "production/epics/resource-system/story-006-example-resources.md"
     priority: should-have
-    status: backlog
+    status: done
     owner: ""
     estimate_days: 1
     blocker: ""
-    completed: ""
+    completed: "2026-05-28"
   - id: "inp-06"
     name: "Input System: Gamepad support (basic navigation)"
     file: "production/epics/input-system/story-006-gamepad-support.md"

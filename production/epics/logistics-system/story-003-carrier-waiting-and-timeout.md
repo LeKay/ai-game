@@ -1,7 +1,7 @@
 # Story 003: Carrier Waiting and Timeout
 
 > **Epic**: Logistics System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: Integration
 > **Manifest Version**: 2026-05-14
@@ -151,7 +151,7 @@ const CARRIER_WAITING_TIMEOUT: int = 300  # Tuning Knob — safe range 100-1000
 **Required evidence**:
 - Integration: `tests/integration/logistics/carrier_waiting_test.gd` — must exist and pass
 
-**Status**: [ ] Not yet created
+**Status**: [x] Created — 2026-06-02
 
 ---
 
@@ -159,3 +159,13 @@ const CARRIER_WAITING_TIMEOUT: int = 300  # Tuning Knob — safe range 100-1000
 
 - Depends on: Story 002 (carrier FSM core loop must establish WAITING_SOURCE/WAITING_DESTINATION states first)
 - Unlocks: None (independent feature)
+
+---
+
+## Completion Notes
+
+**Completed**: 2026-06-02
+**Criteria**: 6/6 passing
+**Deviations**: None — `CARRIER_WAITING_TIMEOUT` declared as `var` (not `const`) required by AC-5 (runtime configurability); doc comment preserves Tuning Knob context
+**Test Evidence**: Integration — `tests/integration/logistics/carrier_waiting_test.gd` (14 test functions, all ACs covered)
+**Code Review**: Skipped (Lean mode)

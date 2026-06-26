@@ -1,6 +1,6 @@
----
+﻿---
 name: prototype
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Rapid prototyping workflow. Skips normal standards to quickly validate a game concept or mechanic. Produces throwaway code and a structured prototype report."
 argument-hint: "[concept-description] [--review full|lean|solo]"
 user-invocable: true
@@ -12,13 +12,13 @@ isolation: worktree
 ## Phase 1: Define the Question
 
 Resolve the review mode (once, store for all gate spawns this run):
-1. If `--review [full|lean|solo]` was passed → use that
-2. Else read `production/review-mode.txt` → use that value
-3. Else → default to `lean`
+1. If `--review [full|lean|solo]` was passed â†’ use that
+2. Else read `production/review-mode.txt` â†’ use that value
+3. Else â†’ default to `lean`
 
 See `.claude/docs/director-gates.md` for the full check pattern.
 
-Read the concept description from the argument. Identify the core question this prototype must answer. If the concept is vague, state the question explicitly before proceeding — a prototype without a clear question wastes time.
+Read the concept description from the argument. Identify the core question this prototype must answer. If the concept is vague, state the question explicitly before proceeding â€” a prototype without a clear question wastes time.
 
 ---
 
@@ -117,10 +117,10 @@ If yes, write the file.
 
 ## Phase 6: Creative Director Review
 
-**Review mode check** — apply before spawning CD-PLAYTEST:
-- `solo` → skip. Note: "CD-PLAYTEST skipped — Solo mode." Proceed to Phase 7 summary with the prototyper's recommendation as the final verdict.
-- `lean` → skip (not a PHASE-GATE). Note: "CD-PLAYTEST skipped — Lean mode." Proceed to Phase 7 summary with the prototyper's recommendation as the final verdict.
-- `full` → spawn as normal.
+**Review mode check** â€” apply before spawning CD-PLAYTEST:
+- `solo` â†’ skip. Note: "CD-PLAYTEST skipped â€” Solo mode." Proceed to Phase 7 summary with the prototyper's recommendation as the final verdict.
+- `lean` â†’ skip (not a PHASE-GATE). Note: "CD-PLAYTEST skipped â€” Lean mode." Proceed to Phase 7 summary with the prototyper's recommendation as the final verdict.
+- `full` â†’ spawn as normal.
 
 Spawn `creative-director` via Task using gate **CD-PLAYTEST** (`.claude/docs/director-gates.md`).
 
@@ -136,15 +136,15 @@ Output a summary to the user: the core question, the result, the prototyper's in
 
 If **PROCEED**: run `/design-system` to begin the production GDD for this mechanic, or `/architecture-decision` to record key technical decisions before implementation.
 
-If **PIVOT** or **KILL**: no further action needed — the prototype report is the deliverable.
+If **PIVOT** or **KILL**: no further action needed â€” the prototype report is the deliverable.
 
-Verdict: **COMPLETE** — prototype finished. Recommendation is PROCEED, PIVOT, or KILL based on findings above.
+Verdict: **COMPLETE** â€” prototype finished. Recommendation is PROCEED, PIVOT, or KILL based on findings above.
 
 ### Important Constraints
 
 - Prototype code must NEVER import from production source files
 - Production code must NEVER import from prototype directories
-- If the recommendation is PROCEED, the production implementation must be written from scratch — prototype code is not refactored into production
+- If the recommendation is PROCEED, the production implementation must be written from scratch â€” prototype code is not refactored into production
 - Total prototype effort should be timeboxed to 1-3 days equivalent of work
 - If the prototype scope starts growing, stop and reassess whether the question can be simplified
 
@@ -154,5 +154,5 @@ Verdict: **COMPLETE** — prototype finished. Recommendation is PROCEED, PIVOT, 
 
 - **If PROCEED**: Run `/design-system [mechanic]` to author the production GDD, or `/architecture-decision` to record key technical decisions before implementation
 - **If PIVOT**: Run `/prototype [revised-concept]` to test the adjusted direction
-- **If KILL**: No further action required — the prototype report is the deliverable
+- **If KILL**: No further action required â€” the prototype report is the deliverable
 - Run `/playtest-report` to formally document any playtest sessions conducted during prototyping

@@ -14,7 +14,7 @@ extends Node
 ## **Story 004**: Day transition — fires `day_transition` signal at day boundary, auto-pauses the game.
 ## **Story 005**: `serialize()` / `deserialize()` — save/load tick state for persistence.
 
-const TICKS_PER_DAY: int = 1000
+const TICKS_PER_DAY: int = 1440
 const TICKS_PER_SECOND_BASE: float = 10.0
 const MAX_TICKS_PER_FRAME: int = 100
 const SPEED_OPTIONS: Array[float] = [0.5, 1.0, 2.0]
@@ -159,7 +159,7 @@ func _accumulate_ticks(ticks: int) -> void:
 ## values, never modified by speed_multiplier. Works regardless of pause
 ## state: a paused world advances by the action cost, then re-freezes.
 ## Handles day transitions via a while loop: if the cost pushes tick_count
-## past 1000, the remainder after subtracting TICKS_PER_DAY wraps to the
+## past TICKS_PER_DAY, the remainder after subtracting TICKS_PER_DAY wraps to the
 ## next day, current_day increments, and the game auto-pauses. Manual
 ## actions that cross a day boundary still trigger pause.
 func advance_ticks_manual(cost: int) -> void:
@@ -232,3 +232,13 @@ func deserialize(data: Dictionary) -> void:
 		raw_ip = true
 	_is_paused = bool(raw_ip)
 	set_process(not _is_paused)
+
+
+## Resets all tick state to game-start defaults. Called by WorldSaveManager.reset_new_game()
+## so a new session starts from day 1 with no time carried over from a previous loaded game.
+func reset() -> void:
+	_tick_count = 0
+	_tick_remainder = 0.0
+	_current_day = 1
+	_speed_multiplier = 1.0
+	set_pause(true)

@@ -1,7 +1,7 @@
----
+﻿---
 name: create-epics
-model: qwen-3.6-35b-sovereign
-description: "Translate approved GDDs + architecture into epics — one epic per architectural module. Defines scope, governing ADRs, engine risk, and untraced requirements. Does NOT break into stories — run /create-stories [epic-slug] after each epic is created."
+model: claude-sonnet-4-6
+description: "Translate approved GDDs + architecture into epics â€” one epic per architectural module. Defines scope, governing ADRs, engine risk, and untraced requirements. Does NOT break into stories â€” run /create-stories [epic-slug] after each epic is created."
 argument-hint: "[system-name | layer: foundation|core|feature|presentation | all] [--review full|lean|solo]"
 user-invocable: true
 allowed-tools: Read, Glob, Grep, Write, Task, AskUserQuestion
@@ -12,10 +12,10 @@ agent: technical-director
 
 An epic is a named, bounded body of work that maps to one architectural module.
 It defines **what** needs to be built and **who owns it architecturally**. It
-does not prescribe implementation steps — that is the job of stories.
+does not prescribe implementation steps â€” that is the job of stories.
 
 **Run this skill once per layer** as you approach that layer in development.
-Do not create Feature layer epics until Core is nearly complete — the design
+Do not create Feature layer epics until Core is nearly complete â€” the design
 will have changed.
 
 **Output:** `production/epics/[epic-slug]/EPIC.md` + `production/epics/index.md`
@@ -29,26 +29,26 @@ will have changed.
 ## 1. Parse Arguments
 
 Resolve the review mode (once, store for all gate spawns this run):
-1. If `--review [full|lean|solo]` was passed → use that
-2. Else read `production/review-mode.txt` → use that value
-3. Else → default to `lean`
+1. If `--review [full|lean|solo]` was passed â†’ use that
+2. Else read `production/review-mode.txt` â†’ use that value
+3. Else â†’ default to `lean`
 
 See `.claude/docs/director-gates.md` for the full check pattern.
 
 **Modes:**
-- `/create-epics all` — process all systems in layer order
-- `/create-epics layer: foundation` — Foundation layer only
-- `/create-epics layer: core` — Core layer only
-- `/create-epics layer: feature` — Feature layer only
-- `/create-epics layer: presentation` — Presentation layer only
-- `/create-epics [system-name]` — one specific system
-- No argument — ask: "Which layer or system would you like to create epics for?"
+- `/create-epics all` â€” process all systems in layer order
+- `/create-epics layer: foundation` â€” Foundation layer only
+- `/create-epics layer: core` â€” Core layer only
+- `/create-epics layer: feature` â€” Feature layer only
+- `/create-epics layer: presentation` â€” Presentation layer only
+- `/create-epics [system-name]` â€” one specific system
+- No argument â€” ask: "Which layer or system would you like to create epics for?"
 
 ---
 
 ## 2. Load Inputs
 
-### Step 2a — Summary scan (fast)
+### Step 2a â€” Summary scan (fast)
 
 Grep all GDDs for their `## Summary` sections before reading anything fully:
 
@@ -59,19 +59,19 @@ Grep pattern="## Summary" glob="design/gdd/*.md" output_mode="content" -A 5
 For `layer:` or `[system-name]` modes: filter to only in-scope GDDs based on
 the Summary quick-reference. Skip full-reading anything out of scope.
 
-### Step 2b — Full document load (in-scope systems only)
+### Step 2b â€” Full document load (in-scope systems only)
 
-Using the Step 2a grep results, identify which systems are in scope. Read full documents **only for in-scope systems** — do not read GDDs or ADRs for out-of-scope systems or layers.
+Using the Step 2a grep results, identify which systems are in scope. Read full documents **only for in-scope systems** â€” do not read GDDs or ADRs for out-of-scope systems or layers.
 
 Read for in-scope systems:
 
-- `design/gdd/systems-index.md` — authoritative system list, layers, priority
+- `design/gdd/systems-index.md` â€” authoritative system list, layers, priority
 - In-scope GDDs only (Approved or Designed status, filtered by Step 2a results)
-- `docs/architecture/architecture.md` — module ownership and API boundaries
-- Accepted ADRs **whose domains cover in-scope systems only** — read the "GDD Requirements Addressed", "Decision", and "Engine Compatibility" sections; skip ADRs for unrelated domains
-- `docs/architecture/control-manifest.md` — manifest version date from header
-- `docs/architecture/tr-registry.yaml` — for tracing requirements to ADR coverage
-- `docs/engine-reference/[engine]/VERSION.md` — engine name, version, risk levels
+- `docs/architecture/architecture.md` â€” module ownership and API boundaries
+- Accepted ADRs **whose domains cover in-scope systems only** â€” read the "GDD Requirements Addressed", "Decision", and "Engine Compatibility" sections; skip ADRs for unrelated domains
+- `docs/architecture/control-manifest.md` â€” manifest version date from header
+- `docs/architecture/tr-registry.yaml` â€” for tracing requirements to ADR coverage
+- `docs/engine-reference/[engine]/VERSION.md` â€” engine name, version, risk levels
 
 Report: "Loaded [N] GDDs, [M] ADRs, engine: [name + version]."
 
@@ -95,7 +95,7 @@ For each system, map it to an architectural module from `architecture.md`.
 
 Check ADR coverage against the TR registry:
 - **Traced requirements**: TR-IDs that have an Accepted ADR covering them
-- **Untraced requirements**: TR-IDs with no ADR — warn before proceeding
+- **Untraced requirements**: TR-IDs with no ADR â€” warn before proceeding
 
 Present to user before writing anything:
 
@@ -106,27 +106,27 @@ Present to user before writing anything:
 **GDD**: design/gdd/[filename].md
 **Architecture Module**: [module name from architecture.md]
 **Governing ADRs**: [ADR-NNNN, ADR-MMMM]
-**Engine Risk**: [LOW / MEDIUM / HIGH — highest risk among governing ADRs]
+**Engine Risk**: [LOW / MEDIUM / HIGH â€” highest risk among governing ADRs]
 **GDD Requirements Covered by ADRs**: [N / total]
 **Untraced Requirements**: [list TR-IDs with no ADR, or "None"]
 ```
 
 If there are untraced requirements:
-> "⚠️ [N] requirements in [system] have no ADR. The epic can be created, but
+> "âš ï¸ [N] requirements in [system] have no ADR. The epic can be created, but
 > stories for these requirements will be marked Blocked until ADRs exist.
 > Run `/architecture-decision` first, or proceed with placeholders."
 
 Ask: "Shall I create Epic: [name]?"
-Options: "Yes, create it", "Skip", "Pause — I need to write ADRs first"
+Options: "Yes, create it", "Skip", "Pause â€” I need to write ADRs first"
 
 ---
 
 ## 4b. Producer Epic Structure Gate
 
-**Review mode check** — apply before spawning PR-EPIC:
-- `solo` → skip. Note: "PR-EPIC skipped — Solo mode." Proceed to Step 5 (write epic files).
-- `lean` → skip (not a PHASE-GATE). Note: "PR-EPIC skipped — Lean mode." Proceed to Step 5 (write epic files).
-- `full` → spawn as normal.
+**Review mode check** â€” apply before spawning PR-EPIC:
+- `solo` â†’ skip. Note: "PR-EPIC skipped â€” Solo mode." Proceed to Step 5 (write epic files).
+- `lean` â†’ skip (not a PHASE-GATE). Note: "PR-EPIC skipped â€” Lean mode." Proceed to Step 5 (write epic files).
+- `full` â†’ spawn as normal.
 
 After all epics for the current layer are defined (Step 4 completed for all in-scope systems), and before writing any files, spawn `producer` via Task using gate **PR-EPIC** (`.claude/docs/director-gates.md`).
 
@@ -151,7 +151,7 @@ After user confirms, write:
 > **GDD**: design/gdd/[filename].md
 > **Architecture Module**: [module name]
 > **Status**: Ready
-> **Stories**: Not yet created — run `/create-stories [epic-slug]`
+> **Stories**: Not yet created â€” run `/create-stories [epic-slug]`
 
 ## Overview
 
@@ -168,8 +168,8 @@ and the architecture module's stated responsibilities]
 
 | TR-ID | Requirement | ADR Coverage |
 |-------|-------------|--------------|
-| TR-[system]-001 | [requirement text from registry] | ADR-NNNN ✅ |
-| TR-[system]-002 | [requirement text] | ❌ No ADR |
+| TR-[system]-001 | [requirement text from registry] | ADR-NNNN âœ… |
+| TR-[system]-002 | [requirement text] | âŒ No ADR |
 
 ## Definition of Done
 
@@ -205,7 +205,7 @@ Engine: [name + version]
 
 After writing all epics for the requested scope:
 
-- **Foundation + Core complete**: These are required for the Pre-Production →
+- **Foundation + Core complete**: These are required for the Pre-Production â†’
   Production gate. Run `/gate-check production` to check readiness.
 - **Reminder**: Epics define scope. Stories define implementation steps. Run
   `/create-stories [epic-slug]` for each epic before developers can pick up work.
@@ -214,13 +214,13 @@ After writing all epics for the requested scope:
 
 ## Collaborative Protocol
 
-1. **One epic at a time** — present each epic definition before asking to create it
-2. **Warn on gaps** — flag untraced requirements before proceeding
-3. **Ask before writing** — per-epic approval before writing any file
-4. **No invention** — all content comes from GDDs, ADRs, and architecture docs
-5. **Never create stories** — this skill stops at the epic level
+1. **One epic at a time** â€” present each epic definition before asking to create it
+2. **Warn on gaps** â€” flag untraced requirements before proceeding
+3. **Ask before writing** â€” per-epic approval before writing any file
+4. **No invention** â€” all content comes from GDDs, ADRs, and architecture docs
+5. **Never create stories** â€” this skill stops at the epic level
 
 After all requested epics are processed:
 
-- **Verdict: COMPLETE** — [N] epic(s) written. Run `/create-stories [epic-slug]` per epic.
-- **Verdict: BLOCKED** — user declined all epics, or no eligible systems found.
+- **Verdict: COMPLETE** â€” [N] epic(s) written. Run `/create-stories [epic-slug]` per epic.
+- **Verdict: BLOCKED** â€” user declined all epics, or no eligible systems found.

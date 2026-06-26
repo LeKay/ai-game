@@ -1,7 +1,7 @@
 # Story 001: Route Model and Slot Validation
 
 > **Epic**: Logistics System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: Logic
 > **Manifest Version**: 2026-05-14
@@ -122,7 +122,7 @@ create_route(source_id, destination_id, npc_id, route_type):
 **Required evidence**:
 - Logic: `tests/unit/logistics/route_model_test.gd` — must exist and pass
 
-**Status**: [ ] Not yet created
+**Status**: [x] Created — `tests/unit/logistics/route_model_test.gd` (22 test functions)
 
 ---
 
@@ -130,3 +130,12 @@ create_route(source_id, destination_id, npc_id, route_type):
 
 - Depends on: None
 - Unlocks: Story 002 (carrier FSM needs route model), Story 004 (building status needs route queries)
+
+---
+
+## Completion Notes
+**Completed**: 2026-06-02
+**Criteria**: 6/6 passing
+**Deviations**: ADVISORY — `MAX_OUTPUT_SLOTS` and `MAX_INPUT_SLOTS` hardcoded as 1 in `LogisticsSystem`. Acceptable for MVP (ADR-0011 defines 1 slot per building type); extract to building definition table when configurable slots are introduced.
+**Test Evidence**: Logic — `tests/unit/logistics/route_model_test.gd` (22 test functions, all ACs covered)
+**Code Review**: Skipped (lean mode)

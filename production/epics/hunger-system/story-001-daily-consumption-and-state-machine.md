@@ -1,7 +1,7 @@
 # Story 001: Daily Consumption and State Machine
 
 > **Epic**: Hunger System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Foundation
 > **Type**: Logic — ADR-0010
 > **Manifest Version**: N/A — control manifest not yet created
@@ -169,3 +169,15 @@ func deserialize(data: Dictionary) -> void:
 
 - Depends on: None — state machine and daily requirement calculation can be unit tested with mocked dependencies
 - Unlocks: Story 002 (debuff stacking requires the state machine to produce FED/HUNGRY states)
+
+---
+
+## Completion Notes
+**Completed**: 2026-06-03
+**Criteria**: 5/5 passing
+**Deviations**:
+- ADVISORY: `hunger_tick_multiplier = 2.0` (HUNGRY value) is an inline literal — could be a named const `HUNGRY_TICK_MULTIPLIER`
+- ADVISORY: Story Manifest Version was "N/A" (story pre-dates manifest v2026-05-14); manifest rules are followed in implementation
+**Test Evidence**: Logic — `tests/unit/hunger_system/daily_consumption_test.gd` (11 test functions)
+**Scope additions**: `inventory_system.gd` consume_food stub signature corrected; `project.godot` HungerSystem Autoload registered
+**Code Review**: Skipped — Lean mode

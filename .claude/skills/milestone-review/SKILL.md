@@ -1,6 +1,6 @@
----
+﻿---
 name: milestone-review
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Generates a comprehensive milestone progress review including feature completeness, quality metrics, risk assessment, and go/no-go recommendation. Use at milestone checkpoints or when evaluating readiness for a milestone deadline."
 argument-hint: "[milestone-name|current] [--review full|lean|solo]"
 user-invocable: true
@@ -10,9 +10,9 @@ allowed-tools: Read, Glob, Grep, Write, Task, AskUserQuestion
 ## Phase 0: Parse Arguments
 
 Extract the milestone name (`current` or a specific name) and resolve the review mode (once, store for all gate spawns this run):
-1. If `--review [full|lean|solo]` was passed → use that
-2. Else read `production/review-mode.txt` → use that value
-3. Else → default to `lean`
+1. If `--review [full|lean|solo]` was passed â†’ use that
+2. Else read `production/review-mode.txt` â†’ use that value
+3. Else â†’ default to `lean`
 
 See `.claude/docs/director-gates.md` for the full check pattern.
 
@@ -109,16 +109,16 @@ Read all sprint reports for sprints within this milestone from `production/sprin
 
 ## Phase 3b: Producer Risk Assessment
 
-**Review mode check** — apply before spawning PR-MILESTONE:
-- `solo` → skip. Note: "PR-MILESTONE skipped — Solo mode." Present the Go/No-Go section without a producer verdict.
-- `lean` → skip (not a PHASE-GATE). Note: "PR-MILESTONE skipped — Lean mode." Present the Go/No-Go section without a producer verdict.
-- `full` → spawn as normal.
+**Review mode check** â€” apply before spawning PR-MILESTONE:
+- `solo` â†’ skip. Note: "PR-MILESTONE skipped â€” Solo mode." Present the Go/No-Go section without a producer verdict.
+- `lean` â†’ skip (not a PHASE-GATE). Note: "PR-MILESTONE skipped â€” Lean mode." Present the Go/No-Go section without a producer verdict.
+- `full` â†’ spawn as normal.
 
 Before generating the Go/No-Go recommendation, spawn `producer` via Task using gate **PR-MILESTONE** (`.claude/docs/director-gates.md`).
 
 Pass: milestone name and target date, current completion percentage, blocked story count, velocity data from sprint reports (if available), list of cut candidates.
 
-Present the producer's assessment inline within the Go/No-Go section. The producer's verdict (ON TRACK / AT RISK / OFF TRACK) informs the overall recommendation — do not issue a GO against an OFF TRACK producer verdict without explicit user acknowledgement.
+Present the producer's assessment inline within the Go/No-Go section. The producer's verdict (ON TRACK / AT RISK / OFF TRACK) informs the overall recommendation â€” do not issue a GO against an OFF TRACK producer verdict without explicit user acknowledgement.
 
 ---
 
@@ -128,9 +128,9 @@ Present the review to the user.
 
 Ask: "May I write this to `production/milestones/[milestone-name]-review.md`?"
 
-If yes, write the file, creating the directory if needed. Verdict: **COMPLETE** — milestone review saved.
+If yes, write the file, creating the directory if needed. Verdict: **COMPLETE** â€” milestone review saved.
 
-If no, stop here. Verdict: **BLOCKED** — user declined write.
+If no, stop here. Verdict: **BLOCKED** â€” user declined write.
 
 ---
 

@@ -1,7 +1,7 @@
----
+﻿---
 name: consistency-check
-model: qwen-3.6-35b-sovereign
-description: "Scan all GDDs against the entity registry to detect cross-document inconsistencies: same entity with different stats, same item with different values, same formula with different variables. Grep-first approach — reads registry then targets only conflicting GDD sections rather than full document reads."
+model: claude-sonnet-4-6
+description: "Scan all GDDs against the entity registry to detect cross-document inconsistencies: same entity with different stats, same item with different values, same formula with different variables. Grep-first approach â€” reads registry then targets only conflicting GDD sections rather than full document reads."
 argument-hint: "[full | since-last-review | entity:<name> | item:<name>]"
 user-invocable: true
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash
@@ -12,7 +12,7 @@ allowed-tools: Read, Glob, Grep, Write, Edit, Bash
 Detects cross-document inconsistencies by comparing all GDDs against the
 entity registry (`design/registry/entities.yaml`). Uses a grep-first approach:
 reads the registry once, then targets only the GDD sections that mention
-registered names — no full document reads unless a conflict needs investigation.
+registered names â€” no full document reads unless a conflict needs investigation.
 
 **This skill is the write-time safety net.** It catches what `/design-system`'s
 per-section checks may have missed and what `/review-all-gdds`'s holistic review
@@ -31,10 +31,10 @@ catches too late.
 ## Phase 1: Parse Arguments and Load Registry
 
 **Modes:**
-- No argument / `full` — check all registered entries against all GDDs
-- `since-last-review` — check only GDDs modified since the last review report
-- `entity:<name>` — check one specific entity across all GDDs
-- `item:<name>` — check one specific item across all GDDs
+- No argument / `full` â€” check all registered entries against all GDDs
+- `since-last-review` â€” check only GDDs modified since the last review report
+- `entity:<name>` â€” check one specific entity across all GDDs
+- `item:<name>` â€” check one specific item across all GDDs
 
 **Load the registry:**
 
@@ -43,16 +43,16 @@ Read path="design/registry/entities.yaml"
 ```
 
 If the file does not exist or has no entries:
-> "Entity registry is empty. Run `/design-system` to write GDDs — the registry
+> "Entity registry is empty. Run `/design-system` to write GDDs â€” the registry
 > is populated automatically after each GDD is completed. Nothing to check yet."
 
 Stop and exit.
 
 Build four lookup tables from the registry:
-- **entity_map**: `{ name → { source, attributes, referenced_by } }`
-- **item_map**: `{ name → { source, value_gold, weight, ... } }`
-- **formula_map**: `{ name → { source, variables, output_range } }`
-- **constant_map**: `{ name → { source, value, unit } }`
+- **entity_map**: `{ name â†’ { source, attributes, referenced_by } }`
+- **item_map**: `{ name â†’ { source, value_gold, weight, ... } }`
+- **formula_map**: `{ name â†’ { source, variables, output_range } }`
+- **constant_map**: `{ name â†’ { source, value, unit } }`
 
 Count total registered entries. Report:
 ```
@@ -68,7 +68,7 @@ Scope: [full | since-last-review | entity:name]
 Glob pattern="design/gdd/*.md"
 ```
 
-Exclude: `game-concept.md`, `systems-index.md`, `game-pillars.md` — these are
+Exclude: `game-concept.md`, `systems-index.md`, `game-pillars.md` â€” these are
 not system GDDs.
 
 For `since-last-review` mode:
@@ -85,11 +85,11 @@ Report the in-scope GDD list before scanning.
 ## Phase 3: Grep-First Conflict Scan
 
 For each registered entry, grep every in-scope GDD for the entry's name.
-Do NOT do full reads — extract only the matching lines and their immediate
+Do NOT do full reads â€” extract only the matching lines and their immediate
 context (-C 3 lines).
 
-This is the core optimization: instead of reading 10 GDDs × 400 lines each
-(4,000 lines), you grep 50 entity names × 10 GDDs (50 targeted searches,
+This is the core optimization: instead of reading 10 GDDs Ã— 400 lines each
+(4,000 lines), you grep 50 entity names Ã— 10 GDDs (50 targeted searches,
 each returning ~10 lines on a hit).
 
 ### 3a: Entity Scan
@@ -109,9 +109,9 @@ For each GDD hit, extract the values mentioned near the entity name:
 Compare extracted values against the registry entry.
 
 **Conflict detection:**
-- Registry says `[entity_name].[attribute] = [value_A]`. GDD says `[entity_name] has [value_B]`. → **CONFLICT**
-- Registry says `[item_name].[attribute] = [value_A]`. GDD says `[item_name] is [value_B]`. → **CONFLICT**
-- GDD mentions `[entity_name]` but doesn't specify the attribute. → **NOTE** (no conflict, just unverifiable)
+- Registry says `[entity_name].[attribute] = [value_A]`. GDD says `[entity_name] has [value_B]`. â†’ **CONFLICT**
+- Registry says `[item_name].[attribute] = [value_A]`. GDD says `[item_name] is [value_B]`. â†’ **CONFLICT**
+- GDD mentions `[entity_name]` but doesn't specify the attribute. â†’ **NOTE** (no conflict, just unverifiable)
 
 ### 3b: Item Scan
 
@@ -130,8 +130,8 @@ For each formula in formula_map, grep all GDDs for the formula name. Extract:
 - output range or cap values mentioned
 
 Compare against registry entry:
-- Different variable names → **CONFLICT**
-- Output range stated differently → **CONFLICT**
+- Different variable names â†’ **CONFLICT**
+- Output range stated differently â†’ **CONFLICT**
 
 ### 3d: Constant Scan
 
@@ -139,7 +139,7 @@ For each constant in constant_map, grep all GDDs for the constant name. Extract:
 - Any numeric value mentioned near the constant name
 
 Compare against registry value:
-- Different number → **CONFLICT**
+- Different number â†’ **CONFLICT**
 
 ---
 
@@ -154,7 +154,7 @@ Read path="design/gdd/[conflicting_gdd].md"
 (Or use Grep with wider context if the file is large)
 
 Confirm the conflict with full context. Determine:
-1. **Which GDD is correct?** Check the `source:` field in the registry — the
+1. **Which GDD is correct?** Check the `source:` field in the registry â€” the
    source GDD is the authoritative owner. Any other GDD that contradicts it
    is the one that needs updating.
 2. **Is the registry itself out of date?** If the source GDD was updated after
@@ -164,11 +164,11 @@ Confirm the conflict with full context. Determine:
    then fix all other GDDs.
 
 For each conflict, classify:
-- **🔴 CONFLICT** — same named entity/item/formula/constant with different values
+- **ðŸ”´ CONFLICT** â€” same named entity/item/formula/constant with different values
   in different GDDs. Must resolve before architecture begins.
-- **⚠️ STALE REGISTRY** — source GDD value changed but registry not updated.
+- **âš ï¸ STALE REGISTRY** â€” source GDD value changed but registry not updated.
   Registry needs updating; other GDDs may be correct already.
-- **ℹ️ UNVERIFIABLE** — entity mentioned but no comparable attribute stated.
+- **â„¹ï¸ UNVERIFIABLE** â€” entity mentioned but no comparable attribute stated.
   Not a conflict; just noting the reference.
 
 ---
@@ -185,32 +185,32 @@ GDDs scanned: [N] ([list names])
 
 ### Conflicts Found (must resolve before architecture)
 
-🔴 [Entity/Item/Formula/Constant Name]
+ðŸ”´ [Entity/Item/Formula/Constant Name]
    Registry (source: [gdd]): [attribute] = [value]
    Conflict in [other_gdd].md: [attribute] = [different_value]
-   → Resolution needed: [which doc to change and to what]
+   â†’ Resolution needed: [which doc to change and to what]
 
 ---
 
 ### Stale Registry Entries (registry behind the GDD)
 
-⚠️ [Entry Name]
+âš ï¸ [Entry Name]
    Registry says: [value] (written [date])
    Source GDD now says: [new value]
-   → Update registry entry to match source GDD, then check referenced_by docs.
+   â†’ Update registry entry to match source GDD, then check referenced_by docs.
 
 ---
 
 ### Unverifiable References (no conflict, informational)
 
-ℹ️ [gdd].md mentions [entity_name] but states no comparable attributes.
+â„¹ï¸ [gdd].md mentions [entity_name] but states no comparable attributes.
    No conflict detected. No action required.
 
 ---
 
 ### Clean Entries (no issues found)
 
-✅ [N] registry entries verified across all GDDs with no conflicts.
+âœ… [N] registry entries verified across all GDDs with no conflicts.
 
 ---
 
@@ -218,8 +218,8 @@ Verdict: PASS | CONFLICTS FOUND
 ```
 
 **Verdict:**
-- **PASS** — no conflicts. Registry and GDDs agree on all checked values.
-- **CONFLICTS FOUND** — one or more conflicts detected. List resolution steps.
+- **PASS** â€” no conflicts. Registry and GDDs agree on all checked values.
+- **CONFLICTS FOUND** â€” one or more conflicts detected. List resolution steps.
 
 ---
 
@@ -242,26 +242,26 @@ Only add entries that appear in more than one GDD (true cross-system facts).
 **Never delete registry entries.** Set `status: deprecated` if an entry is removed
 from all GDDs.
 
-After writing: Verdict: **COMPLETE** — consistency check finished.
-If conflicts remain unresolved: Verdict: **BLOCKED** — [N] conflicts need manual resolution before architecture begins.
+After writing: Verdict: **COMPLETE** â€” consistency check finished.
+If conflicts remain unresolved: Verdict: **BLOCKED** â€” [N] conflicts need manual resolution before architecture begins.
 
 ### 6b: Append to Reflexion Log
 
-If any 🔴 CONFLICT entries were found (regardless of whether they were resolved),
+If any ðŸ”´ CONFLICT entries were found (regardless of whether they were resolved),
 append an entry to `docs/consistency-failures.md` for each conflict:
 
 ```markdown
-### [YYYY-MM-DD] — /consistency-check — 🔴 CONFLICT
+### [YYYY-MM-DD] â€” /consistency-check â€” ðŸ”´ CONFLICT
 **Domain**: [system domain(s) involved]
 **Documents involved**: [source GDD] vs [conflicting GDD]
-**What happened**: [specific conflict — entity name, attribute, differing values]
-**Resolution**: [how it was fixed, or "Unresolved — manual action needed"]
+**What happened**: [specific conflict â€” entity name, attribute, differing values]
+**Resolution**: [how it was fixed, or "Unresolved â€” manual action needed"]
 **Pattern**: [generalised lesson, e.g. "Item values defined in combat GDD were not
-referenced in economy GDD before authoring — always check entities.yaml first"]
+referenced in economy GDD before authoring â€” always check entities.yaml first"]
 ```
 
 Only append if `docs/consistency-failures.md` exists. If the file is missing,
-skip this step silently — do not create the file from this skill.
+skip this step silently â€” do not create the file from this skill.
 
 ---
 

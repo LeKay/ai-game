@@ -1,6 +1,6 @@
----
+﻿---
 name: tech-debt
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Track, categorize, and prioritize technical debt across the codebase. Scans for debt indicators, maintains a debt register, and recommends repayment scheduling."
 argument-hint: "[scan|add|prioritize|report]"
 user-invocable: true
@@ -11,12 +11,12 @@ allowed-tools: Read, Glob, Grep, Write
 
 Determine the mode from the argument:
 
-- `scan` — Scan the codebase for tech debt indicators
-- `add` — Add a new tech debt entry manually
-- `prioritize` — Re-prioritize the existing debt register
-- `report` — Generate a summary report of current debt status
+- `scan` â€” Scan the codebase for tech debt indicators
+- `add` â€” Add a new tech debt entry manually
+- `prioritize` â€” Re-prioritize the existing debt register
+- `report` â€” Generate a summary report of current debt status
 
-If no subcommand is provided, output usage and stop. Verdict: **FAIL** — missing required subcommand.
+If no subcommand is provided, output usage and stop. Verdict: **FAIL** â€” missing required subcommand.
 
 ---
 
@@ -45,9 +45,9 @@ Present the findings to the user.
 
 Ask: "May I write these findings to `docs/tech-debt-register.md`?"
 
-If yes, update the register (append new entries, do not overwrite existing ones). Verdict: **COMPLETE** — scan findings written to register.
+If yes, update the register (append new entries, do not overwrite existing ones). Verdict: **COMPLETE** â€” scan findings written to register.
 
-If no, stop here. Verdict: **BLOCKED** — user declined write.
+If no, stop here. Verdict: **BLOCKED** â€” user declined write.
 
 ---
 
@@ -59,9 +59,9 @@ Present the new entry to the user.
 
 Ask: "May I append this entry to `docs/tech-debt-register.md`?"
 
-If yes, append the entry. Verdict: **COMPLETE** — entry added to register.
+If yes, append the entry. Verdict: **COMPLETE** â€” entry added to register.
 
-If no, stop here. Verdict: **BLOCKED** — user declined write.
+If no, stop here. Verdict: **BLOCKED** â€” user declined write.
 
 ---
 
@@ -69,7 +69,7 @@ If no, stop here. Verdict: **BLOCKED** — user declined write.
 
 Read the debt register at `docs/tech-debt-register.md`.
 
-Score each item by: `(impact_if_unfixed × frequency_of_encounter) / fix_effort`
+Score each item by: `(impact_if_unfixed Ã— frequency_of_encounter) / fix_effort`
 
 Re-sort the register by priority score and recommend which items to include in the next sprint.
 
@@ -77,9 +77,9 @@ Present the re-prioritized register to the user.
 
 Ask: "May I write the re-prioritized register back to `docs/tech-debt-register.md`?"
 
-If yes, write the updated file. Verdict: **COMPLETE** — register re-prioritized and saved.
+If yes, write the updated file. Verdict: **COMPLETE** â€” register re-prioritized and saved.
 
-If no, stop here. Verdict: **BLOCKED** — user declined write.
+If no, stop here. Verdict: **BLOCKED** â€” user declined write.
 
 ---
 
@@ -94,7 +94,7 @@ Read the debt register. Generate summary statistics:
 
 Flag any items that have been in the register for more than 3 sprints.
 
-Output the report to the user. This mode is read-only — no files are written. Verdict: **COMPLETE** — debt report generated.
+Output the report to the user. This mode is read-only â€” no files are written. Verdict: **COMPLETE** â€” debt report generated.
 
 ---
 
@@ -116,7 +116,7 @@ Total items: [N] | Estimated total effort: [T-shirt sizes summed]
 ```
 
 ### Rules
-- Tech debt is not inherently bad — it is a tool. The register tracks conscious decisions.
+- Tech debt is not inherently bad â€” it is a tool. The register tracks conscious decisions.
 - Every debt entry must explain WHY it was accepted (deadline, prototype, missing info)
 - "Scan" should run at least once per sprint to catch new debt
 - Items older than 3 sprints without action should either be fixed or consciously accepted with a documented reason

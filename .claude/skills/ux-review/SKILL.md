@@ -1,6 +1,6 @@
----
+﻿---
 name: ux-review
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Validates a UX spec, HUD design, or interaction pattern library for completeness, accessibility compliance, GDD alignment, and implementation readiness. Produces APPROVED / NEEDS REVISION / MAJOR REVISION NEEDED verdict with specific gaps."
 argument-hint: "[file-path or 'all' or 'hud' or 'patterns']"
 user-invocable: true
@@ -22,9 +22,9 @@ the `/team-ui` pipeline.
 - After major revisions to a UX spec
 
 **Verdict levels:**
-- **APPROVED** — spec is complete, consistent, and implementation-ready
-- **NEEDS REVISION** — specific gaps found; fix before handoff but not a full redesign
-- **MAJOR REVISION NEEDED** — fundamental issues with scope, player need, or
+- **APPROVED** â€” spec is complete, consistent, and implementation-ready
+- **NEEDS REVISION** â€” specific gaps found; fix before handoff but not a full redesign
+- **MAJOR REVISION NEEDED** â€” fundamental issues with scope, player need, or
   completeness; needs significant rework
 
 ---
@@ -49,7 +49,7 @@ Before validating any spec, load:
 
 1. **Input & Platform config**: Read `.claude/docs/technical-preferences.md` and
    extract `## Input & Platform`. This is the authoritative source for which input
-   methods the game supports — use it to drive the Input Method Coverage checks in
+   methods the game supports â€” use it to drive the Input Method Coverage checks in
    Phase 3A, not the spec's own header. If unconfigured, fall back to the spec header.
 2. The accessibility tier committed to in `design/accessibility-requirements.md`
    (if it exists)
@@ -68,23 +68,23 @@ Run all checks against a `ux-spec.md`-based document.
 ### Completeness (required sections)
 
 - [ ] Document header present with Status, Author, Platform Target
-- [ ] Purpose & Player Need — has a player-perspective need statement (not
+- [ ] Purpose & Player Need â€” has a player-perspective need statement (not
   developer-perspective)
-- [ ] Player Context on Arrival — describes player's state and prior activity
-- [ ] Navigation Position — shows where screen sits in hierarchy
-- [ ] Entry & Exit Points — all entry sources and exit destinations documented
-- [ ] Layout Specification — zones defined, component inventory table present
-- [ ] States & Variants — at minimum: loading, empty/populated, and error states
+- [ ] Player Context on Arrival â€” describes player's state and prior activity
+- [ ] Navigation Position â€” shows where screen sits in hierarchy
+- [ ] Entry & Exit Points â€” all entry sources and exit destinations documented
+- [ ] Layout Specification â€” zones defined, component inventory table present
+- [ ] States & Variants â€” at minimum: loading, empty/populated, and error states
   documented
-- [ ] Interaction Map — covers all target input methods (check platform target
+- [ ] Interaction Map â€” covers all target input methods (check platform target
   in header)
-- [ ] Data Requirements — every displayed data element has a source system and owner
-- [ ] Events Fired — every player action has a corresponding event or null
+- [ ] Data Requirements â€” every displayed data element has a source system and owner
+- [ ] Events Fired â€” every player action has a corresponding event or null
   explanation
-- [ ] Transitions & Animations — at least enter/exit transitions specified
-- [ ] Accessibility Requirements — screen-level requirements present
-- [ ] Localization Considerations — max character counts for text elements
-- [ ] Acceptance Criteria — at least 5 specific testable criteria
+- [ ] Transitions & Animations â€” at least enter/exit transitions specified
+- [ ] Accessibility Requirements â€” screen-level requirements present
+- [ ] Localization Considerations â€” max character counts for text elements
+- [ ] Acceptance Criteria â€” at least 5 specific testable criteria
 
 ### Quality Checks
 
@@ -109,7 +109,7 @@ Run all checks against a `ux-spec.md`-based document.
 
 **Data Architecture**
 - [ ] No data element has "UI" listed as the owner (UI must not own game state)
-- [ ] Update frequency is specified for all real-time data (not just "realtime" —
+- [ ] Update frequency is specified for all real-time data (not just "realtime" â€”
   what triggers update?)
 - [ ] Null handling is specified for all data elements (what shows when data is
   unavailable?)
@@ -211,7 +211,7 @@ Run all checks against a `hud-design.md`-based document.
 
 ### Completeness: [X/Y sections present]
 - [x] Purpose & Player Need
-- [ ] States & Variants — MISSING: error state not documented
+- [ ] States & Variants â€” MISSING: error state not documented
 
 ### Quality Issues: [N found]
 1. **[Issue title]** [BLOCKING / ADVISORY]
@@ -220,7 +220,7 @@ Run all checks against a `hud-design.md`-based document.
    - Fix: [specific action to take]
 
 ### GDD Alignment: [ALIGNED / GAPS FOUND]
-- GDD [name] UI Requirements — [X/Y requirements covered]
+- GDD [name] UI Requirements â€” [X/Y requirements covered]
 - Missing: [list any uncovered GDD requirements]
 
 ### Accessibility: [COMPLIANT / GAPS / NON-COMPLIANT]
@@ -231,8 +231,8 @@ Run all checks against a `hud-design.md`-based document.
 - [findings]
 
 ### Verdict: APPROVED / NEEDS REVISION / MAJOR REVISION NEEDED
-**Blocking issues**: [N] — must be resolved before implementation
-**Advisory issues**: [N] — recommended but not blocking
+**Blocking issues**: [N] â€” must be resolved before implementation
+**Advisory issues**: [N] â€” recommended but not blocking
 
 [For APPROVED]: This spec is ready for handoff to `/team-ui` Phase 2
 (Visual Design).
@@ -248,16 +248,16 @@ Recommend returning to `/ux-design` to rework [sections].
 
 ## Phase 5: Collaborative Protocol
 
-This skill is READ-ONLY — it never edits or writes files. It reports findings only.
+This skill is READ-ONLY â€” it never edits or writes files. It reports findings only.
 
 After delivering the verdict:
 - For **APPROVED**: suggest running `/team-ui` to begin implementation coordination
 - For **NEEDS REVISION**: offer to help fix specific gaps ("Would you like me to
-  help draft the missing error state?") — but do not auto-fix; wait for user
+  help draft the missing error state?") â€” but do not auto-fix; wait for user
   instruction
 - For **MAJOR REVISION NEEDED**: suggest returning to `/ux-design` with the
   specific sections to rework
 
-Never block the user from proceeding — the verdict is advisory. Document risks,
+Never block the user from proceeding â€” the verdict is advisory. Document risks,
 present findings, let the user decide whether to proceed despite concerns. A user
 who chooses to proceed with a NEEDS REVISION spec takes on the documented risk.

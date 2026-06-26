@@ -1,7 +1,7 @@
 # Story 004: Depletion Penalty and Food Refill
 
 > **Epic**: Player Character System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Core
 > **Type**: Logic — ADR-0007
 > **Manifest Version**: N/A — control manifest not yet created
@@ -132,7 +132,7 @@ The `effective_tick_cost` and `effective_output` are set on the `ProgressUpdate`
   - Given: energy = 0, action slot FREE, player attempts Chop Tree (base: 80 ticks, 5 Wood)
   - When: ActionSlot.try_start() with depleted EnergyPool
   - Then: effective_tick_cost = 80 × 2 = 160, effective_output = max(1, ceil(5 × 0.5)) = max(1, 3) = 3
-  - Edge cases: Pick Berries at 0 Energy → effective_output = max(1, ceil(3 × 0.5)) = 3; Foraging at 0 Energy → effective_output = max(1, ceil(1 × 0.5)) = 1; Craft Tool at 0 Energy → output = 1 (same, producing 1 tool); Mine Stone at 0 Energy → effective_output = max(1, ceil(3 × 0.5)) = 2
+  - Edge cases: Pick Berries at 0 Energy → effective_output = max(1, ceil(3 × 0.5)) = max(1, 2) = 2; Foraging at 0 Energy → effective_output = max(1, ceil(1 × 0.5)) = 1; Craft Tool at 0 Energy → output = 1 (same, producing 1 tool); Mine Stone at 0 Energy → effective_output = max(1, ceil(3 × 0.5)) = max(1, 2) = 2
 
 **AC8**: Action running at energy drop to 0 — no retroactive penalty
   - Given: energy = 50, Chop Tree running (80 ticks, 5 Wood, effective values locked at start)
@@ -153,7 +153,7 @@ The `effective_tick_cost` and `effective_output` are set on the `ProgressUpdate`
 **Story Type**: Logic
 **Required evidence**: `tests/unit/player_character/depletion_food_test.gd` — must exist and pass
 
-**Status**: [ ] Not yet created
+**Status**: [x] `tests/unit/player_character/depletion_food_test.gd` — 16 tests, all 5 ACs covered
 
 ---
 
@@ -161,3 +161,12 @@ The `effective_tick_cost` and `effective_output` are set on the `ProgressUpdate`
 
 - Depends on: Story 001 (EnergyPool must be DONE)
 - Unlocks: None directly — depletion logic feeds into Story 002's action dispatch (which consumes the modifier)
+
+---
+
+## Completion Notes
+**Completed**: 2026-05-31
+**Criteria**: 5/5 passing
+**Deviations**: ADVISORY — action configs hardcoded in `_ready()` (not data-driven); ADVISORY — story predates control manifest v2026-05-14
+**Test Evidence**: Logic — `tests/unit/player_character/depletion_food_test.gd` (16 tests, all 5 ACs covered)
+**Code Review**: Complete — `/code-review` run this session; CHANGES REQUIRED resolved (AC6 slot occupation gap fixed before closure)

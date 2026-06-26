@@ -53,11 +53,17 @@ UI language guidelines:
 
 | Action | Tick Cost | Energy Cost | Output |
 |--------|-----------|-------------|--------|
-| Meadow Foraging | 50 | 8 | Randomly drops: 1 Wood (40%), 1 Fiber (40%), 1 Stone (20%) |
+| Meadow Foraging | 50 | 8 | 1 random resource (25% each: Wood / Stone / Berry / Fiber) |
 | Pick Berries | 40 | 5 | 3 Berries |
-| Craft Tool | 100 | 15 | 1 Tool |
-| Chop Tree | 80 | 12 | 5 Wood (requires tool, deducts charge_cost charge) |
-| Mine Stone | 60 | 10 | 3 Stone (requires tool, deducts charge_cost charge) |
+| Harvest Fiber | 45 | 6 | 2 Fiber |
+| Chop Tree | 80 | 12 | 5 Wood (requires tool) |
+| Mine Stone | 60 | 10 | 3 Stone (requires tool) |
+| Clear Tree / Stone / Berry / Grass | 400 | 40 | 20 of the tile's resource; removes the terrain tile |
+
+> **Tool crafting is NOT a manual tile action** (removed 2026-06-13 — it was dead
+> legacy code). Crafting runs through the Crafting UI via `CraftingRegistry`:
+> Tool = 2 Wood + 1 Stone + 1 Fiber + 15 Energy, 90 ticks (advances the world
+> clock like a manual action). See `design/gdd/recipe-database.md`.
 
 **4. Transport (Drag-and-Drop)**
 - After harvesting a tile, the resource appears as a **pin icon** (small resource sprite) on the tile. The pin shows a stack count when there are multiple items.
@@ -76,10 +82,14 @@ UI language guidelines:
   - The only UI change is the energy bar turning red with the text "Energy depleted — actions cost 2x time, yield 50% less."
 
 **6. Food-to-Energy Refill**
-- The player can consume food items to refill Energy instantly.
-- Consumption amounts:
-  - 1 Beere (berry) → +10 Energy
-  - 1 Brot (bread) → +25 Energy
+- The player can consume food items to refill Energy instantly. Any resource with
+  positive **nutrition** (Resource System) is edible.
+- Energy restored per unit = `round(nutrition × ENERGY_PER_NUTRITION)`, with
+  `ENERGY_PER_NUTRITION = 10`:
+  - 1 Berry (nutrition 1.0) → +10 Energy
+  - 1 Bread (nutrition 5.0) → +50 Energy
+  - 1 Game Meat (nutrition 4.0) → +40 Energy
+  - 1 Wheat (nutrition 0.5) → +5 Energy
 - Eating food **occupies the action slot**: the player must spend a manual action to eat, and the action runs until completion. The eating action has no tick cost — it completes instantly once initiated. However, the action slot IS occupied, preventing other actions during this time.
 - Energy is clamped to max 100 — excess Energy is lost.
 - Food source: food is consumed from whichever container it currently resides in (tile drop pin or storage building). There is no separate carry-inventory for food. If food is on a tile pin, the player can eat it by clicking the pin (or via the energy bar quick-eat menu). If food is in storage, eating it requires opening the storage UI and selecting the food item.
@@ -349,13 +359,13 @@ These values are configurable without changing system behavior. All knobs have s
 | **AC3** | GIVEN a resource pin on a tile WHEN the player drags it to a storage building AND the player has sufficient energy THEN the transport begins, deducts `2 × quantity + 1 × distance` energy and `5 × distance` ticks, and deposits items into storage on completion |
 | **AC4** | GIVEN a resource pin on a tile WHEN the player drags it to a non-storage tile AND releases THEN the pin returns to its original position with no energy or ticks consumed |
 | **AC5** | GIVEN the player has 0 Energy WHEN the player attempts to start a manual action with insufficient energy THEN the action is blocked and the energy bar displays the depleted state with subtitle text. At 0 Energy, actions with sufficient energy CAN start with depletion penalties applied. |
-| **AC6** | GIVEN the player has 0 Energy WHEN the player initiates eating food THEN energy is instantly restored by the food's value (berry +10, bread +25) clamped to max 100 and the action slot is occupied (even though the eat action has no tick cost) |
+| **AC6** | GIVEN the player has 0 Energy WHEN the player initiates eating food THEN energy is instantly restored by the food's value (`round(nutrition × 10)`: berry +10, bread +50) clamped to max 100 and the action slot is occupied (even though the eat action has no tick cost) |
 | **AC7** | GIVEN the player is at 0 Energy WHEN a new action is started THEN tick cost is doubled and output is `max(1, ceil(base_output × 0.5))` per the Energy Depletion Modifier formula |
 | **AC8** | GIVEN a manual action is running WHEN the player's energy drops to 0 during the action THEN the action completes at base cost and base output (depletion penalty does not retroactively apply) |
 | **AC9** | GIVEN a day transition occurs WHEN a manual action or transport is running THEN the action continues without interruption and tick progress is preserved |
 | **AC10** | GIVEN a storage building is full WHEN the player attempts transport THEN the transport fails, pin returns to source tile (NOT lost), and no energy/ticks are consumed |
 | **AC11** | GIVEN the player hovers over a harvestable tile WHEN the player has sufficient energy THEN a cost preview tooltip shows energy cost, tick cost, and expected output |
-| **AC13** | GIVEN the player has energy in [91..99] WHEN the player consumes bread (+25 energy) THEN energy is clamped to exactly 100 and the food item is removed from its current source |
+| **AC13** | GIVEN the player has energy in [91..99] WHEN the player consumes bread (+50 energy) THEN energy is clamped to exactly 100 and the food item is removed from its current source |
 | **AC14** | GIVEN the player is at 0 Energy WHEN the player hovers over a harvestable tile THEN the tooltip shows the depleted tick cost (doubled) and depleted output (ceil × 0.5, min 1) with a "(depleted)" label |
 | **AC15** | GIVEN a transport drag where source tile equals the storage building tile (distance = 0) THEN transport energy cost = 2 × quantity and tick cost = 0 |
 | **AC16** | GIVEN a tool-requiring action WHEN the player has no tools OR all tools have 0.0 charge THEN the action is blocked with the message "No tool available — craft one first" |

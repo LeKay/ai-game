@@ -1,7 +1,7 @@
 # Story 002: Carrier FSM Core Loop
 
 > **Epic**: Logistics System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: Integration
 > **Manifest Version**: 2026-05-14

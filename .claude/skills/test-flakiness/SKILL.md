@@ -1,6 +1,6 @@
----
+﻿---
 name: test-flakiness
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Detect non-deterministic (flaky) tests by reading CI run logs or test result history. Aggregates pass rates per test, identifies intermittent failures, recommends quarantine or fix, and maintains a flaky test registry. Best run during Polish phase or after multiple CI runs."
 argument-hint: "[ci-log-path | scan | registry]"
 user-invocable: true
@@ -10,7 +10,7 @@ allowed-tools: Read, Glob, Grep, Write, Edit, Bash
 # Test Flakiness Detection
 
 A flaky test is one that sometimes passes and sometimes fails without any code
-change. Flaky tests are worse than no tests in some ways — they train the team
+change. Flaky tests are worse than no tests in some ways â€” they train the team
 to ignore red CI runs, masking genuine failures. This skill identifies them,
 explains likely causes, and recommends whether to quarantine or fix each one.
 
@@ -27,19 +27,19 @@ explains likely causes, and recommends whether to quarantine or fix each one.
 ## 1. Parse Arguments
 
 **Modes:**
-- `/test-flakiness [ci-log-path]` — analyse a specific CI run log file
-- `/test-flakiness scan` — scan all available CI logs in `.github/` or
+- `/test-flakiness [ci-log-path]` â€” analyse a specific CI run log file
+- `/test-flakiness scan` â€” scan all available CI logs in `.github/` or
   standard log output directories
-- `/test-flakiness registry` — read existing regression-suite.md quarantine
+- `/test-flakiness registry` â€” read existing regression-suite.md quarantine
   section and provide remediation guidance for already-known flaky tests
-- No argument — auto-detect: run `scan` if CI logs are accessible, else
+- No argument â€” auto-detect: run `scan` if CI logs are accessible, else
   `registry`
 
 ---
 
 ## 2. Locate CI Log Data
 
-### Option A — GitHub Actions (preferred)
+### Option A â€” GitHub Actions (preferred)
 
 Check for test result artifacts:
 ```bash
@@ -56,11 +56,11 @@ by default.
 For Unreal projects: automation logs go to `Saved/Logs/`. Grep for
 `Result: Success` and `Result: Fail` patterns.
 
-### Option B — Local log files
+### Option B â€” Local log files
 
 If a path argument is provided, read that file directly.
 
-### Option C — No log data available
+### Option C â€” No log data available
 
 If no logs found:
 > "No CI log data found. To detect flaky tests, this skill needs test result
@@ -89,7 +89,7 @@ For each CI log or result file found, parse:
   - Unreal: `Result: Success` / `Result: Fail`
   - Unity: `Test passed` / `Test failed`
 
-Build a table: `test_id → [run1_result, run2_result, run3_result, ...]`
+Build a table: `test_id â†’ [run1_result, run2_result, run3_result, ...]`
 
 ---
 
@@ -99,9 +99,9 @@ A test is **flaky** if it appears in the result history with both PASS and
 FAIL outcomes across runs with no code changes between them.
 
 Flakiness thresholds:
-- **High flakiness**: Fails in >25% of runs — quarantine immediately
-- **Moderate flakiness**: Fails in 5–25% of runs — investigate and fix soon
-- **Low/suspected flakiness**: Fails in 1–5% of runs — monitor; may be
+- **High flakiness**: Fails in >25% of runs â€” quarantine immediately
+- **Moderate flakiness**: Fails in 5â€“25% of runs â€” investigate and fix soon
+- **Low/suspected flakiness**: Fails in 1â€“5% of runs â€” monitor; may be
   genuinely rare failure
 
 For each flaky test, classify the likely cause:
@@ -136,7 +136,7 @@ For each flaky test:
 **Investigate and fix soon (Moderate):**
 > "This test is intermittently unreliable. Root cause appears to be [cause].
 > Suggested fix: [specific fix based on cause classification]. Do not quarantine
-> yet — fix the test directly."
+> yet â€” fix the test directly."
 
 **Monitor (Low/suspected):**
 > "This test shows suspected flakiness. Collect more run data before
@@ -164,11 +164,11 @@ For each flaky test:
 
 ### Clean Tests (no flakiness detected)
 
-[N] tests ran across [N] runs with consistent results — no flakiness detected.
+[N] tests ran across [N] runs with consistent results â€” no flakiness detected.
 
 ### Data Limitations
 
-[Note if fewer than 5 runs were available — fewer runs = less statistical confidence]
+[Note if fewer than 5 runs were available â€” fewer runs = less statistical confidence]
 ```
 
 ---
@@ -179,7 +179,7 @@ Ask: "May I update the quarantine section of `tests/regression-suite.md`
 with the flaky tests found?"
 
 If yes: use `Edit` to append entries to the Quarantined Tests table.
-Never remove existing quarantine entries — only add new ones.
+Never remove existing quarantine entries â€” only add new ones.
 
 Ask (separately): "May I write a full flakiness report to
 `production/qa/flakiness-report-[date].md`?"
@@ -191,7 +191,7 @@ After writing:
 
 - For each quarantined test: "Add the engine-specific skip annotation to
   disable this test in CI. Re-enable after the root cause is fixed."
-- For fix-eligible tests: "The fix for [test] is straightforward —
+- For fix-eligible tests: "The fix for [test] is straightforward â€”
   change the equality comparison on line [N] to use `is_equal_approx`."
 - Summary: "Once all quarantine annotations are applied, CI should run green.
   Schedule fix work for the [N] quarantined tests before the release gate."
@@ -200,12 +200,12 @@ After writing:
 
 ## Collaborative Protocol
 
-- **Never delete test files** — quarantine means annotate + list, not remove
-- **Statistical confidence matters** — with < 3 runs, flag findings as
+- **Never delete test files** â€” quarantine means annotate + list, not remove
+- **Statistical confidence matters** â€” with < 3 runs, flag findings as
   "suspected" not "confirmed"; ask if more run data is available
-- **Fix is always the goal** — quarantine is temporary; surface the fix
+- **Fix is always the goal** â€” quarantine is temporary; surface the fix
   direction even when recommending quarantine
-- **Ask before writing** — both the regression-suite update and the report
-  file require explicit approval. On write: Verdict: **COMPLETE** — flakiness report written. On decline: Verdict: **BLOCKED** — user declined write.
-- **Flakiness in CI is a team problem** — surface the list and recommended
+- **Ask before writing** â€” both the regression-suite update and the report
+  file require explicit approval. On write: Verdict: **COMPLETE** â€” flakiness report written. On decline: Verdict: **BLOCKED** â€” user declined write.
+- **Flakiness in CI is a team problem** â€” surface the list and recommended
   actions clearly; do not just silently quarantine without the team knowing

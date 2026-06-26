@@ -1,10 +1,10 @@
 # Story 002: Procedural Generation Pipeline
 
 > **Epic**: Grid/Map System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Core
 > **Type**: Logic
-> **Manifest Version**: Not yet created
+> **Manifest Version**: N/A (no control manifest)
 
 ## Context
 
@@ -40,7 +40,7 @@
 
 *Derived from ADR-0004 Implementation Guidelines:*
 
-Implement `generate(seed: int) -> void` on `GridMap`:
+Implement `generate(seed: int) -> void` on `WorldGrid`:
 
 **Step 1 — Perlin Noise Sampling**:
 ```gdscript
@@ -105,13 +105,13 @@ After generation completes, set `_generation_done = true` to lock TerrainLayer.
 *QL-STORY-READY skipped — Lean mode. Test cases written from GDD acceptance criteria.*
 
 - **AC-2**: Deterministic generation with same seed
-  - Given: A fresh `GridMap` instance
+  - Given: A fresh `WorldGrid` instance
   - When: `generate(42)` is called, terrain+resource arrays are copied, then `generate(42)` is called again
   - Then: Every tile in both runs has identical `TileType` and identical `resource_id`/`clearable` values
   - Edge cases: Test with seed 0, seed 999999; verify seed+1 moisture produces different map than seed alone
 
 - **AC-4**: Minimum resource counts after generation
-  - Given: A fresh `GridMap` instance
+  - Given: A fresh `WorldGrid` instance
   - When: `generate(42)` completes
   - Then: count(TREE) >= 8, count(STONE) >= 4, count(BERRY) >= 6, count(GRASS) >= 6
   - Edge cases: Test 10 different seeds to confirm no seed fails minimum counts after force-fix
@@ -139,7 +139,14 @@ After generation completes, set `_generation_done = true` to lock TerrainLayer.
 
 ---
 
+## Completion Notes
+**Completed**: 2026-05-25
+**Criteria**: 4/4 passing (push_warning assertion for AC-22 untested — GdUnit4 framework limitation)
+**Deviations**: Noise thresholds and parameters hardcoded (ADVISORY — externalize during balance phase); story written against manifest N/A, current manifest 2026-05-14 (no new forbidden patterns apply)
+**Test Evidence**: Logic: `tests/unit/grid/grid_generation_test.gd` (22 tests)
+**Code Review**: Complete (APPROVED WITH SUGGESTIONS — all fixes applied)
+
 ## Dependencies
 
-- Depends on: Story 001 must be DONE (GridMap class, arrays, and enums must exist before generation can fill them)
+- Depends on: Story 001 must be DONE (WorldGrid class, arrays, and enums must exist before generation can fill them)
 - Unlocks: Story 006 (TileMapLayer rendering — rendering wires to the populated grid data)

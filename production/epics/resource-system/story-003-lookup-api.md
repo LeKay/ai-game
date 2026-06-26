@@ -1,10 +1,10 @@
 # Story 003: Dictionary Cache and O(1) Lookup API
 
 > **Epic**: Resource System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Foundation
 > **Type**: Logic
-> **Manifest Version**: Not yet created
+> **Manifest Version**: 2026-05-14
 
 ## Context
 
@@ -45,32 +45,32 @@ Add caching and public methods to ResourceRegistry:
 
 ```gdscript
 func _cache_resource(entry: Dictionary) -> void:
-    var def := _ResourceDefinition.new()
-    def.id = StringName(entry["id"])
-    def.display_name = entry["display_name"]
-    def.category = _parse_category(entry["category"])
-    def.stack_limit = int(entry["stack_limit"])
-    def.icon_path = entry["icon_path"]
-    # Optional fields with defaults
-    def.subcategory = entry.get("subcategory", "")
-    def.weight = float(entry.get("weight", 0.0))
-    def.base_value = int(entry.get("base_value", 0))
-    def.max_durability = int(entry.get("max_durability", 0))
-    def.description = entry.get("description", "")
-    def.tags = entry.get("tags", [])
-    def.deprecated = bool(entry.get("deprecated", false))
-    _definitions[def.id] = def
+	var def := _ResourceDefinition.new()
+	def.id = StringName(entry["id"])
+	def.display_name = entry["display_name"]
+	def.category = _parse_category(entry["category"])
+	def.stack_limit = int(entry["stack_limit"])
+	def.icon_path = entry["icon_path"]
+	# Optional fields with defaults
+	def.subcategory = entry.get("subcategory", "")
+	def.weight = float(entry.get("weight", 0.0))
+	def.base_value = int(entry.get("base_value", 0))
+	def.max_durability = int(entry.get("max_durability", 0))
+	def.description = entry.get("description", "")
+	def.tags = entry.get("tags", [])
+	def.deprecated = bool(entry.get("deprecated", false))
+	_definitions[def.id] = def
 
 func get_definition(id: StringName) -> _ResourceDefinition:
-    return _definitions.get(id, null)
+	return _definitions.get(id, null)
 
 func is_valid_id(id: StringName) -> bool:
-    return id in _definitions
+	return id in _definitions
 
 func _parse_category(cat_string: String) -> ResourceCategory:
-    match cat_string:
-        "verbrauchsgut": return ResourceCategory.VERBRAUCHSGUT
-        _: return ResourceCategory.PRODUKTIONSWARE
+	match cat_string:
+		"verbrauchsgut": return ResourceCategory.VERBRAUCHSGUT
+		_: return ResourceCategory.PRODUKTIONSWARE
 ```
 
 **Important**: `get_definition()` return type annotation is `_ResourceDefinition` — GDScript allows returning `null` from a typed method. Callers must null-check. Do not annotate as `_ResourceDefinition?` (nullable annotation syntax varies — use untyped return or verify Godot 4.6 nullable annotation support).
@@ -125,7 +125,7 @@ func _parse_category(cat_string: String) -> ResourceCategory:
 **Story Type**: Logic
 **Required evidence**: `tests/unit/resource/lookup_api_test.gd` — must exist and pass
 
-**Status**: [ ] Not yet created
+**Status**: [x] `tests/unit/resource/lookup_api_test.gd` — 13 tests, all ACs covered
 
 ---
 
@@ -133,3 +133,12 @@ func _parse_category(cat_string: String) -> ResourceCategory:
 
 - Depends on: Story 002 must be DONE (cache is populated only after validation passes)
 - Unlocks: Story 004 (category filtering needs the cache and category enum), Story 005 (deprecated flag accessible via get_definition)
+
+---
+
+## Completion Notes
+**Completed**: 2026-05-25
+**Criteria**: 5/5 passing
+**Deviations**: None
+**Test Evidence**: Logic — `tests/unit/resource/lookup_api_test.gd` (13 tests)
+**Code Review**: Complete (lean mode — code quality fixes applied: `category: ResourceCategory` type, removed parameter mutation in `_validate_resource`, stale comment removed, AC-5 threshold raised to 5ms)

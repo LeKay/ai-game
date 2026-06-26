@@ -1,7 +1,7 @@
 # Story 001: JSON File Loading and Registry Schema
 
 > **Epic**: Resource System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Foundation
 > **Type**: Logic
 > **Manifest Version**: Not yet created
@@ -57,7 +57,7 @@ func _ready() -> void:
 func load_from_file(path: String) -> bool:
     var file: FileAccess = FileAccess.open(path, FileAccess.READ)
     if file == null:  # NULL-CHECK — NOT bool check (Godot 4.4+ breaking change)
-        push_error("ResourceRegistry: Cannot open '%s'" % path)
+		push_error("ResourceRegistry: Cannot open '%s'" % path)
         return false
 
     var json_text: String = file.get_as_text()

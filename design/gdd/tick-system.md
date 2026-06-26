@@ -1,8 +1,11 @@
 # Tick System
 
-> **Status**: In Design
+> **Status**: Implemented — synced against `src/systems/tick_system.gd` (2026-06-13)
 > **Author**: User + Claude (Sonnet 4.5)
-> **Last Updated**: 2026-05-05
+> **Last Updated**: 2026-06-13
+> **Sync note**: `TICKS_PER_DAY` was raised from 1000 to **1440** in the 2026-06-11
+> balancing pass — pacing anchor: 1 tick ≈ 1 in-game minute, 1440 ticks = 1 day
+> (= 144 real seconds at 1x). All other rules unchanged.
 > **Implements Pillar**: Pillar 2 (Information Transparency), Pillar 3 (Optimization Over Expansion)
 > **Engine**: Godot 4.6 (signal-based event dispatch)
 
@@ -10,7 +13,7 @@
 
 ## Overview
 
-The Tick System is the foundational time management infrastructure that converts real-time engine delta into discrete, abstract tick units consumed by all time-dependent gameplay systems (production, manual labor, hunger, logistics, day/night cycle). It provides player-controlled time flow through variable speed multipliers (0.5x, 1x, 2x) and full pause/play control, enabling the "meditative planning" gameplay (Pillar 3: Optimization Over Expansion) by freezing time for layout decisions. Every gameplay system that performs work over time (production chains, NPC transport, manual actions) measures duration in ticks rather than seconds, creating a debuggable, deterministic simulation independent of framerate. The system triggers daily events (hunger deduction, NPC spawning checks) when the tick counter reaches 1000 (= 1 day), then resets to 0.
+The Tick System is the foundational time management infrastructure that converts real-time engine delta into discrete, abstract tick units consumed by all time-dependent gameplay systems (production, manual labor, hunger, logistics, day/night cycle). It provides player-controlled time flow through variable speed multipliers (0.5x, 1x, 2x) and full pause/play control, enabling the "meditative planning" gameplay (Pillar 3: Optimization Over Expansion) by freezing time for layout decisions. Every gameplay system that performs work over time (production chains, NPC transport, manual actions) measures duration in ticks rather than seconds, creating a debuggable, deterministic simulation independent of framerate. The system triggers daily events (hunger deduction, NPC spawning checks) when the tick counter reaches 1440 (= 1 day; 1 tick ≈ 1 in-game minute), then resets to 0.
 
 ---
 
@@ -41,9 +44,9 @@ This transformation — from reactive pause (diagnosing failures) to proactive p
 
 2. **Speed Multipliers**
    - Available speeds: 0.5x, 1x, 2x
-   - At 1x speed: 1 real second = 10 ticks (baseline: 1 day = 100 real seconds)
-   - At 0.5x: 1 real second = 5 ticks (1 day = 200 real seconds)
-   - At 2x: 1 real second = 20 ticks (1 day = 50 real seconds)
+   - At 1x speed: 1 real second = 10 ticks (baseline: 1 day = 1440 ticks = 144 real seconds)
+   - At 0.5x: 1 real second = 5 ticks (1 day = 288 real seconds)
+   - At 2x: 1 real second = 20 ticks (1 day = 72 real seconds)
    - Speed changes take effect immediately (next frame's accumulation uses new multiplier).
 
 3. **Pause State Machine**
@@ -61,11 +64,11 @@ This transformation — from reactive pause (diagnosing failures) to proactive p
    - Manual actions always cost their full base tick cost regardless of speed multiplier.
 
 5. **Day Transition**
-   - When `tick_count >= 1000`:
+   - When `tick_count >= 1440` (`TICKS_PER_DAY`):
      - Broadcast `day_transition(1)` event (always exactly 1 day)
      - Game enters PAUSED state automatically
-     - Reset `tick_count = 0` — ticks beyond 1000 are discarded
-   - **No overflow carry:** Each day is a clean boundary. Excess ticks accumulated past 1000 in one frame are dropped. The MAX_TICKS_PER_FRAME cap (100 ticks) limits discarded ticks to at most 100 per day transition.
+     - Reset `tick_count = 0` — ticks beyond 1440 are discarded
+   - **No overflow carry:** Each day is a clean boundary. Excess ticks accumulated past 1440 in one frame are dropped. The MAX_TICKS_PER_FRAME cap (100 ticks) limits discarded ticks to at most 100 per day transition.
    - **Resume:** The Day Overview System (separate system) subscribes to `day_transition`, shows its summary, and calls `set_pause(false)` when the player dismisses it.
 
 6. **Tick Consumer Contract**
@@ -78,7 +81,7 @@ This transformation — from reactive pause (diagnosing failures) to proactive p
 
 7. **Determinism Guarantee**
    - Tick accumulation is deterministic: given identical input sequence (delta values, speed changes, manual actions), `tick_count` will always reach the same value at the same frame.
-   - Fractional remainder carry ensures no drift over long sessions (1000 ticks ALWAYS equals 100 real seconds at 1x speed, ±1 frame).
+   - Fractional remainder carry ensures no drift over long sessions (1440 ticks ALWAYS equals 144 real seconds at 1x speed, ±1 frame).
 
 ---
 
@@ -181,8 +184,8 @@ Frame 6: remainder_old = 0.835, δ = 0.0167 → Δt = 1, remainder_new = 0.002
 
 ### 3. Day Transition
 
-`days_elapsed = floor(tick_count / 1000)`
-`tick_count = 0` — overflow ticks beyond 1000 are **discarded**
+`days_elapsed = floor(tick_count / 1440)`
+`tick_count = 0` — overflow ticks beyond 1440 are **discarded**
 
 **Variables:**
 
@@ -193,20 +196,20 @@ Frame 6: remainder_old = 0.835, δ = 0.0167 → Δt = 1, remainder_new = 0.002
 | tick_count (after) | t' | int | 0 | Always resets to 0 (overflow discarded, never retained) |
 
 **Output Range:**
-- `days_elapsed`: [0, 2,147,483] (int32 max allows ~5,881 years of in-game time)
-- `tick_count`: [0, 999] — always valid
+- `days_elapsed`: [0, 1,491,308] (int32 max allows ~4,000 years of in-game time)
+- `tick_count`: [0, 1439] — always valid
 
 **Example (normal day transition):**
 ```
-tick_count = 1002
-days_elapsed = floor(1002 / 1000) = 1
+tick_count = 1442
+days_elapsed = floor(1442 / 1440) = 1
 tick_count = 0  (overflow 2 ticks discarded)
 ```
 
 **Example (lag-induced overflow, discarded):**
 ```
-tick_count = 950, tick_delta = 100 (clamped from 300)
-tick_count = 950 + 100 = 1050 → day transition fires
+tick_count = 1390, tick_delta = 100 (clamped from 300)
+tick_count = 1390 + 100 = 1490 → day transition fires
 tick_count reset to 0 (50 overflow ticks discarded)
 Day Overview shown, game pauses
 ```
@@ -216,7 +219,7 @@ Day Overview shown, game pauses
 ### 4. Real-Time to Tick Conversion
 
 `ticks_per_second = 10 × speed_multiplier`
-`day_duration_seconds = 1000 / ticks_per_second`
+`day_duration_seconds = 1440 / ticks_per_second`
 
 **Variables:**
 
@@ -224,15 +227,15 @@ Day Overview shown, game pauses
 |----------|--------|------|-------|-------------|
 | speed_multiplier | s | float | {0.5, 1.0, 2.0} | Current simulation speed setting |
 | ticks_per_second | — | float | 5.0–20.0 | Tick accumulation rate |
-| day_duration_seconds | — | float | 50.0–200.0 | Real-world seconds per in-game day |
+| day_duration_seconds | — | float | 72.0–288.0 | Real-world seconds per in-game day |
 
 **Output Table:**
 
 | Speed | Ticks/Second | Ticks/Minute | In-Game Day Duration (real-time) |
 |-------|--------------|--------------|----------------------------------|
-| 0.5x  | 5            | 300          | 200 seconds (3m 20s) |
-| 1.0x  | 10           | 600          | 100 seconds (1m 40s) |
-| 2.0x  | 20           | 1200         | 50 seconds |
+| 0.5x  | 5            | 300          | 288 seconds (4m 48s) |
+| 1.0x  | 10           | 600          | 144 seconds (2m 24s) |
+| 2.0x  | 20           | 1200         | 72 seconds (1m 12s) |
 
 ---
 
@@ -244,9 +247,9 @@ Day Overview shown, game pauses
 
 - **If manual action performed during PAUSED**: World advances by action tick cost, all systems process those ticks, then time re-freezes. Player can act while planning (Pillar 3: meditative optimization).
 
-- **If tick_count ≥ 1000 (day transition)**: Fire `day_transition(1)`, reset `tick_count = 0`, enter PAUSED state. Ticks beyond 1000 are discarded. The Day Overview System handles the summary UI and resumes the game on player confirmation. Multi-day skips cannot occur due to MAX_TICKS_PER_FRAME cap.
+- **If tick_count ≥ 1440 (day transition)**: Fire `day_transition(1)`, reset `tick_count = 0`, enter PAUSED state. Ticks beyond 1440 are discarded. The Day Overview System handles the summary UI and resumes the game on player confirmation. Multi-day skips cannot occur due to MAX_TICKS_PER_FRAME cap.
 
-- **If manual action cost > 100 ticks**: Apply full cost (no clamping). MAX_TICKS_PER_FRAME applies only to automatic accumulation, not intentional player actions. May trigger multiple day transitions if cost pushes tick_count past 2000+.
+- **If manual action cost > 100 ticks**: Apply full cost (no clamping). MAX_TICKS_PER_FRAME applies only to automatic accumulation, not intentional player actions. May trigger multiple day transitions if cost pushes tick_count past 2880+.
 
 ### State Machine Edge Cases
 
@@ -274,11 +277,11 @@ Day Overview shown, game pauses
 
 - **If two systems call `set_speed()` simultaneously**: Last call wins (overwrites). Only one `speed_changed` event fires with final value. Log warning if multiple calls detected — design error (UI should be sole speed controller).
 
-- **If 10+ manual actions in one frame**: Process all calls sequentially. Each increments `tick_count` and fires `ticks_advanced(cost)` independently. Day transitions fire once at frame end if `tick_count >= 1000` after all actions. Preserves granularity for tick-listening systems.
+- **If 10+ manual actions in one frame**: Process all calls sequentially. Each increments `tick_count` and fires `ticks_advanced(cost)` independently. Day transitions fire once at frame end if `tick_count >= 1440` after all actions. Preserves granularity for tick-listening systems.
 
 ### Save/Load Edge Cases
 
-- **If save loaded with tick_count = 999, remainder = 0.8**: Resume accumulation normally. Next frame may trigger day transition if accumulated ticks push count >= 1000. Save/load preserves exact tick state — no special boundary handling.
+- **If save loaded with tick_count = 1439, remainder = 0.8**: Resume accumulation normally. Next frame may trigger day transition if accumulated ticks push count >= 1440. Save/load preserves exact tick state — no special boundary handling.
 
 - **If remainder carry persists after speed change**: Old remainder at 1x speed carries into 0.5x speed regime. Next frame accumulates `tick_delta = floor(delta × 10 × 0.5 + old_remainder)`. May accumulate tick faster than expected due to carried fractional time. Remainder represents real elapsed time — discarding on speed change would lose ticks.
 
@@ -310,7 +313,7 @@ None — the Tick System is the lowest infrastructure layer. It depends on no ot
 
 | Knob | Default | Safe Range | Gameplay Effect |
 |------|---------|------------|-----------------|
-| `TICKS_PER_DAY` | 1000 | 500–2000 | Length of one in-game day in ticks |
+| `TICKS_PER_DAY` | 1440 | 720–2880 | Length of one in-game day in ticks (1 tick ≈ 1 in-game minute) |
 | `TICKS_PER_SECOND_BASE` | 10 | 5–20 | Tick accumulation rate at 1x speed |
 | `MAX_TICKS_PER_FRAME` | 100 | 50–200 | Safety cap against lag spike time jumps |
 | `SPEED_OPTIONS` | [0.5, 1.0, 2.0] | fixed | Available speed multiplier steps |
@@ -345,7 +348,7 @@ All UI listed here is owned by the Tick System (HUD controls). The Day Overview 
 | **Speed buttons** | Three buttons: 0.5x / 1x / 2x. Active speed highlighted. Pressing an active button has no effect. |
 | **Pause/Play button** | Toggles PAUSED ↔ RUNNING state. Displays current state (pause icon when running, play icon when paused). |
 | **Day counter** | Displays current day number ("Day 12"). Updates on `day_transition`. |
-| **Tick progress bar** | Optional: shows tick_count progress from 0–1000 for the current day. Fills over the course of the day, resets to 0 on day transition. |
+| **Tick progress bar** | Optional: shows tick_count progress from 0–1440 for the current day. Fills over the course of the day, resets to 0 on day transition. |
 
 ---
 
@@ -353,11 +356,11 @@ All UI listed here is owned by the Tick System (HUD controls). The Day Overview 
 
 ### Blocking (must pass before ship)
 
-1. **Given** speed is 1x, **when** 100 real seconds elapse, **then** exactly 1000 ticks have accumulated (±1 frame tolerance)
+1. **Given** speed is 1x, **when** 144 real seconds elapse, **then** exactly 1440 ticks have accumulated (±1 frame tolerance)
 2. **Given** game is PAUSED, **when** no player action occurs, **then** `tick_count` does not change
 3. **Given** game is PAUSED, **when** player performs a manual action costing 80 ticks, **then** `tick_count` increases by 80 and all subscribed systems receive `ticks_advanced(80)`
 4. **Given** speed is 2x, **when** player performs a manual action costing 80 ticks, **then** action costs 80 ticks (speed has no effect on manual action cost)
-5. **Given** `tick_count` reaches 1000, **then** `day_transition(1)` fires, `tick_count` resets to 0, game enters PAUSED state
+5. **Given** `tick_count` reaches 1440, **then** `day_transition(1)` fires, `tick_count` resets to 0, game enters PAUSED state
 6. **Given** a lag spike produces a raw tick_delta > 100, **then** tick_delta is clamped to 100 and no multi-day skip occurs
 7. **Given** a save is created at `tick_count = 450`, **when** loaded, **then** game resumes at exactly `tick_count = 450` with identical remainder
 

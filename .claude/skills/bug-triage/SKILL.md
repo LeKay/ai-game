@@ -1,6 +1,6 @@
----
+﻿---
 name: bug-triage
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Read all open bugs in production/qa/bugs/, re-evaluate priority vs. severity, assign to sprints, surface systemic trends, and produce a triage report. Run at sprint start or when the bug count grows enough to need re-prioritization."
 argument-hint: "[sprint | full | trend]"
 user-invocable: true
@@ -17,7 +17,7 @@ ensures no critical bug is lost between sprints.
 **Output:** `production/qa/bug-triage-[date].md`
 
 **When to run:**
-- Sprint start — assign open bugs to the new sprint or backlog
+- Sprint start â€” assign open bugs to the new sprint or backlog
 - After `/team-qa` completes and new bugs have been filed
 - When the bug count crosses 10+ open items
 
@@ -26,21 +26,21 @@ ensures no critical bug is lost between sprints.
 ## 1. Parse Arguments
 
 **Modes:**
-- `/bug-triage sprint` — triage against the current sprint; assign fixable bugs
+- `/bug-triage sprint` â€” triage against the current sprint; assign fixable bugs
   to the sprint backlog; defer the rest
-- `/bug-triage full` — full triage of all bugs regardless of sprint scope
-- `/bug-triage trend` — trend analysis only (no assignment); read-only report
-- No argument — run sprint mode if a current sprint exists, else full mode
+- `/bug-triage full` â€” full triage of all bugs regardless of sprint scope
+- `/bug-triage trend` â€” trend analysis only (no assignment); read-only report
+- No argument â€” run sprint mode if a current sprint exists, else full mode
 
 ---
 
 ## 2. Load Bug Backlog
 
-### Step 2a — Discover bug files
+### Step 2a â€” Discover bug files
 
 Glob for bug reports in priority order:
-1. `production/qa/bugs/*.md` — individual bug report files (preferred format)
-2. `production/qa/bugs.md` — single consolidated bug log (fallback)
+1. `production/qa/bugs/*.md` â€” individual bug report files (preferred format)
+2. `production/qa/bugs.md` â€” single consolidated bug log (fallback)
 3. Any `production/qa/qa-plan-*.md` "Bugs Found" table (last resort)
 
 If no bug files found:
@@ -50,16 +50,16 @@ If no bug files found:
 
 Stop and report. Do not proceed if no bugs exist.
 
-### Step 2b — Load sprint context
+### Step 2b â€” Load sprint context
 
 Read the most recently modified file in `production/sprints/` to understand:
 - Current sprint number / name
 - Stories in scope (for assignment target)
 - Sprint capacity constraints (if noted)
 
-If no sprint file exists: note "No sprint plan found — assigning to backlog only."
+If no sprint file exists: note "No sprint plan found â€” assigning to backlog only."
 
-### Step 2c — Load severity reference
+### Step 2c â€” Load severity reference
 
 Read `.claude/docs/coding-standards.md` for severity/priority definitions if they
 exist. If they do not exist, use the standard definitions in Step 3.
@@ -74,19 +74,19 @@ For each bug, extract or infer:
 
 | Severity | Definition |
 |----------|-----------|
-| **S1 — Critical** | Game crashes, data loss, or complete feature failure. Cannot proceed past this point. |
-| **S2 — High** | Major feature broken but game is still playable. Significant wrong behaviour. |
-| **S3 — Medium** | Feature degraded but a workaround exists. Minor wrong behaviour. |
-| **S4 — Low** | Visual glitch, cosmetic issue, typo. No gameplay impact. |
+| **S1 â€” Critical** | Game crashes, data loss, or complete feature failure. Cannot proceed past this point. |
+| **S2 â€” High** | Major feature broken but game is still playable. Significant wrong behaviour. |
+| **S3 â€” Medium** | Feature degraded but a workaround exists. Minor wrong behaviour. |
+| **S4 â€” Low** | Visual glitch, cosmetic issue, typo. No gameplay impact. |
 
 ### Priority (urgency of the fix)
 
 | Priority | Definition |
 |----------|-----------|
-| **P1 — Fix this sprint** | Blocks QA, blocks release, or is regression from last sprint |
-| **P2 — Fix soon** | Should be resolved before the next major milestone |
-| **P3 — Backlog** | Would be good to fix, but no active blocking impact |
-| **P4 — Won't fix / Deferred** | Accepted risk or out of scope for current product scope |
+| **P1 â€” Fix this sprint** | Blocks QA, blocks release, or is regression from last sprint |
+| **P2 â€” Fix soon** | Should be resolved before the next major milestone |
+| **P3 â€” Backlog** | Would be good to fix, but no active blocking impact |
+| **P4 â€” Won't fix / Deferred** | Accepted risk or out of scope for current product scope |
 
 ### Assignment
 
@@ -94,7 +94,7 @@ For each P1/P2 bug in `sprint` mode:
 - Identify which story or epic the fix belongs to
 - Check whether the current sprint has remaining capacity
 - If capacity exists: assign to sprint (`Sprint: [current]`)
-- If capacity is full: flag as `Priority overflow — consider pulling from sprint`
+- If capacity is full: flag as `Priority overflow â€” consider pulling from sprint`
 
 For `full` mode: assign all P1 to current sprint, P2 to next sprint estimate,
 P3+ to backlog.
@@ -102,11 +102,11 @@ P3+ to backlog.
 ### Deviation check
 
 Flag bugs that suggest **systematic problems**:
-- 3+ bugs from the same system in the same sprint → "Potential design or
+- 3+ bugs from the same system in the same sprint â†’ "Potential design or
   implementation quality issue in [system]"
-- 2+ S1/S2 bugs in the same story → "Story may need to be reopened and
+- 2+ S1/S2 bugs in the same story â†’ "Story may need to be reopened and
   re-reviewed before shipping"
-- Bug filed against a story marked Complete → "Regression in completed story —
+- Bug filed against a story marked Complete â†’ "Regression in completed story â€”
   story should be re-opened in sprint tracking"
 
 ---
@@ -152,16 +152,16 @@ After classifying all bugs, generate trend metrics:
 
 | Priority | Count | Notes |
 |----------|-------|-------|
-| P1 — Fix this sprint | [N] | [N] assigned to sprint, [N] overflow |
-| P2 — Fix soon | [N] | Scheduled for next sprint |
-| P3 — Backlog | [N] | Deferred |
-| P4 — Won't fix | [N] | Accepted risk |
+| P1 â€” Fix this sprint | [N] | [N] assigned to sprint, [N] overflow |
+| P2 â€” Fix soon | [N] | Scheduled for next sprint |
+| P3 â€” Backlog | [N] | Deferred |
+| P4 â€” Won't fix | [N] | Accepted risk |
 
 **Critical (S1/S2) unfixed count**: [N]
 
 ---
 
-## P1 Bugs — Fix This Sprint
+## P1 Bugs â€” Fix This Sprint
 
 | ID | System | Severity | Summary | Assigned to | Story |
 |----|--------|----------|---------|-------------|-------|
@@ -169,7 +169,7 @@ After classifying all bugs, generate trend metrics:
 
 ---
 
-## P2 Bugs — Fix Soon
+## P2 Bugs â€” Fix Soon
 
 | ID | System | Severity | Summary | Target Sprint |
 |----|--------|----------|---------|---------------|
@@ -177,7 +177,7 @@ After classifying all bugs, generate trend metrics:
 
 ---
 
-## P3/P4 Bugs — Backlog / Won't Fix
+## P3/P4 Bugs â€” Backlog / Won't Fix
 
 | ID | System | Severity | Summary | Disposition |
 |----|--------|----------|---------|-------------|
@@ -199,16 +199,16 @@ After classifying all bugs, generate trend metrics:
 **Aged bugs (>2 sprints old)**: [N]
 
 [If N aged S1/S2 bugs > 0:]
-> ⚠️ [N] high-severity bugs have been open for more than 2 sprints without
+> âš ï¸ [N] high-severity bugs have been open for more than 2 sprints without
 > assignment. These represent accepted risk that should be explicitly reviewed.
 
 ---
 
 ## Recommended Actions
 
-1. [Most urgent action — usually "fix P1 bugs before QA hand-off"]
-2. [Second action — usually "investigate [hot spot system] quality"]
-3. [Third action — optional improvement]
+1. [Most urgent action â€” usually "fix P1 bugs before QA hand-off"]
+2. [Second action â€” usually "investigate [hot spot system] quality"]
+3. [Third action â€” optional improvement]
 ```
 
 ---
@@ -224,21 +224,21 @@ Write only after approval.
 After writing:
 - If any S1 bugs are unassigned: "S1 bugs must be assigned before the sprint
   can be considered healthy. Run `/sprint-status` to see current capacity."
-- If regression bugs exist: "Regressions found — consider re-opening the
+- If regression bugs exist: "Regressions found â€” consider re-opening the
   affected stories in sprint tracking and running `/smoke-check` to re-gate."
-- If no P1 bugs exist: "No P1 bugs — build is in good shape for QA hand-off." Verdict: **COMPLETE** — triage report written.
+- If no P1 bugs exist: "No P1 bugs â€” build is in good shape for QA hand-off." Verdict: **COMPLETE** â€” triage report written.
 
-If user declined write: Verdict: **BLOCKED** — user declined write.
+If user declined write: Verdict: **BLOCKED** â€” user declined write.
 
 ---
 
 ## Collaborative Protocol
 
-- **Never close or mark bugs Won't Fix without user approval** — surface them
+- **Never close or mark bugs Won't Fix without user approval** â€” surface them
   as P4 candidates and ask: "Are these acceptable as Won't Fix?"
-- **Never auto-assign to a sprint at capacity** — flag overflow and let the
+- **Never auto-assign to a sprint at capacity** â€” flag overflow and let the
   sprint owner decide what to pull
-- **Severity is objective; priority is a team decision** — present severity
+- **Severity is objective; priority is a team decision** â€” present severity
   classifications as recommendations, not mandates
-- **Trend data is informational** — do not block work on trend findings alone;
+- **Trend data is informational** â€” do not block work on trend findings alone;
   surface them as observations

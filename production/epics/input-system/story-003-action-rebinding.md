@@ -1,7 +1,7 @@
 # Story 003: Action Rebinding and Persistence
 
 > **Epic**: Input System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Foundation
 > **Type**: Logic
 > **Manifest Version**: N/A
@@ -111,7 +111,7 @@
 **Required evidence**:
 - Logic: `tests/unit/input/rebinding_test.gd` — must exist and pass
 
-**Status**: [ ] Not created
+**Status**: [x] Created — `tests/unit/input/rebinding_test.gd` (12 tests, all ACs covered)
 
 ---
 
@@ -119,3 +119,12 @@
 
 - Depends on: Story 001 must be DONE
 - Unlocks: None
+
+## Completion Notes
+**Completed**: 2026-05-28
+**Criteria**: 8/8 passing (all ACs + edge cases covered)
+**Deviations**:
+- ADVISORY: `push_warning` for corrupt/invalid key paths not directly asserted in tests — binding state is verified; warning emission is untested
+- ADVISORY: `rebind_action` erases gamepad events — intentional for current PC-first scope, documented with code comment
+**Test Evidence**: Logic — `tests/unit/input/rebinding_test.gd` (12 tests)
+**Code Review**: Complete (all findings fixed — false-positive save/load test, multi-key edge case, typed Arrays, redundant casts, warning message improvements)

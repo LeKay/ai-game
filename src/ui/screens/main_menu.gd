@@ -21,7 +21,7 @@ extends CanvasLayer
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-const GAME_SCENE: String = "res://scenes/game.tscn"
+const GAME_SCENE: String = "res://src/scenes/game.tscn"
 const FADE_IN_DURATION: float = 0.3
 const FADE_OUT_DURATION: float = 0.3
 
@@ -45,6 +45,7 @@ signal game_exited()
 @onready var load_failed_overlay: Panel = %LoadFailedOverlay
 @onready var try_again_btn: Button = %TryAgain
 @onready var new_game_from_fail_btn: Button = %NewGameFromFail
+@onready var version_label: Label = %VersionLabel
 
 
 # ── State ────────────────────────────────────────────────────────────────────
@@ -62,6 +63,8 @@ func _ready() -> void:
 	# Check for save file per ADR-0006
 	check_save_file_state()
 
+	version_label.text = _read_version()
+
 	# Connect button signals
 	new_game_btn.pressed.connect(_on_new_game_pressed)
 	continue_btn.pressed.connect(_on_continue_pressed)
@@ -76,8 +79,6 @@ func _ready() -> void:
 	var tween := create_tween()
 	tween.tween_property(background, "modulate", Color.WHITE, FADE_IN_DURATION).set_trans(Tween.TRANS_SINE)
 
-	# Scale title font size to screen density per AC-2
-	title_label.add_theme_font_size_override("font_size", 24)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -124,8 +125,8 @@ func _on_continue_pressed() -> void:
 		return
 	_is_transitioning = true
 
-	# Show loading overlay within 200ms (AC-10)
 	_show_loading()
+	await get_tree().process_frame
 
 	if WorldSaveManager:
 		var success: bool = WorldSaveManager.load_last()
@@ -163,6 +164,8 @@ func _on_quit_pressed() -> void:
 
 ## Try Again: retry the failed load.
 func _on_try_again_pressed() -> void:
+	if _is_transitioning:
+		return
 	_hide_overlays()
 	_on_continue_pressed()
 
@@ -193,9 +196,30 @@ func _load_game_scene() -> void:
 	if game_scene:
 		var instance: Node = game_scene.instantiate()
 		get_tree().root.add_child(instance)
+		queue_free()
 	else:
 		push_error("[MainMenu] Failed to load game scene: " + GAME_SCENE)
-	queue_free()
+		_try_push_ui_context()
+		_hide_overlays()
+		_is_transitioning = false
+
+
+## Reads version.json and returns a display string like "v0.1.72 (abc1234)".
+func _read_version() -> String:
+	const PATH := "res://version.json"
+	if not FileAccess.file_exists(PATH):
+		return "dev"
+	var f := FileAccess.open(PATH, FileAccess.READ)
+	if not f:
+		return "dev"
+	var data: Variant = JSON.parse_string(f.get_as_text())
+	if not data is Dictionary:
+		return "dev"
+	var major: int = data.get("major", 0)
+	var minor: int = data.get("minor", 1)
+	var build: int = data.get("build", 0)
+	var commit: String = data.get("commit", "")
+	return "v%d.%d.%d (%s)" % [major, minor, build, commit]
 
 
 ## Quit to desktop — clean process exit.

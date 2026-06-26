@@ -48,9 +48,13 @@ This epic is complete when:
 | # | Story | Type | Status | ADR/UX |
 |---|-------|------|--------|--------|
 | 001 | [Main Menu Screen](story-001-main-menu.md) | UI | Ready | UX: main-menu, ADR-0003 |
-| 002 | HUD — Resource Bar & Play/Pause Button | UI | Ready | UX: hud.md, ADR-0003 |
+| 002 | HUD — Resource Bar & Play/Pause Button | UI | Complete | UX: hud.md, ADR-0003 |
 | 003 | Settings Modal & Key Binding UI | UI | Ready | UX: TBD, ADR-0003 |
 | 004 | Pause Menu & Return to Main Menu | UI | Ready | UX: TBD, ADR-0003, ADR-0006 |
+| 005 | Tile Interaction Panel | UI | Complete | ADR-0007 |
+| 006 | HUD — Storage Panel (Global Resource Overview) | UI | Ready | UX: hud.md, ADR-0005 |
+| 007 | [DayLedger — Tägliche Ressourcen-Delta-Erfassung](story-007-day-ledger.md) | Logic | Ready | ADR-0001, ADR-0003 |
+| 008 | [Day Overview Panel](story-008-day-overview-panel.md) | UI | Ready | ADR-0003 |
 
 ## Dependencies
 

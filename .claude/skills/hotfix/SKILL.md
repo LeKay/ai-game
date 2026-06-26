@@ -1,6 +1,6 @@
----
+﻿---
 name: hotfix
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Emergency fix workflow that bypasses normal sprint processes with a full audit trail. Creates hotfix branch, tracks approvals, and ensures the fix is backported correctly."
 argument-hint: "[bug-id or description]"
 user-invocable: true
@@ -13,8 +13,8 @@ allowed-tools: Read, Glob, Grep, Write, Edit, Bash, Task
 
 Read the bug description or ID. Determine severity:
 
-- **S1 (Critical)**: Game unplayable, data loss, security vulnerability — hotfix immediately
-- **S2 (Major)**: Significant feature broken, workaround exists — hotfix within 24 hours
+- **S1 (Critical)**: Game unplayable, data loss, security vulnerability â€” hotfix immediately
+- **S2 (Major)**: Significant feature broken, workaround exists â€” hotfix within 24 hours
 - If severity is S3 or lower, recommend using the normal bug fix workflow instead and stop.
 
 ---
@@ -81,11 +81,11 @@ Update the hotfix record with root cause, fix details, and test results.
 
 Use the Task tool to request sign-off in parallel:
 
-- `subagent_type: lead-programmer` — Review the fix for correctness and side effects
-- `subagent_type: qa-tester` — Run targeted regression tests on the affected system
-- `subagent_type: producer` — Approve deployment timing and communication plan
+- `subagent_type: lead-programmer` â€” Review the fix for correctness and side effects
+- `subagent_type: qa-tester` â€” Run targeted regression tests on the affected system
+- `subagent_type: producer` â€” Approve deployment timing and communication plan
 
-All three must return APPROVE before proceeding. If any returns CONCERNS or REJECT, do not deploy — surface the issue and resolve it first.
+All three must return APPROVE before proceeding. If any returns CONCERNS or REJECT, do not deploy â€” surface the issue and resolve it first.
 
 ---
 
@@ -99,9 +99,9 @@ After approvals, determine the QA scope required before deploying the hotfix. Sp
 Ask qa-lead: **Is a full smoke check sufficient, or does this fix require a targeted team-qa pass?**
 
 Apply the verdict:
-- **Smoke check sufficient** — run `/smoke-check` against the hotfix build. If PASS, proceed to Phase 6.
-- **Targeted QA pass required** — run `/team-qa [affected-system]` scoped to the changed system only. If QA returns APPROVED or APPROVED WITH CONDITIONS, proceed to Phase 6.
-- **Full QA required** — S1 fixes that touch core systems may require a full `/team-qa sprint`. This delays deployment but prevents a bad patch.
+- **Smoke check sufficient** â€” run `/smoke-check` against the hotfix build. If PASS, proceed to Phase 6.
+- **Targeted QA pass required** â€” run `/team-qa [affected-system]` scoped to the changed system only. If QA returns APPROVED or APPROVED WITH CONDITIONS, proceed to Phase 6.
+- **Full QA required** â€” S1 fixes that touch core systems may require a full `/team-qa sprint`. This delays deployment but prevents a bad patch.
 
 Do not skip this gate. A hotfix that breaks something else is worse than the original bug.
 
@@ -113,12 +113,12 @@ Update the original bug file if one exists:
 
 ```markdown
 ## Fix Record
-**Fixed in**: hotfix/[branch-name] — [commit hash or description]
+**Fixed in**: hotfix/[branch-name] â€” [commit hash or description]
 **Fixed date**: [date]
-**Status**: Fixed — Pending Verification
+**Status**: Fixed â€” Pending Verification
 ```
 
-Set `**Status**: Fixed — Pending Verification` in the bug file header.
+Set `**Status**: Fixed â€” Pending Verification` in the bug file header.
 
 Output a deployment summary:
 
@@ -129,7 +129,7 @@ Output a deployment summary:
 **Root cause**: [one line]
 **Fix**: [one line]
 **QA gate**: [Smoke check PASS / Team-QA APPROVED]
-**Approvals**: lead-programmer ✓ / qa-tester ✓ / producer ✓
+**Approvals**: lead-programmer âœ“ / qa-tester âœ“ / producer âœ“
 **Rollback plan**: [from Phase 2 record]
 
 Merge to: release branch AND development branch
@@ -137,7 +137,7 @@ Next: /bug-report verify [BUG-ID] after deploy to confirm resolution
 ```
 
 ### Rules
-- Hotfixes must be the MINIMUM change to fix the issue — no cleanup, no refactoring
+- Hotfixes must be the MINIMUM change to fix the issue â€” no cleanup, no refactoring
 - Every hotfix must have a rollback plan documented before deployment
 - Hotfix branches merge to BOTH the release branch AND the development branch
 - All hotfixes require a post-incident review within 48 hours
@@ -150,6 +150,6 @@ Next: /bug-report verify [BUG-ID] after deploy to confirm resolution
 After deploying, run `/bug-report verify [BUG-ID]` to confirm the fix resolved the issue in the deployed build.
 
 If VERIFIED FIXED: run `/bug-report close [BUG-ID]` to formally close it.
-If STILL PRESENT: the hotfix failed — immediately re-open, assess rollback, and escalate.
+If STILL PRESENT: the hotfix failed â€” immediately re-open, assess rollback, and escalate.
 
 Schedule a post-incident review within 48 hours using `/retrospective hotfix`.

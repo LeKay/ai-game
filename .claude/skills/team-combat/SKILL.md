@@ -1,13 +1,13 @@
----
+﻿---
 name: team-combat
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Orchestrate the combat team: coordinates game-designer, gameplay-programmer, ai-programmer, technical-artist, sound-designer, and qa-tester to design, implement, and validate a combat feature end-to-end."
 argument-hint: "[combat feature description]"
 user-invocable: true
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash, Task, AskUserQuestion, TodoWrite
 ---
 **Argument check:** If no combat feature description is provided, output:
-> "Usage: `/team-combat [combat feature description]` — Provide a description of the combat feature to design and implement (e.g., `melee parry system`, `ranged weapon spread`)."
+> "Usage: `/team-combat [combat feature description]` â€” Provide a description of the combat feature to design and implement (e.g., `melee parry system`, `ranged weapon spread`)."
 Then stop immediately without spawning any subagents or reading any files.
 
 When this skill is invoked with a valid argument, orchestrate the combat team through a structured pipeline.
@@ -18,24 +18,24 @@ full analysis in conversation, then capture the decision with concise labels.
 The user must approve before moving to the next phase.
 
 ## Team Composition
-- **game-designer** — Design the mechanic, define formulas and edge cases
-- **gameplay-programmer** — Implement the core gameplay code
-- **ai-programmer** — Implement NPC/enemy AI behavior for the feature
-- **technical-artist** — Create VFX, shader effects, and visual feedback
-- **sound-designer** — Define audio events, impact sounds, and ambient combat audio
-- **engine specialist** (primary) — Validate architecture and implementation patterns are idiomatic for the engine (read from `.claude/docs/technical-preferences.md` Engine Specialists section)
-- **qa-tester** — Write test cases and validate the implementation
+- **game-designer** â€” Design the mechanic, define formulas and edge cases
+- **gameplay-programmer** â€” Implement the core gameplay code
+- **ai-programmer** â€” Implement NPC/enemy AI behavior for the feature
+- **technical-artist** â€” Create VFX, shader effects, and visual feedback
+- **sound-designer** â€” Define audio events, impact sounds, and ambient combat audio
+- **engine specialist** (primary) â€” Validate architecture and implementation patterns are idiomatic for the engine (read from `.claude/docs/technical-preferences.md` Engine Specialists section)
+- **qa-tester** â€” Write test cases and validate the implementation
 
 ## How to Delegate
 
 Use the Task tool to spawn each team member as a subagent:
-- `subagent_type: game-designer` — Design the mechanic, define formulas and edge cases
-- `subagent_type: gameplay-programmer` — Implement the core gameplay code
-- `subagent_type: ai-programmer` — Implement NPC/enemy AI behavior
-- `subagent_type: technical-artist` — Create VFX, shader effects, visual feedback
-- `subagent_type: sound-designer` — Define audio events, impact sounds, ambient audio
-- `subagent_type: [primary engine specialist]` — Engine idiom validation for architecture and implementation
-- `subagent_type: qa-tester` — Write test cases and validate implementation
+- `subagent_type: game-designer` â€” Design the mechanic, define formulas and edge cases
+- `subagent_type: gameplay-programmer` â€” Implement the core gameplay code
+- `subagent_type: ai-programmer` â€” Implement NPC/enemy AI behavior
+- `subagent_type: technical-artist` â€” Create VFX, shader effects, visual feedback
+- `subagent_type: sound-designer` â€” Define audio events, impact sounds, ambient audio
+- `subagent_type: [primary engine specialist]` â€” Engine idiom validation for architecture and implementation
+- `subagent_type: qa-tester` â€” Write test cases and validate implementation
 
 Always provide full context in each agent's prompt (design doc path, relevant code files, constraints). Launch independent agents in parallel where the pipeline allows it (e.g., Phase 3 agents can run simultaneously).
 
@@ -57,7 +57,7 @@ Then spawn the **primary engine specialist** to validate the proposed architectu
 - Is the class/node/component structure idiomatic for the pinned engine? (e.g., Godot node hierarchy, Unity MonoBehaviour vs DOTS, Unreal Actor/Component design)
 - Are there engine-native systems that should be used instead of custom implementations?
 - Any proposed APIs that are deprecated or changed in the pinned engine version?
-- Output: engine architecture notes — incorporate into the architecture before Phase 3 begins
+- Output: engine architecture notes â€” incorporate into the architecture before Phase 3 begins
 
 ### Phase 3: Implementation (parallel where possible)
 Delegate in parallel:
@@ -87,19 +87,19 @@ Delegate to **qa-tester**:
 
 If any spawned agent (via Task) returns BLOCKED, errors, or cannot complete:
 
-1. **Surface immediately**: Report "[AgentName]: BLOCKED — [reason]" to the user before continuing to dependent phases
+1. **Surface immediately**: Report "[AgentName]: BLOCKED â€” [reason]" to the user before continuing to dependent phases
 2. **Assess dependencies**: Check whether the blocked agent's output is required by subsequent phases. If yes, do not proceed past that dependency point without user input.
 3. **Offer options** via AskUserQuestion with choices:
    - Skip this agent and note the gap in the final report
    - Retry with narrower scope
    - Stop here and resolve the blocker first
-4. **Always produce a partial report** — output whatever was completed. Never discard work because one agent blocked.
+4. **Always produce a partial report** â€” output whatever was completed. Never discard work because one agent blocked.
 
 Common blockers:
-- Input file missing (story not found, GDD absent) → redirect to the skill that creates it
-- ADR status is Proposed → do not implement; run `/architecture-decision` first
-- Scope too large → split into two stories via `/create-stories`
-- Conflicting instructions between ADR and story → surface the conflict, do not guess
+- Input file missing (story not found, GDD absent) â†’ redirect to the skill that creates it
+- ADR status is Proposed â†’ do not implement; run `/architecture-decision` first
+- Scope too large â†’ split into two stories via `/create-stories`
+- Conflicting instructions between ADR and story â†’ surface the conflict, do not guess
 
 ## File Write Protocol
 
@@ -111,8 +111,8 @@ delegated to sub-agents spawned via Task. Each sub-agent enforces the
 
 A summary report covering: design completion status, implementation status per team member, test results, and any open issues.
 
-Verdict: **COMPLETE** — combat feature designed, implemented, and validated.
-Verdict: **BLOCKED** — one or more phases could not complete; partial report produced with unresolved items listed.
+Verdict: **COMPLETE** â€” combat feature designed, implemented, and validated.
+Verdict: **BLOCKED** â€” one or more phases could not complete; partial report produced with unresolved items listed.
 
 ## Next Steps
 

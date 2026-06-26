@@ -1,6 +1,6 @@
----
+﻿---
 name: patch-notes
-model: qwen-3.6-35b-sovereign
+model: claude-haiku-4-5-20251001
 description: "Generate player-facing patch notes from git history, sprint data, and internal changelogs. Translates developer language into clear, engaging player communication."
 argument-hint: "[version] [--style brief|detailed|full]"
 user-invocable: true
@@ -11,7 +11,7 @@ agent: community-manager
 ## Phase 1: Parse Arguments
 
 - `version`: the release version to generate notes for (e.g., `1.2.0`)
-- `--style`: output style — `brief` (bullet points), `detailed` (with context), `full` (with developer commentary). Default: `detailed`.
+- `--style`: output style â€” `brief` (bullet points), `detailed` (with context), `full` (with developer commentary). Default: `detailed`.
 
 If no version is provided, ask the user before proceeding.
 
@@ -32,13 +32,13 @@ nor a `docs/CHANGELOG.md` entry for this version exists, and git log is empty or
 > "No changelog data found for [version]. Run `/changelog [version]` first to generate the
 > internal changelog, then re-run `/patch-notes [version]`."
 
-Verdict: **BLOCKED** — stop here without generating notes.
+Verdict: **BLOCKED** â€” stop here without generating notes.
 
 ---
 
 ## Phase 2b: Detect Tone Guide and Template
 
-**Tone guide detection** — before drafting notes, check for writing style guidance:
+**Tone guide detection** â€” before drafting notes, check for writing style guidance:
 
 1. Check `.claude/docs/technical-preferences.md` for any "tone", "voice", or "style"
    fields or sections.
@@ -50,7 +50,7 @@ Verdict: **BLOCKED** — stop here without generating notes.
    player-friendly, non-technical language; enthusiastic but not hyperbolic;
    focus on what the player experiences, not what the developer changed.
 
-**Template detection** — check whether a patch notes template exists:
+**Template detection** â€” check whether a patch notes template exists:
 
 1. Glob for `docs/patch-notes-template.md` and `.claude/docs/templates/patch-notes-template.md`.
 2. If found at either location, read it and use it as the output structure for Phase 4
@@ -73,11 +73,11 @@ Categorize all changes into player-facing categories:
 
 Translate developer language to player language:
 
-- "Refactored damage calculation pipeline" → "Improved hit detection accuracy"
-- "Fixed null reference in inventory manager" → "Fixed a crash when opening inventory"
-- "Reduced GC allocations in combat loop" → "Improved combat performance"
+- "Refactored damage calculation pipeline" â†’ "Improved hit detection accuracy"
+- "Fixed null reference in inventory manager" â†’ "Fixed a crash when opening inventory"
+- "Reduced GC allocations in combat loop" â†’ "Improved combat performance"
 - Remove purely internal changes that don't affect players
-- Preserve specific numbers for balance changes (damage: 50 → 45)
+- Preserve specific numbers for balance changes (damage: 50 â†’ 45)
 
 ---
 
@@ -85,14 +85,14 @@ Translate developer language to player language:
 
 ### Brief Style
 ```markdown
-# Patch [Version] — [Title]
+# Patch [Version] â€” [Title]
 
 **New**
 - [Feature 1]
 - [Feature 2]
 
 **Changes**
-- [Balance/mechanic change with before → after values]
+- [Balance/mechanic change with before â†’ after values]
 
 **Fixes**
 - [Bug fix 1]
@@ -104,7 +104,7 @@ Translate developer language to player language:
 
 ### Detailed Style
 ```markdown
-# Patch [Version] — [Title]
+# Patch [Version] â€” [Title]
 *[Date]*
 
 ## Highlights
@@ -148,7 +148,7 @@ Includes everything from Detailed, plus:
 ```markdown
 ## Developer Commentary
 ### [Topic]
-> [Developer insight into a major change — why it was made, what was considered,
+> [Developer insight into a major change â€” why it was made, what was considered,
 > what the team learned. Written in first-person team voice.]
 ```
 
@@ -180,7 +180,7 @@ internal archive copy.
 
 ## Phase 7: Next Steps
 
-Verdict: **COMPLETE** — patch notes generated and saved.
+Verdict: **COMPLETE** â€” patch notes generated and saved.
 
 - Run `/release-checklist` to verify all other release gates are met before publishing.
 - Share the patch notes draft with the community-manager for tone review before posting publicly.

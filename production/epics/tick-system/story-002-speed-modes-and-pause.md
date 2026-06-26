@@ -55,20 +55,20 @@ signal speed_changed(new_speed: float)
 signal pause_state_changed(is_paused: bool)
 
 func set_speed(multiplier: float) -> void:
-    var clamped: float = SPEED_OPTIONS.front()
-    for s in SPEED_OPTIONS:
-        if absf(s - multiplier) < 0.01:
-            clamped = s
-            break
-    if clamped != speed_multiplier:
-        speed_multiplier = clamped
-        speed_changed.emit(speed_multiplier)
+	var clamped: float = SPEED_OPTIONS.front()
+	for s in SPEED_OPTIONS:
+		if absf(s - multiplier) < 0.01:
+			clamped = s
+			break
+	if clamped != speed_multiplier:
+		speed_multiplier = clamped
+		speed_changed.emit(speed_multiplier)
 
 func set_pause(paused: bool) -> void:
-    if paused != is_paused:
-        is_paused = paused
-        set_process(not is_paused)
-        pause_state_changed.emit(is_paused)
+	if paused != is_paused:
+		is_paused = paused
+		set_process(not is_paused)
+		pause_state_changed.emit(is_paused)
 ```
 
 Key invariant: `set_process(false)` when paused means `_process()` never runs — no guard needed inside `_process()` beyond the early-return that Story 001 already has.

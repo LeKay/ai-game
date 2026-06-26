@@ -1,336 +1,294 @@
 # Logistics System
 
-> **Status**: In Design
+> **Status**: Implemented — synced against `src/systems/logistics/` (2026-06-13)
 > **Author**: [user + agents]
-> **Last Updated**: 2026-05-19
+> **Last Updated**: 2026-06-13
 > **Implements Pillar**: Pillar 1 (Earned Automation), Pillar 2 (Information Transparency), Pillar 3 (Optimization Over Expansion)
+> **Sync note**: Reverse-synced to the implementation. Two structural changes since the
+> 2026-05-19 design: (1) **shared carriers** — one NPC can serve several routes,
+> switching after each delivery; (2) **tile-weighted A\* pathfinding** (ADR-0013)
+> replaced raw Manhattan distance. Waiting timeouts were removed. Time values use the
+> pacing anchor 1 tick ≈ 1 minute, 1440 ticks/day.
 
 ## Overview
 
-The Logistics System is the village's supply chain — it connects buildings via NPC carriers that physically move resources across the map. Production buildings use carriers to deliver inputs (bringing them upstream goods) and collect outputs (taking finished goods away). Storage buildings receive outputs from production buildings and provide inputs to production buildings. Extraction buildings (Lumber Camp, Quarry) operate on resources in their proximity — no input carriers needed — but still have output carriers that collect their processed goods. A building without the carriers it needs enters BLOCKED (missing inputs) or STALLED (output can't leave). Transport time is distance-based — Manhattan distance multiplied by `ticks_per_tile` (default 3.0) — so a building placed 10 tiles from its destination pays 30 ticks per one-way trip. This is the core spatial optimization puzzle: place buildings close together for throughput, far apart for variety.
+The Logistics System is the village's supply chain — it connects buildings via NPC
+carriers that physically move resources across the map. Production buildings use
+carriers to deliver inputs (tools, intermediate goods) and collect outputs; storage
+buildings act as sources and sinks. A building without the carriers it needs enters
+BLOCKED (inputs cannot arrive); a building whose output is never collected idles with
+a full output buffer.
 
-The system supports three route types:
-- **Storage → Production**: Carriers deliver raw/intermediate goods to buildings that need inputs
-- **Production → Storage**: Carriers collect finished goods and deliver them to storage
-- **Production → Production**: Multi-hop chains where one building's output feeds another building's input (e.g., Lumber Camp → Sawmill → Plank Storage)
+Transport time is **path-based**: routes are pathfound with a tile-weighted A\*
+(roads cost 0.5, open ground 1.0, resource tiles more; ADR-0013), and the path cost is
+multiplied by `TICKS_PER_TILE` (5.0) to get the base travel time at 100% carrier
+efficiency. The base time is then divided by the carrier's food-efficiency (Formula F4,
+ADR-0012) — a starving carrier crawls at 20 ticks/tile, a bread-fed one moves at
+5 ticks/tile. Placement, road building, and carrier feeding are all levers on the same
+spatial optimization puzzle.
 
-The Logistics System does not simulate visible NPC movement as a visual spectacle — carriers are abstract entities whose routes are communicated through building status indicators and route lines. A carrier's journey is a mechanic, not a spectacle. This keeps the system debuggable (Pillar 2) and scoped for solo development.
+**Shared-carrier model (2026-06-12):** A single NPC can be the carrier for several
+routes but serves **one at a time**. After each delivery it switches round-robin to its
+next route that actually has work; if none has work, it waits in place and re-checks
+every tick. This collapsed the old "1 NPC per route" architecture that demanded ~13
+NPCs for a 4-building village (balance finding B3).
 
-**Scope note:** The Vertical Slice implements the carrier assignment loop (assign NPC → route → building produces) and building status feedback (BLOCKED/STALLED). Multi-hop chain planning, efficiency metrics (Formulas 3 and 4), and route optimization tools are MVP+ features that extend the core VS loop.
+The route types:
+- **OUTPUT route** (production → storage): collects finished goods from a building's output buffer.
+- **INPUT route** (storage → production, or production → production): delivers a chosen resource into a building's input buffer (e.g. tools to the Lumber Camp).
 
-*Reference: Factorio's conveyor belt logic abstracted into human-scale NPC carriers; Anno's population-tier supply chains where buildings starve without resource delivery.*
+Carriers are visualized as icons moving along their route lines (NpcOverlay +
+RouteLines); a carrier's journey is a mechanic with a readable visual trace, not a
+spectacle.
 
-**What would go wrong if this system is broken:** Buildings sit idle while the player doesn't know why — no one is transporting the resources. Or worse, the player assigned a carrier but the route is inefficient (too many tiles, too slow), so buildings produce half-speed. The core loop — identify bottleneck, route resources, watch production stabilize — breaks into "I built things but nothing is happening."
+*Reference: Factorio's conveyor logic abstracted into human-scale NPC carriers; Anno's
+supply chains where buildings starve without delivery.*
 
 ## Player Fantasy
 
 **"The Village Works Because of You."**
 
-Every carrier trip, every completed delivery, every optimized route is evidence that the player's decisions created something that runs without them. The logistics system is the proof that the player built something real.
+Every carrier trip, every completed delivery, every optimized route is evidence that
+the player's decisions created something that runs without them.
 
-**The first carrier** proves delegation works. The player assigns the first NPC to a Storage → Sawmill route. They watch it walk to the storage, grab a plank, and walk away. It's slow (12 tiles × 3 ticks = 36 ticks each way — about 3.6 seconds at 1x speed). But when the item drops into the Sawmill's input buffer and the building's status turns from yellow to green, the player feels a discrete, satisfying click of purpose fulfilled. This is the moment "I built things but nothing is happening" becomes "I built things and they work."
+**The first carrier** proves delegation works. The player assigns an NPC to a
+Lumber Camp → Storage route and watches the icon crawl along the route line — 10 tiles,
+50 ticks each way at full efficiency. When the wood lands in storage, the loop closes:
+"I built things and they work."
 
-**The multi-hop chain** proves systemic thinking. The Lumber Camp delivers wood to the Sawmill, which produces planks, and a second carrier carries those planks to Plank Storage. Three buildings, three routes, one coherent flow. The player zooms out and watches resources move end-to-end. They didn't build a single machine — they built a *system*. This is the moment the player stops seeing individual buildings and starts seeing a production network.
+**The shared carrier** proves systemic thinking. One NPC serves the lumber camp's
+output route AND the tool delivery route. The player watches it deliver wood, then pivot
+directly to the workshop to fetch a tool — no wasted walk home. Three buildings, three
+routes, one worker: the player built a *system*, and the system economizes on its own.
 
-**The optimized route** proves spatial mastery. The player spots that Plank Storage is 20 tiles from the Sawmill — 120 ticks per trip, 6 carriers needed for peak throughput. They rebuild the storage 5 tiles closer, reducing to 30 ticks per trip, requiring only 2 carriers. The efficiency gain is visible in the building status: the Sawmill goes from "2/3 carriers needed" to "saturated." The player optimized with spatial reasoning, not micromanagement.
+**The optimized route** proves spatial mastery. A road cuts the path cost in half;
+feeding the carrier bread doubles its speed again. The same route that took 100 ticks
+now takes 25. Both improvements are visible on the map — the route line shortens along
+the road, the icon visibly speeds up.
 
-All three moments are the same underlying emotion at different stages of progression. The logistics system is the emotional arc of the game made tangible: from "I can do things myself" to "I built a system that runs itself" to "I can read the village's health at a glance."
+**What it serves:** Pillar 1 (Earned Automation), Pillar 2 (Information Transparency —
+routes, carrier positions and cargo are visible; every delay is debuggable), Pillar 3
+(Optimization Over Expansion — distance, roads, and feeding are all throughput levers).
 
-**What it serves:** Pillar 1 (Earned Automation — the player sees the direct result of every carrier assignment), Pillar 2 (Information Transparency — carrier routes are visible through building status, every delay is debuggable), Pillar 3 (Optimization Over Expansion — every tile of distance is a design tradeoff the player must solve).
-
-## Detailed Design
-
-### Core Rules
+## Detailed Rules
 
 **1. Route Model**
 
-A route is an explicit connection between two buildings that assigns an NPC carrier to transport resources. The Logistics System manages three route types:
+A route is an explicit connection between two buildings served by an NPC carrier
+(`LogisticsRoute`, pure data):
 
-| Route Type | Direction | Purpose |
-|------------|-----------|---------|
-| Storage → Production | Output from storage → Input to production | Deliver raw/intermediate goods to buildings that need them |
-| Production → Storage | Output from production → Input to storage | Collect finished goods for storage |
-| Production → Production | Output from production → Input to other production | Move intermediate goods in multi-hop chains |
+| Field | Meaning |
+|-------|---------|
+| `id` | `route_<npc>_<source>_<destination>` — unique per (carrier, pair); one carrier may own several routes |
+| `source_building_id` / `destination_building_id` | pickup / delivery buildings |
+| `npc_id` | the carrier NPC (may appear on multiple routes — shared carrier) |
+| `route_type` | INPUT (fills destination input slot) or OUTPUT (drains source output slot) |
+| `source_item_id` | for storage sources: which resource to pick up (required); for production sources: optional filter |
+| `active` / `lifecycle_state` | DRAFT / ACTIVE / PAUSED / DEACTIVATED |
+| `carrier_state` | 8-state carrier FSM position (see Rule 5) |
+| `cached_path`, `cached_path_cost`, `path_valid` | A\* path source → destination (ADR-0013) |
+| `current_leg_path`, `current_leg_total_ticks` | current travel leg for overlay animation (F4-scaled duration) |
 
-Each route has these properties:
-- `source_building_id`: The building where the carrier picks up items
-- `destination_building_id`: The building where the carrier delivers items
-- `npc_id`: The NPC assigned to this route (a single NPC serves one route at a time)
-- `route_type`: INPUT or OUTPUT — which slot type on the source building this route fills
-- `active`: Boolean — whether the route is active or toggled off
+**2. Route Creation and Slot Validation**
 
-A building can have at most one carrier per slot type. A building with `output_slots = 1` can have at most one route with `route_type = OUTPUT`. If the player tries to assign a second carrier to that slot, the action is blocked with "This building has no free output slots."
+Routes are created via the Transportation panel. Validation gates, in order:
 
-**2. Route Creation**
+1. Source ≠ destination.
+2. **OUTPUT route:** source building must have a free output slot (`MAX_OUTPUT_SLOTS = 1`).
+3. **INPUT route:** destination must have a free input slot. Max input slots = number of
+   distinct input resources in its `PRODUCTION_TABLE` entry (Tool Workshop: 3, Lumber
+   Camp: 1); storage/unknown buildings: 1. Inactive/paused routes still occupy their
+   slot until deleted.
+4. **Path gate (ADR-0013):** a viable A\* path source → destination must exist;
+   otherwise creation fails with "No viable path…". The found path is cached on the
+   route.
 
-The player creates routes through the Transportation Management UI (see `design/ux/transportation.md`). The UI presents two views:
-- **Active Routes List**: Shows all existing routes with From → To, resource, NPC, status
-- **Route Detail**: The player selects source building (map-select), destination building (map-select), and assigns an available NPC
+Carrier candidates are idle non-worker NPCs **plus NPCs already serving as carriers**
+(`get_carrier_candidates`) — assigning an existing carrier to another route is the
+shared-carrier feature, not an error.
 
-Route creation is player-driven — no auto-assignment. This serves the Foreman fantasy: the player deliberately decides which NPC goes where.
+**3. Shared-Carrier Scheduling**
 
-Route discovery is organic — the player discovers multi-hop chains when they build a second production building that needs inputs from the first. There is no gating or unlock.
+The system maintains `carrier_active_route: npc_id → route_id` — the ONE route each
+carrier is currently executing. All its other routes are dormant.
 
-**3. Route Execution (Continuous Loop)**
+- **Decision point** (`_carrier_pick_next`): whenever the carrier has no cargo in hand
+  (after a delivery, after arriving at an empty source, or when its active route went
+  away), it picks the next of its routes **round-robin starting after the current
+  route** ("switch after each delivery") that **has work**.
+- **Has work** = source has cargo available AND destination has space.
+- **Wait in place:** if no route has work, the carrier idles at its current tile (no
+  trek home) and the scheduler re-checks every tick (`_service_carriers`).
+- **Travel to source starts from the carrier's current tile** — after a delivery the
+  carrier moves directly from the destination to the next route's source.
+- A **busy** carrier (travelling or holding cargo) is never preempted: a newly started
+  route simply joins its round-robin.
 
-Once a route is created and active, the assigned NPC loops continuously:
+**4. Route Execution (per-trip loop of the active route)**
 
 ```
-TRAVEL_TO_SOURCE → PICKUP → TRAVEL_TO_DESTINATION → UNLOAD → RETURN_HOME → (repeat)
+(decision point) → TRAVEL_TO_SOURCE → AT_SOURCE → pickup min(available, CARRIER_CAPACITY)
+→ TRAVEL_TO_DESTINATION → AT_DESTINATION → deposit → (decision point: next route / wait in place)
 ```
 
-- **TRAVEL_TO_SOURCE**: NPC moves from home to the source building. Travel time = Manhattan distance × `ticks_per_tile` (Formula 1).
-- **PICKUP**: If the source building has output in its buffer, the carrier picks up `min(buffer_amount, carrier_capacity)` items. If the buffer is empty, the carrier enters WAITING_SOURCE (see EC-L6).
-- **TRAVEL_TO_DESTINATION**: NPC moves to the destination building. Travel time = Manhattan distance × `ticks_per_tile`.
-- **UNLOAD**: If the destination has space (storage has free slots or the destination building's input buffer is available), the carrier unloads immediately. If the destination is full, the carrier enters WAITING_DESTINATION (see EC-L5).
-- **RETURN_HOME**: NPC returns home. Travel time = Manhattan distance from destination to home × `ticks_per_tile`. On arrival, the NPC enters IDLE and immediately starts the next trip by traveling back to the source.
+- Pickup and deposit are instant (same tick as arrival); there are no loading ticks.
+- Pickup amount = `min(available, CARRIER_CAPACITY)` with `CARRIER_CAPACITY = 2`.
+- Storage sources consume `source_item_id` via InventorySystem; production sources
+  drain `buffered_output` (filtered by `source_item_id` when set).
+- Storage destinations deposit via `InventorySystem.try_deposit`; production
+  destinations receive into `input_buffer` via `receive_input_from_world` (a delivered
+  tool adds 1.0 charge — see Building System T9). Delivery is blocked while the
+  destination slot is full (`is_input_full`).
 
-The carrier always returns home between trips. This maintains the spatial connection to the village and makes trip time visible to the player.
+**5. Carrier State Machine (8 states, `LogisticsRoute.CarrierState`)**
 
-**4. Slot-Based Assignment**
+| State | Description | Exits |
+|-------|-------------|-------|
+| IDLE | No work on any of the carrier's routes — waiting **in place**; also the parked state of dormant routes | → TRAVEL_TO_SOURCE (work appears, re-checked each tick) |
+| TRAVEL_TO_SOURCE | Moving to the active route's source (from current tile) | → AT_SOURCE |
+| AT_SOURCE | At source, attempting pickup | → TRAVEL_TO_DESTINATION (cargo loaded) · → decision point (source empty — try other routes) |
+| WAITING_SOURCE | **Legacy** — no longer entered; old saves route through the decision point | → decision point |
+| TRAVEL_TO_DESTINATION | Moving along the cached route path with cargo | → AT_DESTINATION |
+| AT_DESTINATION | At destination, attempting deposit | → decision point (deposited) · → WAITING_DESTINATION (destination full) |
+| WAITING_DESTINATION | Holding cargo, destination full — **waits indefinitely** (switching would destroy the held cargo); deposits the moment space frees | → decision point |
+| RETURN_HOME | Travelling home — only used when a route is deactivated/paused mid-loop | → TRAVEL_TO_SOURCE (route still active) · → IDLE + release (inactive) |
 
-Each building type has defined carrier slots:
+There are **no waiting timeouts** — they were removed because they made carriers
+discard held cargo and walk pointless home-and-back legs. `carrier_waiting_timeout`
+survives only as a serialized field for save-file compatibility.
 
-| Building Type | Input Slots | Output Slots | Notes |
-|---------------|-------------|--------------|-------|
-| Storage | 1 | 1 | Receives output from production; delivers stored goods to production |
-| Extraction (Lumber Camp, Quarry) | 0 | 1 | Operates on resources in proximity; no input carriers needed |
-| Processing (Sawmill, Mill) | 1 | 1 | Receives upstream goods; delivers processed output |
+On every state transition the Logistics System mirrors the carrier state into the NPC
+System (`set_carrier_state`, ADR-0011 mapping). Travel-leg entry applies F4: the base
+leg ticks are divided by the carrier's current efficiency, and the effective duration
+is recorded in `current_leg_total_ticks` for the overlay animation.
 
-A route with `route_type = INPUT` fills an input slot on the destination building. A route with `route_type = OUTPUT` fills an output slot on the source building. Slot definitions are hard limits — the Logistics System blocks route creation if no free slots exist.
+**6. Building Status Integration**
 
-**5. Carrier State Machine**
+| Condition | Effect |
+|-----------|--------|
+| Carrier at source/destination working | destination building set OPERATING |
+| INPUT route deactivated, no other active INPUT routes | destination building set BLOCKED ("no input carrier") |
+| OUTPUT route deactivated | source's output carrier slot cleared; building idles naturally when its buffer fills |
+| Carrier in transit (IDLE/TRAVEL/RETURN) | building status untouched |
 
-The NPC's carrier state (managed by the Logistics System, executed through the NPC System) defines these states:
+**7. Pathfinding and Invalidation (ADR-0013)**
+
+- Paths are computed by `LogisticsPathfinder.find_path` over WorldGrid tile costs
+  (roads 0.5 via PathSystem, terrain via resource `movement_cost`, buildings
+  impassable except roads).
+- Terrain changes crossing a cached path invalidate that route; terrain-type changes
+  and road placement/removal invalidate **all** routes (costs may have improved).
+  Recalculation is deferred to end of frame.
+- If recalculation finds no path for an active route, the route is **DEACTIVATED**
+  with reason "Path blocked by terrain change." — the player must fix the map and
+  reactivate.
+
+**8. Fairness and Persistence**
+
+- Routes are processed with a rotating start offset per tick batch so no route gets
+  permanent priority.
+- All route state (including FSM position, cargo, leg progress and cached paths) is
+  serialized. On load, each carrier's active route is reconstructed as its first
+  non-IDLE route; the rest stay dormant.
+
+### Route Lifecycle States
 
 | State | Description | Transitions |
 |-------|-------------|-------------|
-| IDLE | Not actively transporting; at home base | → TRAVEL_TO_SOURCE (route starts) |
-| TRAVEL_TO_SOURCE | Moving to source to pick up | → AT_SOURCE (arrived), → IDLE (route deactivated) |
-| AT_SOURCE | At source building; attempting pickup | → TRAVEL_TO_DESTINATION (picked up), → WAITING_SOURCE (empty buffer), → IDLE (route deactivated) |
-| WAITING_SOURCE | Source has nothing to carry | → TRAVEL_TO_DESTINATION (item produced), → IDLE (route deactivated) |
-| TRAVEL_TO_DESTINATION | Moving to destination to deliver | → AT_DESTINATION (arrived), → IDLE (route deactivated) |
-| AT_DESTINATION | At destination; attempting unload | → TRAVEL_TO_HOME (unloaded), → WAITING_DESTINATION (destination full), → IDLE (route deactivated) |
-| WAITING_DESTINATION | Destination is full; waiting | → TRAVEL_TO_HOME (space opens), → IDLE (route deactivated) |
-| RETURN_HOME | Traveling back to home base | → IDLE (arrived, next trip begins) |
+| ACTIVE | Route participates in its carrier's round-robin | → PAUSED (player), → DEACTIVATED (path blocked / NPC removed), → deleted |
+| PAUSED | Slot stays occupied; route leaves the round-robin. If it was the carrier's active route, the carrier freezes in place until rescheduled onto its other routes (next tick) | → ACTIVE (resume), → deleted |
+| DEACTIVATED | Broken (no path, NPC removed); record preserved with a human-readable `deactivation_reason` for reassignment | → ACTIVE (player fixes + reactivates), → deleted |
 
-The Logistics System calls `npc_system.set_carrier_state(npc_id, state)` to transition. The NPC System tracks the NPC's position and physical state. The two systems share the carrier state as their interface.
-
-**6. Building State Integration**
-
-The Logistics System communicates with the Building System through slot assignment status:
-
-| Condition | Building State | Cause |
-|-----------|---------------|-------|
-| Building needs input carrier, has none | BLOCKED | No carrier on any input slot |
-| Building has output, no carrier assigned | STALLED | Output buffer fills, production halts |
-| Output carrier assigned but destination full | STALLED | Carrier in WAITING_DESTINATION state |
-| Building is producing, carriers assigned and functioning | OPERATING (green) | Normal operation |
-
-When a route is deleted or deactivated, the corresponding slot is freed. If this causes the building to lose all its input carriers, the building transitions to BLOCKED. If the building loses all output carriers, it transitions to STALLED once the buffer fills.
-
-**7. Route Persistence**
-
-Routes are saved and loaded as part of game state. Each route is tied to a specific NPC. If the NPC is removed (house demolished, player confirmation), the route is deactivated but not deleted — the player can reassign a new NPC. Route data is preserved to allow quick re-establishment.
-
-Route data model:
-```
-route {
-    id: string
-    source_building_id: string
-    destination_building_id: string
-    npc_id: string
-    route_type: INPUT | OUTPUT
-    active: bool
-}
-```
-
-### States and Transitions
-
-**Route Lifecycle States:**
-
-| State | Description | Transitions |
-|-------|-------------|-------------|
-| DRAFT | Route is being configured (player selecting source/destination) | → ACTIVE (player confirms), → DELETED (player cancels) |
-| ACTIVE | Route is executing; NPC is looping | → PAUSED (player toggles off), → DELETED (player deletes) |
-| PAUSED | Route exists but NPC is idle at home | → ACTIVE (player toggles on), → DELETED (player deletes) |
-| DEACTIVATED | Route is broken (source/destination demolished, NPC removed) | → ACTIVE (player reconfigures), → DELETED (player deletes) |
-
-### Interactions with Other Systems
-
-**NPC System** — Primary dependency. The Logistics System treats NPCs as carriers. It calls `npc_system.set_carrier_state(npc_id, state)` and `npc_system.get_npc_position(npc_id)` to track carrier movement.
-
-**State Machine Contract (NPC System ↔ Logistics System):**
-The NPC System and the Logistics System each own a state machine. They operate at different abstraction levels:
-
-| Layer | Owner | What it tracks |
-|-------|-------|----------------|
-| NPC Task Cycle | NPC System | Where the NPC is physically, what building they work at, where they deposit |
-| Carrier State | Logistics System | Which route they serve, whether they are transporting a resource |
-
-**Precedence rules:**
-- When an NPC is assigned to a route, the Logistics System's carrier FSM **fully replaces** the NPC System's task cycle for that NPC. The NPC System still tracks position, but the Logistics System dictates the NPC's work behavior.
-- When an NPC has no active route, the NPC System's task cycle runs normally (IDLE → WORK → RETURN).
-- The Logistics System does **NOT** call `npc_system.set_carrier_state()` every tick. It only calls it on state *transitions* (e.g., when a carrier completes a trip and the NPC returns home idle). The NPC System's internal simulation loop transitions the carrier between logistics states using the state table in Core Rules 5.
-
-**Interface methods (defined by the NPC System, called by Logistics System):**
-| Method | Called By | When |
-|--------|-----------|------|
-| `npc_system.set_carrier_state(npc_id, state)` | Logistics System | On carrier FSM transition |
-| `npc_system.get_npc_position(npc_id)` | Logistics System | On route creation for distance calculation |
-| `npc_system.is_available(npc_id)` | Logistics System | During route creation |
-| `npc_system.release_npc(npc_id)` | Logistics System | When route is deleted/deactivated |
-| `npc_system.on_npc_at_location(npc_id, building_id)` | NPC System → Logistics System | Carrier arrives at source or destination building |
-
-**Building System** — Provides building slot definitions (`input_slots`, `output_slots`), building positions (for distance calculation), and building state (BLOCKED/STALLED transitions). The Logistics System calls `building_system.has_output_buffer(building_id)` and `building_system.get_free_input_slots(building_id)` to validate carrier actions. When the building produces output, the Logistics System's carrier picks it up. When the carrier delivers to a building, the Building System deposits it via `building_system.accept_input(building_id, resource_type, quantity)`.
-
-**Grid/Map System** — Provides Manhattan distance calculation: `grid_map.get_manhattan_distance(pos_a, pos_b)`. Used by Formula 1. Buildings are transparent to carrier pathfinding (carriers move along grid axes, no obstacle avoidance at MVP scope).
-
-**Tick System** — All carrier timing is tick-based. Carriers advance only when time is RUNNING. On day transition, carriers continue their loop across day boundaries without interruption.
-
-**Inventory/Storage System** — Provides capacity checks (`storage.has_free_slots()`, `storage.get_current_count()`). When a carrier unloads at a storage building, the Inventory System deducts from the building's capacity. When a carrier picks up from storage, the Inventory System removes the item.
-
-**Transportation Management UI** (`design/ux/transportation.md`) — Player-facing interface for route creation, editing, and deletion. The Logistics System provides data queries (`get_active_routes()`, `get_route_status(npc_id)`) and receives commands (`create_route()`, `delete_route(npc_id)`, `toggle_route(npc_id, active)`).
+**Deletion:** frees the building slot. The carrier is released home **only if it has no
+other routes left**; otherwise it keeps serving its remaining routes.
 
 ## Formulas
 
-### Formula 1: Round-Trip Time
+### Formula 1: Leg Travel Time (with F4)
 
-The carrier_round_trip_ticks formula is defined as:
-
-`carrier_round_trip_ticks = (dist_home_source + d + dist_dest_home) × ticks_per_tile + loading_ticks + unloading_ticks`
+`leg_ticks = max(1, floor( floor(path_cost × TICKS_PER_TILE) / carrier_efficiency ))`
 
 **Variables:**
-| Variable | Symbol | Type | Range | Description |
-|----------|--------|------|-------|-------------|
-| Home → source distance | `dist_home_source` | int | 0–750 | Manhattan distance from the NPC's home base to the source building. For carriers whose home base is at the source building, this is 0. |
-| Source → destination distance | `d` | int | 0–750 | Manhattan distance between source and destination buildings. Maximum for 30×30 grid: 58 (corner to corner). |
-| Dest → home distance | `dist_dest_home` | int | 0–750 | Manhattan distance from destination back to the NPC's home base. For carriers whose home base is at the source building, this equals `d`. |
-| Ticks per tile | `tpt` | float | 1.0–10.0 | Default: 3.0. Shared with NPC Movement constant (see NPC System GDD). |
-| Loading ticks | `lt` | int | 1–10 | Ticks for the loading phase. Default: 1. Scales with carrier_capacity in future. |
-| Unloading ticks | `ut` | int | 1–10 | Ticks for the unloading phase. Default: 1. |
+| Variable | Type | Range | Description |
+|----------|------|-------|-------------|
+| `path_cost` | float | 0–∞ | A\* cost of the leg (Σ entered-tile costs; roads 0.5/tile, open ground 1.0/tile). Falls back to Manhattan distance when no grid is available. |
+| `TICKS_PER_TILE` | float | 1.0–10.0 | **5.0** — base ticks per cost unit at 100% efficiency. Identical constant in LogisticsSystem, NPCSystem, BuildingRegistry. |
+| `carrier_efficiency` | float | 0.25–1.0 | The carrier NPC's food-driven efficiency (Hunger System Formula 1); 1.0 fallback when unavailable. |
 
-**Output Range:** [2, ∞) ticks — minimum 2 ticks (all distances = 0, 1 tick load, 1 tick unload).
+**Anchors:** 10-tile open path, fed carrier (1.0) → 50 ticks. Same path, unfed (0.5) →
+100 ticks. Same path fully on roads (cost 5.0), fed → 25 ticks.
 
-**Planning shortcut (home at source):** When the NPC's home base is at or adjacent to the source building (`dist_home_source = 0`), then `dist_dest_home = d`, and the formula simplifies to:
-`carrier_round_trip_ticks = floor(d × ticks_per_tile × 2) + loading_ticks + unloading_ticks`
+**Example:** Source at (3,7), destination at (8,2), no roads → path cost 10.
+Base = `floor(10 × 5.0)` = 50. Unfed carrier: `floor(50 / 0.5)` = 100 ticks for the leg.
 
-**Example (full):** Home at (0, 0), source at (3, 7), destination at (8, 2). `dist_home_source = 10`, `d = 10`, `dist_dest_home = 13`. `ticks_per_tile = 3.0`.
-`carrier_round_trip_ticks = (10 + 10 + 13) × 3.0 + 1 + 1 = 105 + 2 = 107 ticks`
+### Formula 2: Route Loop Time and Throughput
 
-**Example (planning shortcut, home at source):** Source at (3, 7), destination at (8, 2). Distance = 10. Home at source. `ticks_per_tile = 3.0`.
-`carrier_round_trip_ticks = floor(10 × 3.0 × 2) + 1 + 1 = 60 + 2 = 62 ticks`
+For a carrier serving a single route (steady state, no waiting):
 
-At 1x speed (10 ticks/real second), this is 6.2 seconds of real time per round trip.
+`loop_ticks = leg(dest → source) + leg(source → dest)`
+`throughput_per_day = floor(1440 / loop_ticks) × CARRIER_CAPACITY`
 
-### Formula 2: Route Throughput Per Day
+**Variables:** legs from Formula 1; `CARRIER_CAPACITY = 2` items/trip;
+1440 ticks/day (Tick System).
 
-The route_throughput_per_day formula is defined as:
+**Example:** 10-tile route, fed carrier: loop = 50 + 50 = 100 ticks →
+`floor(1440/100) × 2 = 28 items/day`. A Lumber Camp at full efficiency produces
+`floor(1440/250) × 5 = 25 wood/day` → one fed carrier keeps pace. The same carrier
+unfed (loop 200) delivers 14/day → bottleneck. Feeding the carrier IS logistics tuning.
 
-`route_throughput_per_day = floor(TICKS_PER_DAY / carrier_round_trip_ticks) × carrier_capacity`
+**Shared carriers:** a carrier on n routes divides its trips between them on demand;
+per-route throughput is bounded by the single-route figure and decreases with
+contention. There is no closed-form formula — the scheduler is demand-driven.
 
-**Variables:**
-| Variable | Symbol | Type | Range | Description |
-|----------|--------|------|-------|-------------|
-| Ticks per day | `TPD` | int | 1000 | Fixed constant. 1 day = 1000 ticks (see Tick System GDD). |
-| Round-trip ticks | `carrier_round_trip_ticks` | int | 2–∞ | From Formula 1. |
-| Carrier capacity | `cap` | int | 1–∞ | Items per trip. Default: 1. |
+### Formula 3: Route Efficiency Score (STUB)
 
-**Output Range:** [0, ∞) items/day. If `carrier_round_trip_ticks > TICKS_PER_DAY`, throughput is 0 (carrier never completes a trip in one day).
-
-**Example:** `carrier_round_trip_ticks = 62`, `carrier_capacity = 1`.
-`route_throughput_per_day = floor(1000 / 62) × 1 = floor(16.13) × 1 = 16 items/day`
-
-With `carrier_capacity = 1`, a 10-tile route delivers 16 items per day. At distance 30 (round trip = 182 ticks): `floor(1000 / 182) × 1 = 5 items/day`.
-
-### Formula 3: Route Efficiency Score
-
-The route_efficiency formula is defined as:
-
-`route_efficiency = (route_throughput_per_day × cycle_ticks) / (TICKS_PER_DAY × production_output)`
-
-This measures whether a route can keep up with a building's production rate. Value = 1.0 means the route perfectly matches production. < 1.0 means the route is the bottleneck. > 1.0 means the route has excess capacity.
-
-**Variables:**
-| Variable | Symbol | Type | Range | Description |
-|----------|--------|------|-------|-------------|
-| Route throughput per day | `route_throughput_per_day` | int | 0–∞ | From Formula 2. |
-| Production cycle duration | `cycle_ticks` | int | 1–∞ | Building's production cycle time in ticks. Lumber Camp: 100. |
-| Ticks per day | `TPD` | int | 1000 | Fixed constant. |
-| Production output per cycle | `base_output` | int | 1–∞ | Building's base output per production cycle. Lumber Camp: 5. |
-
-**Output Range:** [0, ∞). Value = 1.0 means perfect match.
-
-**Example:** Lumber Camp produces 5 Wood/cycle (cycle_ticks = 100). Route at distance 10 delivers 16 items/day (Formula 2).
-`route_efficiency = (16 × 100) / (1000 × 5) = 1600 / 5000 = 0.32`
-
-The route delivers 32% of what the building produces. The player needs 4 carriers (or a shorter route) to achieve efficiency ≥ 1.0.
-
-**UI interpretation:**
-- Efficiency ≥ 1.0: green indicator — route can handle production
-- 0.5 ≤ efficiency < 1.0: yellow — route is strained
-- Efficiency < 0.5: red — route is severely undersized
-
-### Formula 4: Number of Carriers Needed
-
-The carriers_needed formula is defined as:
-
-`carriers_needed = ceil((base_output × TICKS_PER_DAY) / (route_throughput_per_day × cycle_ticks))`
-
-This is the inverse of Formula 3. Given a building's production rate and a route's throughput, how many carriers does the player need?
-
-**Variables:**
-| Variable | Symbol | Type | Range | Description |
-|----------|--------|------|-------|-------------|
-| Production output per cycle | `base_output` | int | 1–∞ | Building's base output per cycle. |
-| Ticks per day | `TPD` | int | 1000 | Fixed constant. |
-| Route throughput per day | `route_throughput_per_day` | int | 0–∞ | From Formula 2. |
-| Production cycle duration | `cycle_ticks` | int | 1–∞ | Building's production cycle time. |
-
-**Output Range:** [1, ∞) carriers. When `route_throughput_per_day = 0` (carrier never completes a trip), the formula returns `∞` — displayed to the player as "Infinite carriers needed" or "Route too long for any carrier." The player must reduce distance or increase carrier_capacity.
-
-**Example:** Lumber Camp: `base_output = 5`, `cycle_ticks = 100`. Route at distance 10: `route_throughput_per_day = 16`.
-`carriers_needed = ceil((5 × 1000) / (16 × 100)) = ceil(5000 / 1600) = ceil(3.125) = 4`
-
-The player needs 4 carriers on this route to keep up with production.
+`get_route_efficiency` currently returns a lifecycle approximation: 0.0 (inactive),
+0.5 (waiting states), 1.0 (otherwise). UI interpretation: green ≥ 1.0, yellow 0.5–1.0,
+red < 0.5. The full throughput-vs-production formula is future work (logistics
+story 007 / TR-logistics-010).
 
 ## Edge Cases
 
-**EC-L1: Carrier arrives at source, buffer is empty, building not yet producing**
+**EC-L1: Carrier arrives at source, buffer is empty.** The carrier is empty-handed →
+decision point: it serves its next route with work, or idles **in place** if none has
+work, re-checking every tick. It never walks home and never times out. (Replaced the
+old WAITING_SOURCE + 300-tick timeout.)
 
-The carrier enters WAITING_SOURCE state. It waits on the same tick for the building to produce — if the building's production cycle just completed this tick, the carrier picks up immediately. Otherwise, the carrier polls once per tick. A maximum wait of 300 ticks (default `carrier_waiting_timeout`) is enforced: if no item appears within 300 ticks, the carrier returns home and the route transitions to DEACTIVATED. This prevents a carrier from blocking an NPC indefinitely when a production cycle is misconfigured.
+**EC-L2: Carrier arrives at destination, destination is full.** The carrier holds its
+cargo in WAITING_DESTINATION **indefinitely** — switching routes now would destroy the
+held cargo. The moment space frees (signal-driven, same tick), it deposits and moves to
+the decision point. Cargo is never discarded.
 
-**EC-L2: Carrier arrives at destination, storage is full**
+**EC-L3: Route between identical source and destination.** Blocked at creation:
+"Source and destination cannot be the same building."
 
-The carrier enters WAITING_DESTINATION state. It polls once per tick for free space. When space opens (a downstream carrier picks up items, or the player manually removes items), the carrier unloads immediately on the same tick. A maximum wait of 300 ticks (default `carrier_waiting_timeout`) is enforced: if the destination does not free space within 300 ticks, the carrier returns home with the item and the route transitions to DEACTIVATED.
+**EC-L4: Source or destination demolished while en route.** The route is DEACTIVATED
+with a reason; the carrier finishes via RETURN_HOME → released if it has no other
+routes. The route record is preserved for reassignment.
 
-**EC-L3: Route created between two buildings at the same position**
+**EC-L5: Carrier NPC removed (house demolished).** All its routes are DEACTIVATED;
+record preserved; the player can assign a new NPC per route.
 
-Route creation is blocked with the message "Source and destination cannot be the same building." This check occurs during route DRAFT → ACTIVE transition, before any NPC is assigned.
+**EC-L6: Route deleted mid-trip.** Slot freed immediately. The carrier is released home
+only if this was its last route; otherwise the scheduler reassigns it to its remaining
+routes at the next service tick.
 
-**EC-L4: Source or destination building is demolished while a carrier is en route**
+**EC-L7: No path exists at creation.** Route creation fails (path gate) — the player
+sees "No viable path between X and Y. Check for blocking buildings."
 
-The route is DEACTIVATED. If the carrier is holding an item, it returns home and deposits the item at the source building's storage. If the carrier is not holding an item, it returns home IDLE. The route record is preserved (not deleted) so the player can reassign it once a new building is placed.
+**EC-L8: Terrain change blocks an active route's path.** Route is DEACTIVATED with
+"Path blocked by terrain change."; the carrier returns home (or serves other routes).
+Roads placed/removed anywhere invalidate all cached paths (they may now be shorter) and
+trigger deferred recalculation.
 
-**EC-L5: NPC is removed (house demolished) while assigned to a route**
+**EC-L9: One carrier, several routes, only some have work.** The scheduler skips
+workless routes in the round-robin; a route whose source never produces simply never
+gets a visit (its building shows BLOCKED/idle states, which is the player's diagnostic
+signal).
 
-The route is DEACTIVATED. Any item the NPC is carrying is returned home and deposited at the source building's storage. The player is shown a confirmation dialog to reassign a different NPC. If reassigned, the route activates on the same tick. If the player cancels or no NPC is available, the route record remains DEACTIVATED until manually deleted.
-
-**EC-L6: Player deletes a route while the NPC is mid-trip**
-
-The route is immediately PAUSED. If the carrier is holding an item, it completes the current leg to its destination, unloads there, then returns home IDLE. If the carrier is not holding an item, it returns home immediately and enters IDLE. The route record is preserved in DEACTIVATED state for potential reassignment.
-
-**EC-L7: Production cycle completes but carrier is still waiting at source**
-
-This cannot happen. The WAITING_SOURCE state only occurs when the buffer is empty (no item produced). A production cycle completing adds to the buffer, which the carrier detects on its next poll tick and picks up immediately. No special action required.
-
-**EC-L8: Same building used as both source and destination via different slot types**
-
-This is allowed and represents a self-loop (e.g., a building that has both input and output slots, where the output is routed back as input for another processing step). The carrier picks up from the output buffer and delivers to the input buffer. If the building produces 5 items per cycle and the carrier delivers them all back, the system operates as designed. The player is responsible for ensuring this creates a productive loop, not a deadlock.
-
-**EC-L9: Carrier waiting timeout exceeded at both source and destination**
-
-If a carrier hits the timeout at WAITING_SOURCE, it returns home (EC-L1). If it later arrives at a destination that is also full, it hits the timeout at WAITING_DESTINATION (EC-L2). The carrier returns home with the item, the route is DEACTIVATED, and the player sees both source and destination buildings with red indicators. The player must investigate: is the source not producing? Is the destination not draining?
+**EC-L10: Save during a travel leg.** FSM state, remaining ticks, leg path, cargo and
+the carrier's active route are serialized and restored exactly; dormant routes stay
+dormant after load.
 
 ## Dependencies
 
@@ -338,112 +296,82 @@ If a carrier hits the timeout at WAITING_SOURCE, it returns home (EC-L1). If it 
 
 | System | Direction | Interface | Rationale |
 |--------|-----------|-----------|-----------|
-| NPC System | Reads | `npc_system.set_carrier_state(npc_id, state)`, `npc_system.get_npc_position(npc_id)` | NPCs ARE carriers. The Logistics System drives carrier state; the NPC System tracks position. |
-| Building System | Reads/Writes | `building_system.get_free_input_slots()`, `building_system.get_free_output_slots()`, `building_system.has_output_buffer()`, `building_system.accept_input()` | Buildings define carrier slot capacity and receive/surrender resources via carrier actions. |
-| Grid/Map System | Reads | `grid_map.get_manhattan_distance(pos_a, pos_b)` | Distance calculation for travel time. Manhattan distance, no pathfinding. |
-| Tick System | Reads | `ticks_advanced(delta)`, `day_transition(days)` | All carrier timing is tick-based. Carriers only advance when time is RUNNING. |
-| Inventory/Storage System | Reads/Writes | `storage.has_free_slots()`, `storage.get_current_count()`, `storage.deposit(resource, qty)`, `storage.withdraw(resource, qty)` | Carriers check capacity, pick up, and unload through the inventory system. |
+| NPC System | Bidirectional | `set_carrier_state()`, `get_npc_position()`, `get_npc_instance()` (efficiency for F4), `release_npc()`, `get_carrier_candidates()` | NPCs ARE carriers; NPC efficiency scales travel. |
+| Building System | Reads/Writes | `get_building_tile()`, `has_output_buffer()`, `get_output_buffer_*()`, `remove_from_output()`, `receive_input_from_world()`, `is_input_full()`, `assign_output_carrier()`, `add/remove_input_carrier()`, `set_status()` | Slot bookkeeping, pickup/deposit, status integration. |
+| Grid/Map + PathSystem | Reads | `LogisticsPathfinder.find_path()`, `terrain_changed`, `terrain_tile_changed`, `path_placed/removed` | Tile-weighted A\* and path invalidation (ADR-0013). |
+| Tick System | Subscribes | `ticks_advanced(delta)` | All carrier timing is tick-based; 1440 ticks/day. |
+| Inventory System | Reads/Writes | `get_resource_quantity()`, `try_consume()`, `try_deposit()`, `get_total_quantity()`, `get_capacity()` | Storage-side pickup/deposit and capacity checks. |
+| Efficiency System | Uses | `EfficiencyFormulas.calculate_effective_travel_ticks()` (F4) | Carrier speed scales with feeding. |
+| Experience System | Writes | `NPCSystem.add_pending_xp(npc_id, ExperienceFormulas.xp_for_duration(delivery_leg_nominal_ticks))` on each completed delivery | Carriers earn cosmetic, time-based XP scaled to the delivery's nominal travel time. See `design/gdd/experience-system.md`. |
 
 ### Soft Dependencies
 
 | System | Direction | Interface | Rationale |
 |--------|-----------|-----------|-----------|
-| Transportation Management UI | Written by | Data queries: `get_active_routes()`, `get_route_status(npc_id)`, `get_route_efficiency(route_id)` | Player-facing UI displays route state, efficiency, and allows creation/editing. |
-| Building System (UI-5 hover) | Written by | `building.get_carrier_status(building_id)` | Hover tooltips show carrier assignment state alongside building status. |
-
-### Upstream Dependencies (already designed)
-
-All hard dependencies have completed GDDs. No undesigned upstream dependencies.
-
-### Downstream Dependents (not yet designed)
-
-| System | Depends on Logistics | Rationale |
-|--------|---------------------|-----------|
-| Bevölkerungstier System | Indirectly | Higher-tier NPC consumption requires higher production throughput, which logistics efficiency enables. |
-| Trading System | Yes | Trading uses carriers for caravan dispatch to the Übermap. |
-| Übermap System | Yes | Overworld travel uses similar carrier mechanics. |
-| Save/Load System | Yes | Route state must be serialized. |
-
----
+| Transportation Panel (UI) | Written by | `create_route()`, `start_route()`, `delete_route()`, `pause/resume_route()`, `get_active_routes()` | Route management UI. |
+| NpcOverlay / RouteLines (UI) | Reads | `get_active_route_for_npc()`, route `current_leg_path` / `current_leg_total_ticks` | Carrier icon follows its ONE active route; line per route. |
+| Hunger System | Indirect | via NPC efficiency | Feeding carriers is a logistics decision. |
+| Save/Load System | Bidirectional | `serialize()` / `deserialize()` | Full route + scheduler state persists. |
 
 ## Tuning Knobs
 
 | Knob | Default | Safe Range | Effect | What breaks at extremes |
 |------|---------|------------|--------|------------------------|
-| `ticks_per_tile` | 3.0 | 1.0–10.0 | Ticks spent per tile of carrier movement. Controls how much distance matters. | 1.0 = distance is negligible, players ignore placement. 10.0 = even short routes dominate production time, player feels stuck. |
-| `carrier_capacity` | 1 | 1–∞ | Items carried per trip. | 1 = slow but simple. 10+ = carriers become conveyor belts, distance loses meaning. |
-| `loading_ticks` | 1 | 1–∞ | Ticks to load items onto carrier. | 1 = instant, feels snappy. 10+ = loading bottleneck dominates travel time. |
-| `unloading_ticks` | 1 | 1–∞ | Ticks to unload items from carrier. | Same as loading. |
-| `max_carriers_per_slot` | 1 | 1–∞ | Maximum carriers per slot type per building. | 1 = simple, one carrier per route. 3+ = complex routing, harder to debug visually. |
-| `TICKS_PER_DAY` | 1000 | 500–2000 | Ticks in one day. | Lower = faster game, more trips per "day". Higher = slower, carriers feel lazy. |
-| `carrier_waiting_timeout` | 300 | 100–1000 | Ticks before a waiting carrier abandons the trip and returns home. Applies to both WAITING_SOURCE and WAITING_DESTINATION states. | 100 = carrier gives up too fast, player loses items on transient full states. 1000 = carrier is stuck for a full day, player can't diagnose why. |
+| `TICKS_PER_TILE` | 5.0 | 1.0–10.0 | Base ticks per path-cost unit at 100% efficiency. | 1.0 = distance negligible, placement stops mattering. 10.0 = logistics dominates everything. Must stay in sync across the three systems that define it. |
+| `CARRIER_CAPACITY` | 2 | 1–5 | Items per trip. Raised from 1 (2026-06-12) so one carrier keeps pace with one producer at typical distances. Intended to become a per-carrier upgradeable stat. | 1 = carrier is the binding bottleneck everywhere. 5+ = one carrier serves the whole village, distance loses meaning. |
+| `MAX_OUTPUT_SLOTS` | 1 | 1–2 | Output routes per building. | >1 needs UI for splitting output streams. |
+| Input slots | per recipe | — | Derived: distinct inputs in `PRODUCTION_TABLE` (not directly tunable). | — |
+| Road cost factor | 0.5 | 0.25–0.9 | PathSystem tile cost; halves travel on roads. | Too low: roads trivialize distance. Too high: roads pointless. |
+
+Removed knobs: `loading_ticks`/`unloading_ticks` (pickup/deposit are instant),
+`carrier_waiting_timeout` (timeouts removed; field kept in saves only),
+`max_carriers_per_slot` (always 1; scaling now comes from capacity + shared carriers).
 
 ## Visual/Audio Requirements
 
-**Route visualization**: Carrier routes are communicated through building status indicators, not visible NPC sprites. A green indicator means the building has carriers assigned and is producing. A yellow indicator means a carrier is in transit (informational). A red pulsing indicator means the building is STALLED — no carrier assigned or destination full.
+**Route lines (RouteLines):** one line per route along its cached A\* path. The
+carrier's currently-active route renders highlighted; dormant routes render dimmed.
+DEACTIVATED routes render gray with the deactivation reason in the panel.
 
-**Carrier route lines (always-visible)**: A subtle semi-transparent (30% opacity) line connecting source and destination buildings, visible for all active routes on the map. The line is colored by status: green (active), yellow (carrier in transit), red (destination full). Line thickness encodes carrier count on the route. Hovering over a route line highlights it at 60% opacity and shows the route detail tooltip (NPC name, distance, round-trip time, efficiency). Inactive/deactivated routes show a dim gray line at 10% opacity. This is a diagnostic tool that fulfills Pillar 2 — players must be able to scan the map and immediately see which buildings are connected and whether routes are healthy.
+**Carrier icons (NpcOverlay):** carrier NPCs render as icons that follow
+`current_leg_path`, animated over `current_leg_total_ticks` so the on-screen speed
+matches the F4-scaled travel time (a starving carrier visibly crawls). Cargo is shown
+as a small resource icon on the carrier.
 
-**Audio feedback**:
-- **Carrier departure**: A faint "whoosh" (low volume, 0.3s) when an NPC carrier starts a trip. Only played once per carrier per departure (not every trip). Used for the player's awareness, not looped.
-- **Carrier arrival**: A soft "clink" (0.2s) when the carrier deposits items at the destination. Volume proportional to resource value.
-- **Building status change**: When a building goes from BLOCKED to OPERATING due to a carrier arriving, play the building's standard "activation" sound (same as production start). This is the primary feedback that the bottleneck was resolved.
-- **No audio for return trips**: The NPC returning home is a passive state with no audible feedback. This keeps audio clutter low when many carriers are in transit.
+**Audio:** deferred (no logistics audio implemented; keep arrival/status sounds in
+mind for the audio pass).
 
-**Art Bible alignment**: Visual style follows "Functional Clarity" (game-concept.md). Carrier routes use the same high-contrast palette as building status indicators — green (#4CAF50), yellow (#FFC107), red (#F44336). No additional assets needed beyond existing building status sprites.
+**Colorblind accessibility:** route status uses line style in addition to color
+(active = solid, dormant = dim, broken = gray/dashed).
 
-**📌 Asset Spec Flag**: After the art bible is approved, run `/asset-spec system:logistics` to produce per-asset visual descriptions.
-
-**Colorblind accessibility**: Route line colors use non-red/green-only distinction: active = solid line, transit = dashed line, full = dotted line. Colors are supplementary. This satisfies WCAG 2.1 Level AA (no color-only encoding).
-
----
-
-## UI Requirements
-
-**📌 UX Flag — Logistics System**: This system has UI requirements. The Transportation Management UI (`design/ux/transportation.md`) defines the player-facing route configuration interface. In Phase 4 (Pre-Production), stories referencing transport should cite `design/ux/transportation.md`, not the GDD directly.
-
-**Building detail panel additions** (on top of existing building-detail spec):
-- **Carrier status section**: Shows input carrier status (assigned NPC → source building, or "No input carrier") and output carrier status (assigned NPC → destination, or "No output carrier"). Includes distance and round-trip time for active routes.
-- **Efficiency indicator**: Route efficiency score (Formula 3 UI interpretation: green ≥ 1.0, yellow 0.5–1.0, red < 0.5). Shown as a small badge next to the carrier status.
-
-**Hover tooltip additions** (on top of existing UI-5):
-- Carrier assignment: "Carrier: [NPC name] → [Destination] ([distance] tiles, [round_trip] ticks)"
-- If blocked: "No output carrier" or "No input carrier" with resource name
-
-**Transportation Management UI** (separate spec — `design/ux/transportation.md`):
-- Route list view showing all active routes
-- Route detail view for creating/editing routes
-- Map-select interaction for source/destination building selection
-
----
+## Acceptance Criteria
 
 | ID | Acceptance Criterion | Verification |
 |----|---------------------|--------------|
-| AC-1 | A production building with output in its buffer and an assigned carrier on its output slot transitions to OPERATING (green indicator) within 1 tick of the carrier completing its first delivery | Automated: create route with known output → simulate carrier delivery → assert building.state == OPERATING within 1 tick |
-| AC-2 | A carrier assigned to a Storage → Production route delivers the first item to the destination building within `dist × tpt + lt + ut` ticks of route activation | Automated: create route → record time_of_first_delivery → assert `time_of_first_delivery - activation_time <= dist × tpt + lt + ut` |
-| AC-3 | A production building with no carrier on its output slot that completes a production cycle holds the output in its buffer and transitions to STALLED when the buffer reaches capacity | Automated: produce output without carrier → assert `building.buffer_count == production_output` and `building.state == STALLED` after buffer fills |
-| AC-4 | A carrier in WAITING_DESTINATION state transitions to AT_DESTINATION and unloads within 1 tick of the destination gaining free space | Automated: fill destination storage → send carrier → assert state == WAITING_DESTINATION → remove items from storage → assert unload occurred within 1 tick |
-| AC-5 | A carrier in WAITING_SOURCE state picks up an item within 1 tick of the source building's buffer receiving output | Automated: empty source buffer → send carrier → assert state == WAITING_SOURCE → produce item at source → assert pickup within 1 tick |
-| AC-6 | When the player deletes an active route, the carrier's state transitions to IDLE within 1 tick and any item the carrier was holding is deposited at the source building's storage | Automated: create route → assign carrier → delete route → assert `carrier.state == IDLE` and `source_storage.get_count() includes deposited item` within 1 tick |
-| AC-7 | When a route's source building is demolished, the route transitions to DEACTIVATED within 1 tick and the carrier (regardless of current state) begins returning home | Automated: demolish source building → assert `route.active == false` and `route.lifecyle_state == DEACTIVATED` within 1 tick |
-| AC-8 | Attempting to create a second route on a building whose output slot is already filled results in the action being rejected and no route being created | Automated: create route 1 on building → attempt route 2 on same output slot → assert `get_active_routes().count() == 1` |
-| AC-9 | Formula 1: For a route with distance 10 tiles, home at source, `ticks_per_tile = 3.0`, `loading_ticks = 1`, `unloading_ticks = 1`, `carrier_round_trip_ticks` equals 62 | Automated: call formula with inputs → assert result == 62 |
-| AC-10 | Formula 2: With `carrier_round_trip_ticks = 62` and `carrier_capacity = 1`, `route_throughput_per_day` equals 16 | Automated: call formula with inputs → assert result == 16 |
-| AC-11 | Formula 3: With `route_throughput_per_day = 16`, `cycle_ticks = 100`, `TICKS_PER_DAY = 1000`, `base_output = 5`, `route_efficiency` equals 0.32 | Automated: call formula with inputs → assert result ≈ 0.32 (within 0.01 tolerance) |
-| AC-12 | Formula 4: With `base_output = 5`, `cycle_ticks = 100`, `route_throughput_per_day = 16`, `carriers_needed` equals 4 | Automated: call formula with inputs → assert result == 4 |
-| AC-13 | A carrier saved during TRAVEL_TO_DESTINATION with `remaining_ticks = 30` resumes travel from its saved position with `remaining_ticks = 30` after game reload | Automated: save game mid-travel → load → assert `carrier.remaining_ticks == 30` and `carrier.state == TRAVEL_TO_DESTINATION` |
-| AC-14 | Creating a route where source and destination are the same building is blocked and the UI displays "Source and destination cannot be the same building." | Manual: select same building as source and destination → click confirm → assert error message displayed and no route created |
-| AC-15 | When `carrier_waiting_timeout = 300` and a carrier is in WAITING_DESTINATION for 300 consecutive ticks, the carrier transitions to RETURN_HOME and the route to DEACTIVATED | Automated: fill destination → send carrier → assert state == WAITING_DESTINATION → advance 300 ticks → assert `carrier.state == RETURN_HOME` and `route.active == false` |
-| AC-16 | Route lines are visible on the map for all active routes, colored by status (green/yellow/red), and hovering over a line displays the route detail tooltip | Manual: create route → verify line visible on map → hover → verify tooltip shows NPC name, distance, round-trip time |
-
----
+| AC-1 | Creating an OUTPUT route on a building with a free output slot succeeds; a second OUTPUT route on the same building is rejected ("no free output slots") | Automated |
+| AC-2 | Creating an INPUT route to a Tool Workshop succeeds up to 3 times (3 distinct inputs); the 4th is rejected | Automated |
+| AC-3 | Route creation between buildings with no viable path fails with the path error and no route is created | Automated |
+| AC-4 | A fed carrier (eff 1.0) on a 10-cost path takes 50 ticks per leg; the same leg at eff 0.5 takes 100 ticks (F4) | Automated |
+| AC-5 | At AT_SOURCE the carrier picks up `min(available, 2)` items and they leave the source buffer in the same tick | Automated |
+| AC-6 | At AT_DESTINATION with space, cargo is deposited the same tick (storage via InventorySystem; production via input buffer, tools as +charge) | Automated |
+| AC-7 | After a delivery, a carrier with two routes that both have work serves them alternately (switch after each delivery, round-robin) | Automated |
+| AC-8 | A carrier whose routes all lack work idles in place (no walk home) and starts travelling within 1 tick batch of work appearing | Automated |
+| AC-9 | A carrier in WAITING_DESTINATION holds its cargo indefinitely and deposits within 1 tick of space freeing; cargo is never discarded | Automated |
+| AC-10 | Deleting a carrier's last route releases the NPC home; deleting one of several routes keeps the carrier serving the rest | Automated |
+| AC-11 | An INPUT route deactivation with no other active INPUT routes sets the destination building BLOCKED | Automated |
+| AC-12 | Placing or removing a road invalidates cached paths and routes re-path (shorter where the road helps) | Automated/Integration |
+| AC-13 | A terrain change that severs an active route's only path DEACTIVATEs it with reason "Path blocked by terrain change." | Automated |
+| AC-14 | Save/load mid-leg restores FSM state, remaining ticks, cargo, leg path, and the carrier's active route exactly | Automated |
+| AC-15 | Route lines render along the cached path; the carrier icon follows the leg path and completes it in `current_leg_total_ticks` | Manual/Visual |
 
 ## Open Questions
 
-1. **Tool delivery**: Should tool delivery to extraction buildings be handled through the carrier system (Storage → Lumber Camp route) or stay as internal consumption? Currently deferred to internal consumption for MVP scope. Making it a carrier route adds a new route type that players must manage for the simplest production chain.
-
-2. **Roads as a future feature**: The game concept mentions "roads reduce transport time." Should the Logistics System reserve an interface for road-based travel time reduction? Or defer entirely until the feature is designed?
-
-3. **NPC effectiveness (Perk System)**: At Core Experience, Perk System will modify NPC effectiveness. Should the Logistics System have an interface like `npc.get_effectiveness(npc_id) -> float` that modifies `ticks_per_tile` per NPC? Or is this a Perk System concern?
-
-4. **Route priority/urgency**: Should carriers have a concept of priority? If an NPC can serve multiple routes, should they prioritize high-efficiency routes (critical bottlenecks) over low-efficiency ones? Or is this purely a manual player decision?
+1. **Per-route throughput metrics (Formula 3):** the efficiency score is still a
+   lifecycle stub. Implement real measured items/day per route for the panel?
+2. **Carrier capacity as upgrade:** `CARRIER_CAPACITY` is a global constant; the
+   balancing intent is a per-carrier upgradeable stat (equipment?).
+3. **Priority between a shared carrier's routes:** currently strict round-robin among
+   routes with work. Should the player be able to mark a route "high priority"?
+4. **Auto-feed for carriers:** a freshly assigned carrier runs at 0.5 efficiency until
+   the first day transition feeding — consider auto-assign food UX (balance findings,
+   feel note).

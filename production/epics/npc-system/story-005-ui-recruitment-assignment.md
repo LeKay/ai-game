@@ -1,7 +1,7 @@
 # Story 005: UI — Recruitment and Assignment
 
 > **Epic**: NPC System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Feature
 > **Type**: UI — ADR-0009
 > **Manifest Version**: N/A — control manifest not yet created
@@ -151,3 +151,12 @@ if npc.state in [TRAVEL_TO_STORAGE, DEPOSIT, RETURN_TO_BASE]: → green (NPC is 
 
 - Depends on: Story 001 (NPCs must exist to be recruited/assigned), Story 002 (building status indicators depend on NPC travel/work states)
 - Unlocks: None — this is the final story for the NPC System epic
+
+---
+
+## Completion Notes
+**Completed**: 2026-06-02
+**Criteria**: 5/5 implemented — all DEFERRED for in-game manual verification
+**Deviations**: ADVISORY — residential houses not yet in game scene; NPCs are mocked; full cycle not exercisable. project.godot and npc_system.gd touched outside stated scope (both required for feature function).
+**Test Evidence**: UI story — `production/qa/evidence/npc-ui-evidence.md` created (sign-off pending game integration)
+**Code Review**: Complete — 4 required fixes applied (indicator.show(), free() vs queue_free(), NPC_CAPACITY null-safe, npc_released signal guard)

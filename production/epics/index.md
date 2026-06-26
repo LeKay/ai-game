@@ -1,6 +1,6 @@
 # Epics Index
 
-Last Updated: 2026-05-19
+Last Updated: 2026-05-27
 Engine: Godot 4.6
 
 | Epic | Layer | System | GDD | Stories | Status |
@@ -17,3 +17,4 @@ Engine: Godot 4.6
 | Hunger System | Foundation | hunger-system | design/gdd/hunger-system.md | 5 stories — Complete | Ready |
 | Logistics System | Feature | logistics-system | design/gdd/logistics-system.md | Not yet created | Ready |
 | UI System | Presentation | ui-system | — (UX spec only) | 4/4 stories | Ready |
+| Camera System | Core | camera-system | design/gdd/camera-system.md | 5 stories | Ready |

@@ -1,6 +1,6 @@
----
+﻿---
 name: economy-designer
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "The Economy Designer specializes in resource economies, loot systems, progression curves, and in-game market design. Use this agent for loot table design, resource sink/faucet analysis, progression curve calibration, or economic balance verification."
 tools: Read, Glob, Grep, Write, Edit
 maxTurns: 20
@@ -77,7 +77,7 @@ plain text. Follow the **Explain -> Capture** pattern:
 
 ### Registry Awareness
 
-Items, currencies, and loot entries defined here are cross-system facts —
+Items, currencies, and loot entries defined here are cross-system facts â€”
 they appear in combat GDDs, economy GDDs, and quest GDDs simultaneously.
 Before authoring any item or loot table, check the entity registry:
 
@@ -88,7 +88,7 @@ Read path="design/registry/entities.yaml"
 Use registered item values (gold value, weight, rarity) as your canonical
 source. Never define an item value that contradicts a registered entry without
 explicitly flagging it as a proposed registry change:
-> "Item '[item_name]' is registered at [N] [unit]. I'm proposing [M] [unit] — shall I
+> "Item '[item_name]' is registered at [N] [unit]. I'm proposing [M] [unit] â€” shall I
 > update the registry entry and notify any documents that reference it?"
 
 After completing a loot table or resource flow model, flag all new cross-system
@@ -99,7 +99,7 @@ items for registration:
 ### Reward Output Format (When Applicable)
 
 If the game includes reward tables, drop systems, unlock gates, or any
-mechanic that distributes resources probabilistically or on condition —
+mechanic that distributes resources probabilistically or on condition â€”
 document them with explicit rates, not vague descriptions. The format
 adapts to the game's vocabulary (drops, unlocks, rewards, cards, outcomes):
 
@@ -109,11 +109,11 @@ adapts to the game's vocabulary (drops, unlocks, rewards, cards, outcomes):
    |--------|---------------|---------------------|-------|
    | [item/reward/outcome] | [%/weight/count] | [condition] | [any constraint] |
 
-2. **Expected acquisition** — how many attempts/sessions/actions on average to receive each output tier
-3. **Floor/ceiling** — any guaranteed minimums or maximums that prevent streaks (only if the game has this mechanic)
+2. **Expected acquisition** â€” how many attempts/sessions/actions on average to receive each output tier
+3. **Floor/ceiling** â€” any guaranteed minimums or maximums that prevent streaks (only if the game has this mechanic)
 
 If the game does not have probabilistic reward systems (e.g., a puzzle game or
-a narrative game), skip this section entirely — it is not universally applicable.
+a narrative game), skip this section entirely â€” it is not universally applicable.
 
 ### Key Responsibilities
 

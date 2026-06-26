@@ -1,7 +1,7 @@
 # Story 002: HUD — Resource Bar, Energy, Time Controls
 
 > **Epic**: UI System
-> **Status**: Ready
+> **Status**: Complete
 > **Layer**: Presentation
 > **Type**: UI
 > **Manifest Version**: 2026-05-14
@@ -47,69 +47,54 @@
 
 ### Scene Structure
 
-Create `res://ui/hud/hud.tscn` — a persistent scene loaded with every gameplay session:
+`res://src/ui/hud/hud.tscn` — persistent scene, loaded in `game.tscn`:
 
 ```
-hud (CanvasLayer)
-├── top_band (Control)                    — Zone 1: 64px fixed height, full width
-│   ├── day_display (Control)             — Element 1: day number + tick progress bar
-│   │   ├── day_label (Label)             — "Day 12"
-│   │   └── progress_bar (TextureProgressBar)
-│   ├── tick_controls (Control)           — Element 2: speed buttons + play/pause
-│   │   ├── speed_indicator (Label)       — "1x"
-│   │   └── play_pause_btn (Button)      — play/pause toggle
-│   ├── npc_count_label (Label)           — Element 3: "3/5 NPCs"
-│   ├── food_status_label (Label)         — Element 4b: "Food: 3 days" / "Unlimited"
-│   ├── debuff_indicator (Control)        — Element 4c: hidden by default
-│   │   ├── hunger_icon (TextureRect)     — 24px red ⚠
-│   │   └── debuff_text (Label)           — "HUNGRY"
-│   ├── resource_warnings (Control)       — Element 7: warning icons
-│   │   └── warning_icons (HBoxContainer) — 24×24px icons
-│   └── energy_bar (Control)              — Element 4: horizontal fill bar
-│       ├── energy_background (TextureRect)
-│       ├── energy_fill (TextureRect)      — color-coded fill
-│       └── energy_label (Label)           — "45/100"
-├── storage_panel (Control)               — Zone 3: top-right collapsible panel
-│   ├── storage_toggle (Button)           — collapses/expands panel
-│   ├── collapsed_state (Label)            — "Used: 4/12"
-│   └── expanded_state (VBoxContainer)     — per-resource list (hidden when collapsed)
-│       └── resource_rows (VBoxContainer)
-│           └── resource_row (Control)     — icon + label + count
-├── toast_container (Control)             — Zone 4: bottom-right
-│   └── toast_stack (VBoxContainer)        — max 3 toasts, FIFO eviction
-│       └── toast_item (Panel)            — transient message
-├── building_detail_panel (Control)       — Element 10: right-side fixed panel (hidden)
-│   ├── header (Label)
-│   ├── npc_assignment (Control)
-│   ├── input_slots (Control)
-│   └── output_slots (Control)
-├── placement_ghost (Sprite2D)            — Element 12: build mode preview (world-space)
-└── construction_preview (Sprite2D)       — Element 13: under construction (world-space)
+HUD (CanvasLayer, layer=10)
+└── TopBand (Control)                       — 48px, full width, anchored top
+    └── HBoxContainer (PRESET_FULL_RECT)    — single row, separation=12
+        ├── [Control 10px]                  — left padding
+        ├── DayLabel (Label)                — "Day 1", min-width 52px, Element 1
+        ├── TickControls (HBoxContainer)    — Element 2
+        │   ├── SpeedDecBtn (Button)        — "-", 24×24px
+        │   ├── SpeedLabel (Label)          — "1x", min-width 32px
+        │   ├── SpeedIncBtn (Button)        — "+", 24×24px
+        │   └── PlayPauseBtn (Button)       — "▶"/"⏸", 36×24px
+        ├── [Spacer, SIZE_EXPAND_FILL]
+        ├── TimeDisplay (HBoxContainer)     — Element 1b
+        │   ├── ClockEmoji (Label)          — "⏰", 16px
+        │   └── TimeLabel (Label)           — "00:00", min-width 44px
+        ├── EnergyContainer (HBoxContainer) — Element 4
+        │   ├── [Label "⚡", 16px]
+        │   └── EnergyBarOuter (Control)    — 120×8px, SIZE_SHRINK_CENTER
+        │       ├── EnergyBackground (ColorRect) — #333333, fills outer
+        │       └── EnergySegments (HBoxContainer) — 10 segments, sep=2px
+        │           └── Seg0…Seg9 (ColorRect) — SIZE_EXPAND_FILL each
+        └── [Control 10px]                  — right padding
+
+Stub nodes (hidden, pending system deps):
+  NpcCountLabel, FoodStatusLabel, DebuffIndicator,
+  StoragePanel, ToastContainer, BuildingDetailPanel
 ```
 
 ### Signal Bindings
 
-Subscribe to system signals from the HUD root node:
+| Signal | Source | Wired via | Handler | Elements updated |
+|--------|--------|-----------|---------|-----------------|
+| `ticks_advanced(delta)` | TickSystem (Autoload) | direct global `TickSystem` | `_on_ticks_advanced` | DayLabel, TimeLabel |
+| `speed_changed(speed)` | TickSystem (Autoload) | direct global `TickSystem` | `_on_speed_changed` | SpeedLabel, speed buttons |
+| `pause_state_changed(paused)` | TickSystem (Autoload) | direct global `TickSystem` | `_on_pause_state_changed` | PlayPauseBtn |
+| `energy_changed(current, max)` | PlayerCharacter (scene node) | `get_first_node_in_group("player_character")` | `_on_energy_changed` | EnergySegments |
 
-| Signal | Source | Handler | Elements |
-|--------|--------|---------|----------|
-| `ticks_advanced(delta)` | TickSystem | Update progress bar, day counter | Day Display |
-| `speed_changed(speed)` | TickSystem | Update speed indicator | Tick Speed |
-| `pause_state_changed(running)` | TickSystem | Toggle play/pause icon | Play/Pause |
-| `energy_changed(current, max)` | PlayerCharacter | Update energy bar fill + label | Energy Bar |
-| `hunger_state(fed, food_available, food_required)` | HungerSystem | Update food status, show/hide debuff | Food Status, Debuff |
-| `npc_count_changed(count)` | NPCSystem | Update NPC count label | NPC Count |
-| `storage_capacity_changed(used, total)` | InventorySystem | Update storage panel | Storage Panel |
-| `resource_count_changed(id, quantity)` | InventorySystem | Update expanded resource rows | Storage Panel (expanded) |
-| `toast_request(level, message)` | Any system | Push toast to queue | Toast Container |
-| `production_state_changed(id, state)` | BuildingSystem | Show/hide production warning | Production Warning |
+Remaining signals (hunger, NPC, storage, toast, production) are wired when their systems are implemented.
 
-### Top Band Layout (64px height, 2 rows of 32px)
+### Top Band Layout (48px height, single row)
 
-Row 1 (top 32px): Day counter + Tick progress + Tick speed + Play/Pause + NPC count
-Row 2 (bottom 32px): Food status + Debuff indicator + Resource warnings + Energy bar
+```
+[10px] [Day N] [- Nx + ▶]  ··· spacer ···  [⏰ HH:MM] [⚡ ▮▮▮▮▮▮▮▮░░] [10px]
+```
 
-All elements anchored to screen edges via `AnchorPreset` (AnchorTop, AnchorLeft/Right).
+All elements vertically centered (`SIZE_SHRINK_CENTER`). Elements anchored to screen edges via `PRESET_FULL_RECT` on the root HBoxContainer.
 
 ### Energy Bar Color States
 
@@ -171,8 +156,8 @@ Color transitions: 300ms ease-out animation.
 
 - **AC-HUD-02**: Top band height
   - Setup: Measure top band at 1920x1080 and 2560x1440
-  - Verify: Height = 64px ± 0px
-  - Pass condition: Exact 64px at both resolutions
+  - Verify: Height = 48px ± 0px  *(updated from 64px — per explicit design decision, see design/ux/hud.md)*
+  - Pass condition: Exact 48px at both resolutions
 
 - **AC-HUD-03**: Edge anchoring
   - Setup: Resize window from 1920x1080 to 1280x720 and back
@@ -232,6 +217,19 @@ Color transitions: 300ms ease-out animation.
 **Required evidence**: `production/qa/evidence/hud-evidence.md` — screenshot walkthrough of all HUD elements at multiple resolutions, focus order verification
 
 **Status**: [ ] Not yet created
+
+---
+
+## Completion Notes
+**Completed**: 2026-05-29
+**Criteria**: 2/13 auto-passing (AC-HUD-01, AC-HUD-11). 10 deferred — all depend on stub systems explicitly out of scope for this story (Storage, Toast, Debuff, BuildingDetail, gamepad). 1 planned deviation (AC-HUD-02: 48px not 64px).
+**Deviations**:
+- Top band 48px instead of 64px — per user direction; `design/ux/hud.md` updated to match (authoritative)
+- TickSystem wired via direct global, not `Engine.get_singleton()` — bug fix during implementation
+- `TICK_SPEEDS`/`TICKS_PER_DAY` duplicated as constants — TickSystem has no `class_name`; acceptable until class_name is added
+- HUD buttons call `TickSystem.set_speed/set_pause` directly — advisory, low risk at current scale
+**Test Evidence**: None created — UI story, ADVISORY gate; walkthrough deferred
+**Code Review**: APPROVED WITH SUGGESTIONS (2026-05-29 — exit_tree, dynamic speed label, COLOR_BAR_BG, delta_ticks guard)
 
 ---
 

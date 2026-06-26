@@ -1,6 +1,6 @@
----
+﻿---
 name: content-audit
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Audit GDD-specified content counts against implemented content. Identifies what's planned vs built."
 argument-hint: "[system-name | --summary | (no arg = full audit)]"
 user-invocable: true
@@ -11,13 +11,13 @@ agent: producer
 When this skill is invoked:
 
 Parse the argument:
-- No argument → full audit across all systems
-- `[system-name]` → audit that single system only
-- `--summary` → summary table only, no file write
+- No argument â†’ full audit across all systems
+- `[system-name]` â†’ audit that single system only
+- `--summary` â†’ summary table only, no file write
 
 ---
 
-## Phase 1 — Context Gathering
+## Phase 1 â€” Context Gathering
 
 1. **Read `design/gdd/systems-index.md`** for the full list of systems, their
    categories, and MVP/priority tier.
@@ -51,11 +51,11 @@ Parse the argument:
    |--------|-------------|---------------------|------------|
 
    Note: If a GDD describes content qualitatively but gives no count, record
-   "Unspecified" and flag it — unspecified counts are a design gap worth noting.
+   "Unspecified" and flag it â€” unspecified counts are a design gap worth noting.
 
 ---
 
-## Phase 2 — Implementation Scan
+## Phase 2 â€” Implementation Scan
 
 For each content type found in Phase 1, scan the relevant directories to count
 what has been implemented. Use Glob and Grep to locate files.
@@ -92,14 +92,14 @@ what has been implemented. Use Glob and Grep to locate files.
 - Look for `.json`, `.yaml` definition files
 
 **Engine-specific notes (acknowledge in the report):**
-- Counts are approximations — the skill cannot perfectly parse every engine
+- Counts are approximations â€” the skill cannot perfectly parse every engine
   format or distinguish editor-only files from shipped content
 - Scene files may include both gameplay content and system/UI scenes; the scan
   counts all matches and notes this caveat
 
 ---
 
-## Phase 3 — Gap Report
+## Phase 3 â€” Gap Report
 
 Produce the gap table:
 
@@ -109,10 +109,10 @@ Produce the gap table:
 ```
 
 **Status categories:**
-- `COMPLETE` — Found ≥ Specified (100%+)
-- `IN PROGRESS` — Found is 50–99% of Specified
-- `EARLY` — Found is 1–49% of Specified
-- `NOT STARTED` — Found is 0
+- `COMPLETE` â€” Found â‰¥ Specified (100%+)
+- `IN PROGRESS` â€” Found is 50â€“99% of Specified
+- `EARLY` â€” Found is 1â€“49% of Specified
+- `NOT STARTED` â€” Found is 0
 
 **Priority flags:**
 Flag a system as `HIGH PRIORITY` in the report if:
@@ -127,7 +127,7 @@ Flag a system as `HIGH PRIORITY` in the report if:
 
 ---
 
-## Phase 4 — Output
+## Phase 4 â€” Output
 
 ### Full audit and single-system modes
 
@@ -136,7 +136,7 @@ Present the gap table and summary to the user. Ask: "May I write the full report
 If yes, write the file:
 
 ```markdown
-# Content Audit — [Date]
+# Content Audit â€” [Date]
 
 ## Summary
 - **Total specified**: [N] content items across [M] systems
@@ -192,14 +192,14 @@ End with: "Run `/content-audit` without `--summary` to write the full report."
 
 ---
 
-## Phase 5 — Next Steps
+## Phase 5 â€” Next Steps
 
 After the audit, recommend the highest-value follow-up actions:
 
-- If any system is `NOT STARTED` and MVP-tagged → "Run `/design-system [name]` to
+- If any system is `NOT STARTED` and MVP-tagged â†’ "Run `/design-system [name]` to
   add missing content counts to the GDD before implementation begins."
-- If total gap is >50% → "Run `/sprint-plan` to allocate content work across upcoming sprints."
-- If backlog stories are needed → "Run `/create-stories [epic-slug]` for each HIGH PRIORITY gap."
-- If `--summary` was used → "Run `/content-audit` (no flag) to write the full report to `docs/`."
+- If total gap is >50% â†’ "Run `/sprint-plan` to allocate content work across upcoming sprints."
+- If backlog stories are needed â†’ "Run `/create-stories [epic-slug]` for each HIGH PRIORITY gap."
+- If `--summary` was used â†’ "Run `/content-audit` (no flag) to write the full report to `docs/`."
 
-Verdict: **COMPLETE** — content audit finished.
+Verdict: **COMPLETE** â€” content audit finished.

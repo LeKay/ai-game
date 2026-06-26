@@ -1,6 +1,6 @@
----
+﻿---
 name: design-system
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Guided, section-by-section GDD authoring for a single game system. Gathers context from existing docs, walks through each required section collaboratively, cross-references dependencies, and writes incrementally to file."
 argument-hint: "<system-name> [--review full|lean|solo]"
 user-invocable: true
@@ -12,9 +12,9 @@ When this skill is invoked:
 ## 1. Parse Arguments & Validate
 
 Resolve the review mode (once, store for all gate spawns this run):
-1. If `--review [full|lean|solo]` was passed → use that
-2. Else read `production/review-mode.txt` → use that value
-3. Else → default to `lean`
+1. If `--review [full|lean|solo]` was passed â†’ use that
+2. Else read `production/review-mode.txt` â†’ use that value
+3. Else â†’ default to `lean`
 
 See `.claude/docs/director-gates.md` for the full check pattern.
 
@@ -23,10 +23,10 @@ A system name or retrofit path is **required**. If missing:
 1. Check if `design/gdd/systems-index.md` exists.
 2. If it exists: read it, find the highest-priority system with status "Not Started" or equivalent, and use `AskUserQuestion`:
    - Prompt: "The next system in your design order is **[system-name]** ([priority] | [layer]). Start designing it?"
-   - Options: `[A] Yes — design [system-name]` / `[B] Pick a different system` / `[C] Stop here`
+   - Options: `[A] Yes â€” design [system-name]` / `[B] Pick a different system` / `[C] Stop here`
    - If [A]: proceed with that system name. If [B]: ask which system to design (plain text). If [C]: exit.
 3. If no systems index exists, fail with:
-   > "Usage: `/design-system <system-name>` — e.g., `/design-system movement`
+   > "Usage: `/design-system <system-name>` â€” e.g., `/design-system movement`
    > Or to fill gaps in an existing GDD: `/design-system retrofit design/gdd/[system-name].md`
    > No systems index found. Run `/map-systems` first to map your systems and get the design order."
 
@@ -39,19 +39,19 @@ existing `.md` file in `design/gdd/`, enter **retrofit mode**:
    Required sections: Overview, Player Fantasy, Detailed Design/Rules, Formulas,
    Edge Cases, Dependencies, Tuning Knobs, Acceptance Criteria.
 3. Identify which sections contain only placeholder text (`[To be designed]` or
-   equivalent — blank, a single line, or obviously incomplete).
+   equivalent â€” blank, a single line, or obviously incomplete).
 4. Present to the user before doing anything:
    ```
    ## Retrofit: [System Name]
    File: design/gdd/[filename].md
 
    Sections already written (will not be touched):
-   ✓ [section name]
-   ✓ [section name]
+   âœ“ [section name]
+   âœ“ [section name]
 
    Missing or incomplete sections (will be authored):
-   ✗ [section name] — missing
-   ✗ [section name] — placeholder only
+   âœ— [section name] â€” missing
+   âœ— [section name] â€” placeholder only
    ```
 5. Ask: "Shall I fill the [N] missing sections? I will not modify any existing content."
 6. If yes: proceed to **Phase 2 (Gather Context)** as normal, but in **Phase 3**
@@ -69,13 +69,13 @@ filename (e.g., "combat system" becomes `combat-system`).
 ## 2. Gather Context (Read Phase)
 
 Read all relevant context **before** asking the user anything. This is the skill's
-primary advantage over ad-hoc design — it arrives informed.
+primary advantage over ad-hoc design â€” it arrives informed.
 
 ### 2a: Required Reads
 
-- **Game concept**: Read `design/gdd/game-concept.md` — fail if missing:
+- **Game concept**: Read `design/gdd/game-concept.md` â€” fail if missing:
   > "No game concept found. Run `/brainstorm` first."
-- **Systems index**: Read `design/gdd/systems-index.md` — fail if missing:
+- **Systems index**: Read `design/gdd/systems-index.md` â€” fail if missing:
   > "No systems index found. Run `/map-systems` first to map your systems."
 - **Target system**: Find the system in the index. If not listed, warn:
   > "[system-name] is not in the systems index. Would you like to add it, or
@@ -83,11 +83,11 @@ primary advantage over ad-hoc design — it arrives informed.
 - **Entity registry**: Read `design/registry/entities.yaml` if it exists.
   Extract all entries referenced by or relevant to this system (grep
   `referenced_by.*[system-name]` and `source.*[system-name]`). Hold these
-  in context as **known facts** — values that other GDDs have already
+  in context as **known facts** â€” values that other GDDs have already
   established and this GDD must not contradict.
 - **Reflexion log**: Read `docs/consistency-failures.md` if it exists.
   Extract entries whose Domain matches this system's category. These are
-  recurring conflict patterns — present them under "Past failure patterns"
+  recurring conflict patterns â€” present them under "Past failure patterns"
   in the Phase 2d context summary so the user knows where mistakes have
   occurred before in this domain.
 
@@ -127,9 +127,9 @@ Before starting design work, present a brief summary to the user:
 > - **Known cross-system facts (from registry):**
 >   - [entity_name]: [attribute]=[value], [attribute]=[value] (owned by [source GDD])
 >   - [item_name]: [attribute]=[value], [attribute]=[value] (owned by [source GDD])
->   - [formula_name]: variables=[list], output=[min–max] (owned by [source GDD])
+>   - [formula_name]: variables=[list], output=[minâ€“max] (owned by [source GDD])
 >   - [constant_name]: [value] [unit] (owned by [source GDD])
->   *(These values are locked — if this GDD needs different values, surface
+>   *(These values are locked â€” if this GDD needs different values, surface
 >   the conflict before writing. Do not silently use different numbers.)*
 >
 > If no registry entries are relevant: omit the "Known cross-system facts" section.
@@ -144,7 +144,7 @@ If any upstream dependencies are undesigned, warn:
 Before asking the user to begin designing, load engine context and surface any
 constraints or knowledge gaps that will shape the design.
 
-**Step 1 — Determine the engine domain for this system:**
+**Step 1 â€” Determine the engine domain for this system:**
 Map the system's category (from systems-index.md) to an engine domain:
 
 | System Category | Engine Domain |
@@ -160,7 +160,7 @@ Map the system's category (from systems-index.md) to an engine domain:
 | Save/load, persistence, data | Core |
 | Dialogue, quests, narrative | Scripting |
 
-**Step 2 — Read engine context (if available):**
+**Step 2 â€” Read engine context (if available):**
 - Read `.claude/docs/technical-preferences.md` to identify the engine and version
 - If engine is configured, read `docs/engine-reference/[engine]/VERSION.md`
 - Read `docs/engine-reference/[engine]/modules/[domain].md` if it exists
@@ -168,7 +168,7 @@ Map the system's category (from systems-index.md) to an engine domain:
 - Glob `docs/architecture/adr-*.md` and read any ADRs whose domain matches
   (check the Engine Compatibility table's "Domain" field)
 
-**Step 3 — Present the Feasibility Brief:**
+**Step 3 â€” Present the Feasibility Brief:**
 
 If engine reference docs exist, present before starting design:
 
@@ -185,22 +185,22 @@ Domain: [domain]
 - [constraint from engine-reference or existing ADR]
 
 ### Knowledge Gaps (verify before committing to these)
-- [post-cutoff feature this design might rely on — mark HIGH/MEDIUM risk]
+- [post-cutoff feature this design might rely on â€” mark HIGH/MEDIUM risk]
 
 ### Existing ADRs That Constrain This System
-- ADR-XXXX: [decision summary] — means [implication for this GDD]
+- ADR-XXXX: [decision summary] â€” means [implication for this GDD]
   (or "None yet")
 ```
 
 If no engine reference docs exist (engine not yet configured), show a short note:
-> "No engine configured yet — skipping technical feasibility check. Run
+> "No engine configured yet â€” skipping technical feasibility check. Run
 > `/setup-engine` before moving to architecture if you haven't already."
 
-**Step 4 — Ask before proceeding:**
+**Step 4 â€” Ask before proceeding:**
 
 Use `AskUserQuestion`:
 - "Any constraints to add before we begin, or shall we proceed with these noted?"
-  - Options: "Proceed with these noted", "Add a constraint first", "I need to check the engine docs — pause here"
+  - Options: "Proceed with these noted", "Add a constraint first", "I need to check the engine docs â€” pause here"
 
 ---
 
@@ -320,18 +320,18 @@ Context  ->  Questions  ->  Options  ->  Decision  ->  Draft  ->  Approval  ->  
 5. **Draft**: Write the section content in conversation text for review. Flag any
    provisional assumptions about undesigned dependencies.
 
-6. **Approval**: Immediately after the draft — in the SAME response — use
+6. **Approval**: Immediately after the draft â€” in the SAME response â€” use
    `AskUserQuestion`. **NEVER use plain text. NEVER skip this step.**
    - Prompt: "Approve the [Section Name] section?"
-   - Options: `[A] Approve — write it to file` / `[B] Make changes — describe what to fix` / `[C] Start over`
+   - Options: `[A] Approve â€” write it to file` / `[B] Make changes â€” describe what to fix` / `[C] Start over`
 
    **The draft and the approval widget MUST appear together in one response.
    If the draft appears without the widget, the user is left at a blank prompt
-   with no path forward — this is a protocol violation.**
+   with no path forward â€” this is a protocol violation.**
 
 7. **Write**: Use the Edit tool to replace the placeholder with the approved content.
    **CRITICAL**: Always include the section heading in the `old_string` to ensure
-   uniqueness — never match `[To be designed]` alone, as multiple sections use the
+   uniqueness â€” never match `[To be designed]` alone, as multiple sections use the
    same placeholder and the Edit tool requires a unique match. Use this pattern:
    ```
    old_string: "## [Section Name]\n\n[To be designed]"
@@ -339,7 +339,7 @@ Context  ->  Questions  ->  Options  ->  Decision  ->  Draft  ->  Approval  ->  
    ```
    Confirm the write.
 
-8. **Registry conflict check** (Sections C and D only — Detailed Design and Formulas):
+8. **Registry conflict check** (Sections C and D only â€” Detailed Design and Formulas):
    After writing, scan the section content for entity names, item names, formula
    names, and numeric constants that appear in the registry. For each match:
    - Compare the value just written against the registry entry.
@@ -351,7 +351,7 @@ Context  ->  Questions  ->  Options  ->  Decision  ->  Draft  ->  Approval  ->  
      (will be handled in Phase 5).
 
 After writing each section, update `production/session-state/active.md` with the
-completed section name. Use Glob to check if the file exists — use Write to create
+completed section name. Use Glob to check if the file exists â€” use Write to create
 it if absent, Edit to update it if present.
 
 ### Section-Specific Guidance
@@ -365,31 +365,31 @@ Each section has unique design considerations and may benefit from specialist ag
 **Goal**: One paragraph a stranger could read and understand.
 
 **Derive recommended options before building the widget**: Read the system's category and layer from the systems index (already in context from Phase 2), then determine the recommended option for each tab:
-- **Framing tab**: Foundation/Infrastructure layer → `[A]` recommended. Player-facing categories (Combat, UI, Dialogue, Character, Animation, Visual Effects, Audio) → `[C] Both` recommended.
-- **ADR ref tab**: Glob `docs/architecture/adr-*.md` and grep for the system name in the GDD Requirements section of any ADR. If a matching ADR is found → `[A] Yes — cite the ADR` recommended. If none found → `[B] No` recommended.
-- **Fantasy tab**: Foundation/Infrastructure layer → `[B] No` recommended. All other categories → `[A] Yes` recommended.
+- **Framing tab**: Foundation/Infrastructure layer â†’ `[A]` recommended. Player-facing categories (Combat, UI, Dialogue, Character, Animation, Visual Effects, Audio) â†’ `[C] Both` recommended.
+- **ADR ref tab**: Glob `docs/architecture/adr-*.md` and grep for the system name in the GDD Requirements section of any ADR. If a matching ADR is found â†’ `[A] Yes â€” cite the ADR` recommended. If none found â†’ `[B] No` recommended.
+- **Fantasy tab**: Foundation/Infrastructure layer â†’ `[B] No` recommended. All other categories â†’ `[A] Yes` recommended.
 
 Append `(Recommended)` to the appropriate option text in each tab.
 
 **Framing questions (ask BEFORE drafting)**: Use `AskUserQuestion` with a multi-tab widget:
-- Tab "Framing" — "How should the overview frame this system?" Options: `[A] As a data/infrastructure layer (technical framing)` / `[B] Through its player-facing effect (design framing)` / `[C] Both — describe the data layer and its player impact`
-- Tab "ADR ref" — "Should the overview reference the existing ADR for this system?" Options: `[A] Yes — cite the ADR for implementation details` / `[B] No — keep the GDD at pure design level`
-- Tab "Fantasy" — "Does this system have a player fantasy worth stating?" Options: `[A] Yes — players feel it directly` / `[B] No — pure infrastructure, players feel what it enables`
+- Tab "Framing" â€” "How should the overview frame this system?" Options: `[A] As a data/infrastructure layer (technical framing)` / `[B] Through its player-facing effect (design framing)` / `[C] Both â€” describe the data layer and its player impact`
+- Tab "ADR ref" â€” "Should the overview reference the existing ADR for this system?" Options: `[A] Yes â€” cite the ADR for implementation details` / `[B] No â€” keep the GDD at pure design level`
+- Tab "Fantasy" â€” "Does this system have a player fantasy worth stating?" Options: `[A] Yes â€” players feel it directly` / `[B] No â€” pure infrastructure, players feel what it enables`
 
 Use the user's answers to shape the draft. Do NOT answer these questions yourself and auto-draft.
 
 **Questions to ask**:
 - What is this system in one sentence?
 - How does a player interact with it? (active/passive/automatic)
-- Why does this system exist — what would the game lose without it?
+- Why does this system exist â€” what would the game lose without it?
 
 **Cross-reference**: Check that the description aligns with how the systems index
 describes it. Flag discrepancies.
 
 **Design vs. implementation boundary**: Overview questions must stay at the behavior
-level — what the system *does*, not *how it is built*. If implementation questions
+level â€” what the system *does*, not *how it is built*. If implementation questions
 arise during the Overview (e.g., "Should this use an Autoload singleton or a signal
-bus?"), note them as "→ becomes an ADR" and move on. Implementation patterns belong
+bus?"), note them as "â†’ becomes an ADR" and move on. Implementation patterns belong
 in `/architecture-decision`, not the GDD. The GDD describes behavior; the ADR
 describes the technical approach used to achieve it.
 
@@ -397,18 +397,18 @@ describes the technical approach used to achieve it.
 
 ### Section B: Player Fantasy
 
-**Goal**: The emotional target — what the player should *feel*.
+**Goal**: The emotional target â€” what the player should *feel*.
 
 **Derive recommended option before building the widget**: Read the system's category and layer from Phase 2 context:
-- Player-facing categories (Combat, UI, Dialogue, Character, Animation, Audio, Level/World) → `[A] Direct` recommended
-- Foundation/Infrastructure layer → `[B] Indirect` recommended
-- Mixed categories (Camera/input, Economy, AI with visible player effects) → `[C] Both` recommended
+- Player-facing categories (Combat, UI, Dialogue, Character, Animation, Audio, Level/World) â†’ `[A] Direct` recommended
+- Foundation/Infrastructure layer â†’ `[B] Indirect` recommended
+- Mixed categories (Camera/input, Economy, AI with visible player effects) â†’ `[C] Both` recommended
 
 Append `(Recommended)` to the appropriate option text.
 
 **Framing question (ask BEFORE drafting)**: Use `AskUserQuestion`:
 - Prompt: "Is this system something the player engages with directly, or infrastructure they experience indirectly?"
-- Options: `[A] Direct — player actively uses or feels this system` / `[B] Indirect — player experiences the effects, not the system` / `[C] Both — has a direct interaction layer and infrastructure beneath it`
+- Options: `[A] Direct â€” player actively uses or feels this system` / `[B] Indirect â€” player experiences the effects, not the system` / `[C] Both â€” has a direct interaction layer and infrastructure beneath it`
 
 Use the answer to frame the Player Fantasy section appropriately. Do NOT assume the answer.
 
@@ -423,12 +423,12 @@ quote the relevant pillar text.
 **Agent delegation (MANDATORY)**: After the framing answer is given but before drafting,
 spawn `creative-director` via Task:
 - Provide: system name, framing answer (direct/indirect/both), game pillars, any reference games the user mentioned, the game concept summary
-- Ask: "Shape the Player Fantasy for this system. What emotion or power fantasy should it serve? What player moment should we anchor to? What tone and language fits the game's established feeling? Be specific — give me 2-3 candidate framings."
+- Ask: "Shape the Player Fantasy for this system. What emotion or power fantasy should it serve? What player moment should we anchor to? What tone and language fits the game's established feeling? Be specific â€” give me 2-3 candidate framings."
 - Collect the creative-director's framings and present them to the user alongside the draft.
 
 **Do NOT draft Section B without first consulting `creative-director`.** The framing
 answer tells us *what kind* of fantasy it is; the creative-director shapes *how it's
-described* — tone, language, the specific player moment to anchor to.
+described* â€” tone, language, the specific player moment to anchor to.
 
 ---
 
@@ -471,7 +471,7 @@ system expects something different, flag the conflict.
 **Goal**: Every mathematical formula, with variables defined, ranges specified,
 and edge cases noted.
 
-**Completion Steering — always begin each formula with this exact structure:**
+**Completion Steering â€” always begin each formula with this exact structure:**
 
 ```
 The [formula_name] formula is defined as:
@@ -481,7 +481,7 @@ The [formula_name] formula is defined as:
 **Variables:**
 | Variable | Symbol | Type | Range | Description |
 |----------|--------|------|-------|-------------|
-| [name] | [sym] | float/int | [min–max] | [what it represents] |
+| [name] | [sym] | float/int | [minâ€“max] | [what it represents] |
 
 **Output Range:** [min] to [max] under normal play; [behaviour at extremes]
 **Example:** [worked example with real numbers]
@@ -500,10 +500,10 @@ table. A formula without defined variables cannot be implemented without guesswo
 - **For economy/cost systems, also spawn `economy-designer`**: provide placement costs, upgrade cost intent, and progression goals. Ask them to validate cost curves and ratios.
 - Present the specialists' proposals to the user for review via `AskUserQuestion`
 - The user decides; the main session writes to file
-- **Do NOT invent formula values or balance numbers without specialist input.** A user without balance design expertise cannot evaluate raw numbers — they need the specialists' reasoning.
+- **Do NOT invent formula values or balance numbers without specialist input.** A user without balance design expertise cannot evaluate raw numbers â€” they need the specialists' reasoning.
 
 **Cross-reference**: If a dependency GDD defines a formula whose output feeds into
-this system, reference it explicitly. Don't reinvent — connect.
+this system, reference it explicitly. Don't reinvent â€” connect.
 
 ---
 
@@ -511,14 +511,14 @@ this system, reference it explicitly. Don't reinvent — connect.
 
 **Goal**: Explicitly handle unusual situations so they don't become bugs.
 
-**Completion Steering — format each edge case as:**
+**Completion Steering â€” format each edge case as:**
 - **If [condition]**: [exact outcome]. [rationale if non-obvious]
 
 Example (adapt terminology to the game's domain):
 - **If [resource] reaches 0 while [protective condition] is active**: hold at minimum until condition ends, then apply consequence.
 - **If two [triggers/events] fire simultaneously**: resolve in [defined priority order]; ties use [defined tiebreak rule].
 
-Do NOT write vague entries like "handle appropriately" — each must name the exact
+Do NOT write vague entries like "handle appropriately" â€” each must name the exact
 condition and the exact resolution. An edge case without a resolution is an open
 design question, not a specification.
 
@@ -564,7 +564,7 @@ system]". Flag any one-directional dependencies for correction.
 to derive tuning knobs from the formula variables.
 
 **Cross-reference**: If a dependency GDD lists tuning knobs that affect this system,
-reference them here. Don't create duplicate knobs — point to the source of truth.
+reference them here. Don't create duplicate knobs â€” point to the source of truth.
 
 ---
 
@@ -572,7 +572,7 @@ reference them here. Don't create duplicate knobs — point to the source of tru
 
 **Goal**: Testable conditions that prove the system works as designed.
 
-**Completion Steering — format each criterion as Given-When-Then:**
+**Completion Steering â€” format each criterion as Given-When-Then:**
 - **GIVEN** [initial state], **WHEN** [action or trigger], **THEN** [measurable outcome]
 
 Example (adapt terminology to the game's domain):
@@ -580,7 +580,7 @@ Example (adapt terminology to the game's domain):
 - **GIVEN** [a constraint is active], **WHEN** [player attempts an action], **THEN** [feedback shown and action result].
 
 Include at least: one criterion per core rule from Section C, and one per formula
-from Section D. Do NOT write "the system works as designed" — every criterion must
+from Section D. Do NOT write "the system works as designed" â€” every criterion must
 be independently verifiable by a QA tester without reading the GDD.
 
 **Agent delegation (MANDATORY)**: Spawn `qa-lead` via Task before finalising acceptance criteria. Provide: the completed GDD sections C, D, E, and ask them to validate that the criteria are independently testable and cover all core rules and formulas. Surface any gaps or untestable criteria to the user.
@@ -597,9 +597,9 @@ not just this system in isolation.
 
 ### Optional Sections: Visual/Audio, UI Requirements, Open Questions
 
-These sections are included in the template. Visual/Audio is **REQUIRED** for visual system categories — not optional. Determine the requirement level before asking:
+These sections are included in the template. Visual/Audio is **REQUIRED** for visual system categories â€” not optional. Determine the requirement level before asking:
 
-**Visual/Audio is REQUIRED (mandatory — do not offer to skip) for these system categories:**
+**Visual/Audio is REQUIRED (mandatory â€” do not offer to skip) for these system categories:**
 - Combat, damage, health
 - UI systems (HUD, menus)
 - Animation, character movement
@@ -608,26 +608,26 @@ These sections are included in the template. Visual/Audio is **REQUIRED** for vi
 - Dialogue, quests, lore
 - Level/world systems
 
-For required systems: **spawn `art-director` via Task** before drafting this section. Provide: system name, game concept, game pillars, art bible sections 1–4 if they exist. Ask them to specify: (1) VFX and visual feedback requirements for this system's events, (2) any animation or visual style constraints, (3) which art bible principles most directly apply to this system. Present their output; do NOT leave this section as `[To be designed]` for visual systems.
+For required systems: **spawn `art-director` via Task** before drafting this section. Provide: system name, game concept, game pillars, art bible sections 1â€“4 if they exist. Ask them to specify: (1) VFX and visual feedback requirements for this system's events, (2) any animation or visual style constraints, (3) which art bible principles most directly apply to this system. Present their output; do NOT leave this section as `[To be designed]` for visual systems.
 
 For **all other system categories** (Foundation/Infrastructure, Economy, AI/pathfinding, Camera/input), offer the optional sections after the required sections:
 
 Use `AskUserQuestion`:
 - "The 8 required sections are complete. Do you want to also define Visual/Audio
   requirements, UI requirements, or capture open questions?"
-  - Options: "Yes, all three", "Just open questions", "Skip — I'll add these later"
+  - Options: "Yes, all three", "Just open questions", "Skip â€” I'll add these later"
 
 For **Visual/Audio** (non-required systems): Coordinate with `art-director` and `audio-director` if detail is needed. Often a brief note suffices at the GDD stage.
 
 > **Asset Spec Flag**: After the Visual/Audio section is written with real content, output this notice:
-> "📌 **Asset Spec** — Visual/Audio requirements are defined. After the art bible is approved, run `/asset-spec system:[system-name]` to produce per-asset visual descriptions, dimensions, and generation prompts from this section."
+> "ðŸ“Œ **Asset Spec** â€” Visual/Audio requirements are defined. After the art bible is approved, run `/asset-spec system:[system-name]` to produce per-asset visual descriptions, dimensions, and generation prompts from this section."
 
 For **UI Requirements**: Coordinate with `ux-designer` for complex UI systems.
 After writing this section, check whether it contains real content (not just
 `[To be designed]` or a note that this system has no UI). If it does have real
 UI requirements, output this flag immediately:
 
-> **📌 UX Flag — [System Name]**: This system has UI requirements. In Phase 4
+> **ðŸ“Œ UX Flag â€” [System Name]**: This system has UI requirements. In Phase 4
 > (Pre-Production), run `/ux-design` to create a UX spec for each screen or
 > HUD element this system contributes to **before** writing epics. Stories that
 > reference UI should cite `design/ux/[screen].md`, not the GDD directly.
@@ -645,7 +645,7 @@ After all sections are written:
 
 ### 5a: Self-Check
 
-Read back the complete GDD from file (not from conversation memory — the file is
+Read back the complete GDD from file (not from conversation memory â€” the file is
 the source of truth). Verify:
 - All 8 required sections have real content (not placeholders)
 - Formulas reference defined variables
@@ -655,10 +655,10 @@ the source of truth). Verify:
 
 ### 5a-bis: Creative Director Pillar Review
 
-**Review mode check** — apply before spawning CD-GDD-ALIGN:
-- `solo` → skip. Note: "CD-GDD-ALIGN skipped — Solo mode." Proceed to Step 5b.
-- `lean` → skip (not a PHASE-GATE). Note: "CD-GDD-ALIGN skipped — Lean mode." Proceed to Step 5b.
-- `full` → spawn as normal.
+**Review mode check** â€” apply before spawning CD-GDD-ALIGN:
+- `solo` â†’ skip. Note: "CD-GDD-ALIGN skipped â€” Solo mode." Proceed to Step 5b.
+- `lean` â†’ skip (not a PHASE-GATE). Note: "CD-GDD-ALIGN skipped â€” Lean mode." Proceed to Step 5b.
+- `full` â†’ spawn as normal.
 
 Before finalizing the GDD, spawn `creative-director` via Task using gate **CD-GDD-ALIGN** (`.claude/docs/director-gates.md`).
 
@@ -688,9 +688,9 @@ Registry candidates from this GDD:
   NEW (not yet registered):
     - [entity_name] [entity]: [attribute]=[value], [attribute]=[value]
     - [item_name] [item]: [attribute]=[value], [attribute]=[value]
-    - [formula_name] [formula]: variables=[list], output=[min–max]
+    - [formula_name] [formula]: variables=[list], output=[minâ€“max]
   ALREADY REGISTERED (referenced_by will be updated):
-    - [constant_name] [constant]: value=[N] ← matches registry ✅
+    - [constant_name] [constant]: value=[N] â† matches registry âœ…
 ```
 
 Ask: "May I update `design/registry/entities.yaml` with these [N] new entries
@@ -723,10 +723,10 @@ After the GDD is complete (and optionally reviewed):
 
 - Read the systems index
 - Update the target system's row:
-  - If design-review was run and verdict is APPROVED: Status → "Approved"
-  - If design-review was run and verdict is NEEDS REVISION: Status → "In Review"
-  - If design-review was skipped: Status → "Designed" (pending review)
-  - If the user chose "I'll review it myself first": Status → "Designed"
+  - If design-review was run and verdict is APPROVED: Status â†’ "Approved"
+  - If design-review was run and verdict is NEEDS REVISION: Status â†’ "In Review"
+  - If design-review was skipped: Status â†’ "Designed" (pending review)
+  - If the user chose "I'll review it myself first": Status â†’ "Designed"
   - Design Doc: link to `design/gdd/[system-name].md`
 - Update the Progress Tracker counts
 
@@ -746,11 +746,11 @@ Update `production/session-state/active.md` with:
 Use `AskUserQuestion`:
 - "What's next?"
   - Options:
-    - "Run `/consistency-check` — verify this GDD's values don't conflict with existing GDDs (recommended before designing the next system)"
-    - "Design next system ([next-in-order])" — if undesigned systems remain
-    - "Fix review findings" — if design-review flagged issues
+    - "Run `/consistency-check` â€” verify this GDD's values don't conflict with existing GDDs (recommended before designing the next system)"
+    - "Design next system ([next-in-order])" â€” if undesigned systems remain
+    - "Fix review findings" â€” if design-review flagged issues
     - "Stop here for this session"
-    - "Run `/gate-check`" — if enough MVP systems are designed
+    - "Run `/gate-check`" â€” if enough MVP systems are designed
 
 ---
 
@@ -781,7 +781,7 @@ orchestrates the overall flow; agents provide expert content.
 - The agent returns analysis/proposals to the main session
 - The main session presents the agent's output to the user via `AskUserQuestion`
 - The user decides; the main session writes to file
-- Agents do NOT write to files directly — the main session owns all file writes
+- Agents do NOT write to files directly â€” the main session owns all file writes
 
 ---
 
@@ -789,11 +789,11 @@ orchestrates the overall flow; agents provide expert content.
 
 If the session is interrupted (compaction, crash, new session):
 
-1. Read `production/session-state/active.md` — it records the current system and
+1. Read `production/session-state/active.md` â€” it records the current system and
    which sections are complete
-2. Read `design/gdd/[system-name].md` — sections with real content are done;
+2. Read `design/gdd/[system-name].md` â€” sections with real content are done;
    sections with `[To be designed]` still need work
-3. Resume from the next incomplete section — no need to re-discuss completed ones
+3. Resume from the next incomplete section â€” no need to re-discuss completed ones
 
 This is why incremental writing matters: every approved section survives any
 disruption.
@@ -815,7 +815,7 @@ This skill follows the collaborative design principle at every step:
 5. **Session state updates**: After every section write
 6. **Cross-referencing**: Every section checks existing GDDs for conflicts
 7. **Specialist routing**: Complex sections get expert agent input, presented to
-   the user for decision — never written silently
+   the user for decision â€” never written silently
 
 **Never** auto-generate the full GDD and present it as a fait accompli.
 **Never** write a section without user approval.
@@ -827,9 +827,9 @@ This skill follows the collaborative design principle at every step:
 This is a long-running skill. After writing each section, check if the status line
 shows context at or above 70%. If so, append this notice to the response:
 
-> **Context is approaching the limit (≥70%).** Your progress is saved — all approved
+> **Context is approaching the limit (â‰¥70%).** Your progress is saved â€” all approved
 > sections are written to `design/gdd/[system-name].md`. When you're ready to continue,
-> open a fresh Claude Code session and run `/design-system [system-name]` — it will
+> open a fresh Claude Code session and run `/design-system [system-name]` â€” it will
 > detect which sections are complete and resume from the next one.
 
 ---

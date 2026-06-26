@@ -1,6 +1,6 @@
----
+﻿---
 name: localization-lead
-model: qwen-3.6-35b-sovereign
+model: claude-sonnet-4-6
 description: "Owns internationalization architecture, string management, locale testing, and translation pipeline. Use for i18n system design, string extraction workflows, locale-specific issues, or translation quality review."
 tools: Read, Glob, Grep, Write, Edit, Bash
 maxTurns: 20
