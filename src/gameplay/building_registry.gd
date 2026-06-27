@@ -122,6 +122,9 @@ class BuildingInstance:
 	## Set by BuildingRegistry._refresh_water_bonus; not a placement requirement, does not stack.
 	var water_bonus: float = 0.0
 	var efficiency: float = 1.0
+	## Production speed throttle. -1.0 = always use full computed efficiency (tracks max).
+	## 0.0 to <efficiency = explicit throttle; auto-clamped in recalculate_efficiency().
+	var target_efficiency: float = -1.0
 	## Utilization tracking — fraction of the day the building was actively producing.
 	## Accumulates while a cycle is advancing; snapshotted into *_last_day each day rollover.
 	var util_active_ticks_today: int = 0
@@ -152,6 +155,13 @@ class BuildingInstance:
 	func has_upgrade(upgrade_id: StringName) -> bool:
 		return active_upgrades.has(upgrade_id)
 
+	## Returns the efficiency used for production — the computed max when target_efficiency
+	## is the sentinel -1.0, or the player-set throttle otherwise.
+	func get_effective_efficiency() -> float:
+		if target_efficiency < 0.0:
+			return efficiency
+		return target_efficiency
+
 	## Recomputes efficiency (additive model, 2026-06-18):
 	##   efficiency = base 25% + resource_tiles × 5% + worker efficiency (+ upgrade_bonus),
 	##   clamped to [0, BUILDING_EFFICIENCY_MAX]. Resource tiles only count for buildings with an
@@ -163,6 +173,9 @@ class BuildingInstance:
 		var resource_tiles: int = adjacency_tile_count if (ADJACENCY_REQUIREMENTS.has(type) and not ADJACENCY_PLACEMENT_ONLY.has(type)) else 0
 		efficiency = EfficiencyFormulas.calculate_building_efficiency(
 				resource_tiles, worker_eff, upgrade_bonus, water_bonus)
+		# If an explicit throttle now exceeds the new max, clamp it down.
+		if target_efficiency >= 0.0 and target_efficiency > efficiency:
+			target_efficiency = efficiency
 
 	func _init(p_id: String, p_type: int, p_tile: Vector2i) -> void:
 		building_id = p_id
@@ -1097,6 +1110,22 @@ signal upgrade_installed(building_id: String, upgrade_id: StringName)
 ## Emitted when an upgrade is removed from a building (e.g. building demolished).
 signal upgrade_removed(building_id: String, upgrade_id: StringName)
 
+# ---- Public API — production speed ------------------------------------------
+
+## Sets a production speed throttle for [param building_id].
+## [param target] is an absolute efficiency value in [0.0, instance.efficiency].
+## If target >= current max, stores the sentinel -1.0 so the building tracks future
+## max changes automatically (NPC fed/unassigned, adjacency changes, etc.).
+## Emits building_state_changed so the detail panel refreshes.
+func set_production_speed(building_id: String, target: float) -> void:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null:
+		push_warning("[BuildingRegistry] set_production_speed: unknown building %s" % building_id)
+		return
+	var clamped: float = clampf(target, 0.0, instance.efficiency)
+	instance.target_efficiency = -1.0 if clamped >= instance.efficiency else clamped
+	building_state_changed.emit(building_id, instance.state, "production_speed")
+
 # ---- State ------------------------------------------------------------------
 
 var _tick_system: Node = null
@@ -1601,7 +1630,7 @@ func _advance_production_cycle(instance: BuildingInstance, delta: int) -> void:
 	var _active_recipe: Dictionary = get_active_recipe(instance)
 	if not _active_recipe.is_empty():
 		instance.production_cycle_duration = EfficiencyFormulas.calculate_effective_cycle_ticks(
-				_active_recipe.get("base_cycle_ticks", 0), instance.efficiency)
+				_active_recipe.get("base_cycle_ticks", 0), instance.get_effective_efficiency())
 	if instance.production_cycle_ticks < instance.production_cycle_duration:
 		return
 	# Cycle complete — deposit output to buffer.
@@ -2414,6 +2443,7 @@ func serialize() -> Dictionary:
 			"output_carrier_id": str(instance.output_carrier_id),
 			"upgrade_bonus": instance.upgrade_bonus,
 			"efficiency": instance.efficiency,
+			"target_efficiency": instance.target_efficiency,
 			"util_active_ticks_today": instance.util_active_ticks_today,
 			"util_active_ticks_last_day": instance.util_active_ticks_last_day,
 			"util_data_available": instance.util_data_available,
@@ -2471,6 +2501,7 @@ func deserialize(data: Dictionary) -> void:
 		instance.output_carrier_id = StringName(bd.get("output_carrier_id", ""))
 		instance.upgrade_bonus = bd.get("upgrade_bonus", 0.0)
 		instance.efficiency = bd.get("efficiency", 1.0)
+		instance.target_efficiency = bd.get("target_efficiency", -1.0)
 		instance.util_active_ticks_today = bd.get("util_active_ticks_today", 0)
 		instance.util_active_ticks_last_day = bd.get("util_active_ticks_last_day", 0)
 		instance.util_data_available = bd.get("util_data_available", false)
