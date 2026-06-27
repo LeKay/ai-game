@@ -4,7 +4,7 @@ class_name HUD extends CanvasLayer
 ## Partial implementation:
 ##   story-002: Energy + tick controls + day/time display are live.
 ##
-## NPC count, food status, toast container, and building detail panel are stubbed
+## NPC count, food status, and toast container are stubbed
 ## (hidden nodes) pending their system dependencies.
 ##
 ## Signal wiring is null-guarded: absent systems degrade gracefully with push_warning.
@@ -37,8 +37,8 @@ var _speed_inc_btn:   Button
 var _play_pause_btn:  Button
 var _energy_segments: Array[ColorRect] = []
 
-var _building_detail_panel: BuildingDetailPanel
-var _npc_detail_panel:      NpcDetailPanel
+var _buildings_drawer:  BuildingsDrawer
+var _npc_detail_panel:  NpcDetailPanel
 var _transport_drawer:       TransportDrawer
 var _route_toggle_btn:       Button
 var _map_btn:                Button
@@ -86,15 +86,30 @@ func _exit_tree() -> void:
 		_player_character.energy_changed.disconnect(_on_energy_changed)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	var key := event as InputEventKey
-	if _map_select_step != "":
-		if key != null and key.pressed and key.keycode == KEY_ESCAPE:
-			notify_building_selected_in_map_select(&"")
-			get_viewport().set_input_as_handled()
+func _input(event: InputEvent) -> void:
+	if _map_select_step == "":
 		return
-	if key != null and key.pressed and event.is_action_pressed(InputActions.PAUSE_TOGGLE):
+	var key := event as InputEventKey
+	if key != null and key.pressed and key.keycode == KEY_ESCAPE:
+		notify_building_selected_in_map_select(&"")
+		get_viewport().set_input_as_handled()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _map_select_step != "":
+		return
+	var focus := get_viewport().gui_get_focus_owner()
+	if focus is LineEdit or focus is TextEdit:
+		return
+	var key := event as InputEventKey
+	if key == null or not key.pressed:
+		return
+	if event.is_action_pressed(InputActions.PAUSE_TOGGLE):
 		TickSystem.set_pause(not TickSystem.is_paused())
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed(InputActions.OPEN_BUILD_MENU):
+		if _buildings_drawer != null:
+			_buildings_drawer.open_build_picker()
 		get_viewport().set_input_as_handled()
 
 
@@ -237,9 +252,14 @@ func _set_drawers_visible(v: bool) -> void:
 			_task_dialog.close()
 		_task_dialog.visible = v
 	if _transport_drawer != null:
-		if not v:
+		var transport_visible: bool = v and ProgressionSystem.is_unlocked(&"shelter")
+		if not transport_visible:
 			_transport_drawer.close()
-		_transport_drawer.visible = v
+		_transport_drawer.visible = transport_visible
+	if _buildings_drawer != null:
+		if not v:
+			_buildings_drawer.close()
+		_buildings_drawer.visible = v
 
 
 func _on_overworld_close_pressed() -> void:
@@ -475,14 +495,10 @@ func _add_stubs() -> void:
 		node.visible = false
 		add_child(node)
 
-	_building_detail_panel = BuildingDetailPanel.new()
-	_building_detail_panel.name = "BuildingDetailPanel"
-	_building_detail_panel.transport_management_opened.connect(_on_transport_management_opened)
-	_building_detail_panel.transport_route_edit_requested.connect(_on_transport_route_edit_requested)
-	_building_detail_panel.npc_detail_requested.connect(_on_npc_detail_requested)
-	_building_detail_panel.building_selected.connect(_on_building_selected_routes)
-	_building_detail_panel.building_deselected.connect(_on_building_deselected_routes)
-	add_child(_building_detail_panel)
+	_buildings_drawer = BuildingsDrawer.new()
+	_buildings_drawer.name = "BuildingsDrawer"
+	_buildings_drawer.visible = false
+	add_child(_buildings_drawer)
 
 	_npc_detail_panel = NpcDetailPanel.new()
 	_npc_detail_panel.name = "NpcDetailPanel"
@@ -564,6 +580,25 @@ func _connect_systems() -> void:
 	_transport_drawer.route_update_requested.connect(_on_transport_route_updated)
 	_transport_drawer.route_delete_requested.connect(_on_transport_route_deleted)
 	_transport_drawer.map_select_requested.connect(_on_map_select_requested)
+	ProgressionSystem.node_unlocked.connect(func(node_id: StringName) -> void:
+		if node_id == &"shelter":
+			_set_drawers_visible(true))
+
+	_buildings_drawer._content.build_mode_requested.connect(_on_build_mode_requested)
+	_buildings_drawer._content.building_demolish_requested.connect(_on_building_demolish_requested)
+	_buildings_drawer._content.demolish_mode_requested.connect(_on_demolish_mode_requested)
+	_buildings_drawer._content.rename_building.connect(_on_rename_building)
+	_buildings_drawer._content.npc_assigned.connect(_on_npc_assigned)
+	_buildings_drawer._content.npc_recruit_requested.connect(_on_npc_recruit_requested)
+	_buildings_drawer._content.npc_released.connect(_on_npc_released)
+	_buildings_drawer._content.npc_detail_requested.connect(_on_npc_detail_requested_from_buildings)
+	_buildings_drawer._content.upgrade_install_requested.connect(_on_upgrade_install_requested)
+	_buildings_drawer._content.recipe_changed.connect(_on_recipe_changed)
+	_buildings_drawer._content.production_speed_changed.connect(_on_production_speed_changed)
+	_buildings_drawer._content.route_create_requested.connect(_on_transport_route_created)
+	_buildings_drawer._content.route_update_requested.connect(_on_transport_route_updated)
+	_buildings_drawer._content.route_delete_requested.connect(_on_transport_route_deleted)
+	_buildings_drawer._content.map_select_requested.connect(_on_buildings_map_select_requested)
 
 	# Hide the edge drawers (Tasks + Transport) while the full-screen progression tree is up.
 	if _progression_screen != null:
@@ -615,8 +650,6 @@ func _on_energy_changed(current: int, max_energy: int) -> void:
 ## Called by DayOverviewPanel before it shows.
 func close_all_panels_for_day_transition() -> void:
 	_day_transitioning = true
-	if _building_detail_panel != null:
-		_building_detail_panel.close()
 	if _npc_detail_panel != null:
 		_npc_detail_panel.close()
 	if _progression_screen != null:
@@ -643,9 +676,9 @@ func close_open_panels() -> bool:
 	if _npc_detail_panel != null and _npc_detail_panel.visible:
 		any_open = true
 		_npc_detail_panel.close()
-	if _building_detail_panel != null and _building_detail_panel.visible:
+	if _buildings_drawer != null and _buildings_drawer.is_open():
 		any_open = true
-		_building_detail_panel.close()
+		_buildings_drawer.close()
 	if _task_dialog != null and _task_dialog.is_open():
 		any_open = true
 		_task_dialog.close()
@@ -674,14 +707,6 @@ func _on_progression_btn_pressed() -> void:
 		return
 	if _progression_screen != null:
 		_progression_screen.toggle()
-
-
-func _on_transport_management_opened(building_id: String, role: String) -> void:
-	_transport_drawer.open_for_building(StringName(building_id), role)
-
-
-func _on_transport_route_edit_requested(route: LogisticsRoute) -> void:
-	_transport_drawer.open_for_route(route)
 
 
 func _on_transport_route_created(from_id: StringName, to_id: StringName, npc_id: StringName, item_id: StringName) -> void:
@@ -742,13 +767,11 @@ func is_map_select_active() -> bool:
 	return _map_select_step != ""
 
 
-## Enters map-select mode: hides the transport drawer + building detail, shows a text prompt.
-## The map_root should call notify_building_selected_in_map_select() when the player
-## clicks a building on the map. The drawer keeps its in-progress editor intact across the trip.
+## Enters map-select mode: hides the transport drawer, shows a text prompt.
+## The map_root calls notify_building_selected_in_map_select() when the player
+## clicks a building on the map. The drawer keeps its in-progress editor intact.
 func _on_map_select_requested(step: String) -> void:
 	_map_select_step = step
-	if _building_detail_panel != null and _building_detail_panel.visible:
-		_building_detail_panel.close()
 	var prompt_text := "Select source building" if step == "from" else "Select destination building"
 	_map_select_prompt.text = prompt_text
 	_map_select_prompt.visible = true
@@ -763,13 +786,24 @@ func _exit_map_select_mode() -> void:
 
 ## Called by map_root when the player clicks a building during map-select.
 ## Pass building_id = &"" to cancel (clicked empty space).
+## Handles both Transport Drawer map-select ("from"/"to") and Buildings Drawer
+## map-select (step prefixed with "buildings:").
 func notify_building_selected_in_map_select(building_id: StringName) -> void:
 	if _map_select_step == "":
 		return
-	var step := _map_select_step
+	var full_step := _map_select_step
 	_exit_map_select_mode()
-	if _transport_drawer != null:
-		_transport_drawer.resume_map_select(step, building_id)
+	if full_step == "demolish":
+		if building_id != &"":
+			BuildingRegistry.demolish_building(building_id)
+	elif full_step.begins_with("buildings:"):
+		var inner_step: String = full_step.substr(len("buildings:"))
+		if _buildings_drawer != null:
+			_buildings_drawer._content.resume_map_select(inner_step, building_id)
+			_buildings_drawer.open()
+	else:
+		if _transport_drawer != null:
+			_transport_drawer.resume_map_select(full_step, building_id)
 
 
 # --- Button handlers ---------------------------------------------------------
@@ -825,24 +859,11 @@ func _ticks_to_time_str(tick_count: int) -> String:
 	return "%02d:%02d" % [tick_count / tph, tick_count % tph]
 
 
-## Opens the Building Detail Panel for the given building_id.
-## If the same building is already shown, closes the panel (toggle).
+## Opens the Buildings Drawer and navigates directly to the detail view for building_id.
+## Called by DragController when the player left-clicks a building on the map.
 func open_building_detail(building_id: String) -> void:
-	if _building_detail_panel != null:
-		_building_detail_panel.open_for(building_id)
-
-
-## Closes the Building Detail Panel if open.
-func close_building_detail() -> void:
-	if _building_detail_panel != null:
-		_building_detail_panel.close()
-
-
-## Returns the building_id currently shown in the detail panel, or "".
-func get_shown_building_id() -> String:
-	if _building_detail_panel == null:
-		return ""
-	return _building_detail_panel.get_current_building_id()
+	if _buildings_drawer != null:
+		_buildings_drawer.open_for_building(building_id)
 
 
 func _on_npc_detail_requested(npc_id: StringName, npc_state: int) -> void:
@@ -850,6 +871,118 @@ func _on_npc_detail_requested(npc_id: StringName, npc_state: int) -> void:
 		_npc_detail_panel.open_for_npc(npc_id, npc_state)
 	if _route_lines != null:
 		_route_lines.set_npc_filter(npc_id)
+
+
+## Triggered by BuildingsDrawer when the player confirms an inline rename.
+func _on_building_demolish_requested(building_id: String) -> void:
+	BuildingRegistry.demolish_building(building_id)
+
+
+## Enters demolish map-select mode: closes the drawer and waits for the player
+## to click a building on the map.
+func _on_demolish_mode_requested() -> void:
+	_map_select_step = "demolish"
+	_map_select_prompt.text = "Tap a building to demolish"
+	_map_select_prompt.visible = true
+	if _buildings_drawer != null:
+		_buildings_drawer.close()
+
+
+func _on_rename_building(building_id: String, new_name: String) -> void:
+	BuildingRegistry.rename_building(building_id, new_name)
+
+
+## Recruits a new NPC into a residential house using the given food resource.
+func _on_npc_recruit_requested(building_id: String, resource_id: StringName) -> void:
+	var home_tile: Vector2i = BuildingRegistry.get_building_tile(building_id)
+	NPCSystem.recruit_npc(home_tile, resource_id)
+	if _buildings_drawer != null:
+		_buildings_drawer._content.refresh_detail()
+
+
+## Assigns an NPC to a building — routes through NPCSystem so the NPC enters
+## TRAVEL_TO_BUILDING and eventually arrives at WORK_AT_BUILDING.
+func _on_npc_assigned(building_id: String, npc_id: StringName) -> void:
+	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(building_id)
+	var storage_id: StringName = instance.assigned_container_id if instance != null else &""
+	NPCSystem.assign_npc(npc_id, StringName(building_id), storage_id)
+
+
+## Releases the NPC assigned to a building via NPCSystem (sets assigned_npc_id = &"").
+func _on_npc_released(building_id: String, _npc_id: StringName) -> void:
+	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(building_id)
+	if instance == null:
+		return
+	if instance.assigned_npc_id != &"":
+		NPCSystem.release_npc(instance.assigned_npc_id)
+	BuildingRegistry.assign_npc(building_id, &"")
+
+
+## Opens the NPC detail panel for a worker tapped inside the Buildings Drawer.
+func _on_npc_detail_requested_from_buildings(npc_id: StringName) -> void:
+	if _npc_detail_panel != null:
+		_npc_detail_panel.open_for_npc(npc_id, NPCSystem.get_npc_state(npc_id))
+	if _route_lines != null:
+		_route_lines.set_npc_filter(npc_id)
+
+
+## Installs an upgrade and refreshes the detail view.
+func _on_upgrade_install_requested(building_id: String, upgrade_id: StringName) -> void:
+	var ok: bool = BuildingRegistry.install_upgrade(building_id, upgrade_id)
+	if not ok:
+		push_warning("[HUD] install_upgrade failed for building=%s upgrade=%s" % [building_id, upgrade_id])
+	if _buildings_drawer != null:
+		_buildings_drawer._content.refresh_detail()
+
+
+## Changes the active production recipe for a building.
+## Looks up the recipe index by its "id" key; falls back to push_warning on mismatch.
+func _on_recipe_changed(building_id: String, recipe_id: StringName) -> void:
+	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(building_id)
+	if instance == null:
+		push_warning("[HUD] _on_recipe_changed: no building instance for %s" % building_id)
+		return
+	var recipes: Array = BuildingRegistry.get_recipes(instance.type)
+	var idx: int = -1
+	for i: int in range(recipes.size()):
+		var r: Dictionary = recipes[i]
+		if r.get("id", &"") == recipe_id:
+			idx = i
+			break
+	if idx < 0:
+		push_warning("[HUD] _on_recipe_changed: recipe_id=%s not found for building %s" % [recipe_id, building_id])
+		return
+	BuildingRegistry.set_active_recipe(building_id, idx)
+
+
+func _on_production_speed_changed(building_id: String, target_efficiency: float) -> void:
+	BuildingRegistry.set_production_speed(building_id, target_efficiency)
+
+
+func _on_build_mode_requested(building_type: int) -> void:
+	var overlay := get_parent().get_node_or_null("BuildPlacementOverlay") as BuildPlacementOverlay
+	if overlay == null:
+		push_warning("[HUD] BuildPlacementOverlay not found — cannot start placement")
+		return
+	if _buildings_drawer != null:
+		_buildings_drawer.close()
+	if building_type == BuildingRegistry.BuildingType.ROAD:
+		overlay.start_path_placement()
+	else:
+		overlay.start_placement(building_type)
+
+
+## Enters map-select mode for a route pick originating inside the Buildings Drawer.
+## Hides the drawer and shows the selection prompt, then routes the result back via
+## notify_building_selected_in_map_select() → _buildings_drawer._content.resume_map_select().
+func _on_buildings_map_select_requested(step: String) -> void:
+	_map_select_step = "buildings:" + step
+	var prompt_text: String = "Select source building" if step == "from" else "Select destination building"
+	_map_select_prompt.text = prompt_text
+	_map_select_prompt.visible = true
+	if _buildings_drawer != null:
+		_buildings_drawer._content._skip_close_reset = true
+		_buildings_drawer.close()
 
 
 ## Called by MapRoot after RouteLines is ready — wires the overlay to this HUD.
