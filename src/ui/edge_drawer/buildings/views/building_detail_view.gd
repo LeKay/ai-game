@@ -191,8 +191,7 @@ func _input(event: InputEvent) -> void:
 ## Loads data for [param building_id] and rebuilds the header and production/inventory section.
 func setup(building_id: String) -> void:
 	_building_id = building_id
-	if _is_rename_active:
-		_cancel_rename()
+	cancel_all_editors()
 	_rebuild_production_section()
 	if _transport_section is TransportSection:
 		(_transport_section as TransportSection).setup(building_id)
@@ -1016,7 +1015,19 @@ func _close_speed_editor() -> void:
 
 
 ## Cancels an open speed editor without emitting production_speed_changed.
-## Called by BuildingsDrawerContent when the drawer closes.
 func cancel_speed_editor() -> void:
 	if _speed_editor.visible:
 		_on_speed_cancel()
+
+
+## Cancels all active inline editors (rename, speed, recipe picker, route editor, worker popup).
+## Safe to call at any time — all cancellations are no-ops when not active.
+func cancel_all_editors() -> void:
+	_cancel_rename()
+	cancel_speed_editor()
+	if _picker_popup != null and _picker_popup.visible:
+		_picker_popup.visible = false
+	if _production_section is ProductionSection:
+		(_production_section as ProductionSection).cancel_picker()
+	if _transport_section is TransportSection:
+		(_transport_section as TransportSection).cancel_editor()

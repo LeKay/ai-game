@@ -307,6 +307,12 @@ func _hide_picker() -> void:
 	_body_container.visible     = true
 
 
+## Closes the recipe picker without confirming a selection. No-op if not open.
+func cancel_picker() -> void:
+	if _recipe_picker_view.visible:
+		_hide_picker()
+
+
 ## Forwarded from RecipePickerView — emits recipe_changed so callers can update BuildingRegistry.
 func _on_recipe_selected(recipe_id: StringName) -> void:
 	_hide_picker()
