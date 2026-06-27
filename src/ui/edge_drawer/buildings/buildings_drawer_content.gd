@@ -124,6 +124,7 @@ func on_drawer_closed() -> void:
 	if _skip_close_reset:
 		_skip_close_reset = false
 		return
+	_detail_view.cancel_speed_editor()
 	if _current_view != _list_view:
 		_show_view(_list_view)
 

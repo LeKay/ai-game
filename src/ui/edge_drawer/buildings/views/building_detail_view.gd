@@ -323,7 +323,7 @@ func refresh() -> void:
 		_storage_fill_rect.anchor_right = clampf(fill_ratio, 0.0, 1.0)
 	else:
 		# ── Efficiency ────────────────────────────────────────────────────────
-		_eff_label.text = "Eff: %d%%" % int(instance.efficiency * 100.0)  # TODO: localize
+		_eff_label.text = "Eff: %d%%" % int(instance.get_effective_efficiency() * 100.0)  # TODO: localize
 		var _is_prod: bool = BuildingRegistry.is_production_building(instance.type)
 		_eff_gear_btn.visible = _is_prod and not _speed_editor.visible
 		if _speed_editor.visible:
@@ -1013,3 +1013,10 @@ func _close_speed_editor() -> void:
 	_speed_editor.visible       = false
 	_production_section.visible = true
 	refresh()
+
+
+## Cancels an open speed editor without emitting production_speed_changed.
+## Called by BuildingsDrawerContent when the drawer closes.
+func cancel_speed_editor() -> void:
+	if _speed_editor.visible:
+		_on_speed_cancel()

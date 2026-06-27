@@ -39,6 +39,13 @@ var _building_id: String = ""
 var _input_tiles: Dictionary[StringName, ItemTile] = {}
 ## Cache of output ItemTiles keyed by resource_id for efficient refresh.
 var _output_tiles: Dictionary[StringName, ItemTile] = {}
+## Rate labels updated every refresh so they reflect the current effective efficiency.
+var _input_rate_labels:  Dictionary[StringName, Label] = {}
+var _output_rate_labels: Dictionary[StringName, Label] = {}
+## Per-resource base quantities and recipe data needed to recompute rates in refresh().
+var _recipe_cycle_ticks: int = 0
+var _input_base_qty:  Dictionary[StringName, int] = {}
+var _output_base_qty: Dictionary[StringName, int] = {}
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -160,6 +167,21 @@ func refresh() -> void:
 		var qty: int = instance.buffered_output.get(res_id, 0)
 		_output_tiles[res_id].update_quantity(qty)
 
+	# ── Refresh rate labels (depend on effective efficiency which can change) ─
+	if _recipe_cycle_ticks > 0:
+		var tpd: float = float(TickSystem.TICKS_PER_DAY)
+		var eff: float = instance.get_effective_efficiency()
+		for res_id: StringName in _input_rate_labels:
+			var per_day: float = float(_input_base_qty.get(res_id, 1)) * eff * tpd / float(_recipe_cycle_ticks)
+			var lbl: Label = _input_rate_labels[res_id]
+			lbl.text = "~%d/day" % roundi(per_day)  # TODO: localize
+			lbl.tooltip_text = "%.2f/day" % per_day
+		for res_id: StringName in _output_rate_labels:
+			var per_day: float = float(_output_base_qty.get(res_id, 1)) * eff * tpd / float(_recipe_cycle_ticks)
+			var lbl: Label = _output_rate_labels[res_id]
+			lbl.text = "~%d/day" % roundi(per_day)  # TODO: localize
+			lbl.tooltip_text = "%.2f/day" % per_day
+
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -169,6 +191,10 @@ func _rebuild_tiles() -> void:
 	_flow.clear_tiles()
 	_input_tiles.clear()
 	_output_tiles.clear()
+	_input_rate_labels.clear()
+	_output_rate_labels.clear()
+	_input_base_qty.clear()
+	_output_base_qty.clear()
 
 	var instance: BuildingRegistry.BuildingInstance = \
 			BuildingRegistry.get_building_instance(_building_id)
@@ -184,6 +210,7 @@ func _rebuild_tiles() -> void:
 		return
 
 	var cycle_ticks: int = recipe.get("base_cycle_ticks", 0)
+	_recipe_cycle_ticks = cycle_ticks
 	var ticks_per_day: float = float(TickSystem.TICKS_PER_DAY)
 
 	# ── Input tiles ───────────────────────────────────────────────────────────
@@ -205,7 +232,7 @@ func _rebuild_tiles() -> void:
 		rate_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
 		if cycle_ticks > 0:
 			var per_day: float = float(spec_qty) * instance.get_effective_efficiency() * ticks_per_day / float(cycle_ticks)
-			rate_lbl.text = "~%d/day" % int(per_day)  # TODO: localize
+			rate_lbl.text = "~%d/day" % roundi(per_day)  # TODO: localize
 			rate_lbl.tooltip_text = "%.2f/day" % per_day
 		wrapper.add_child(rate_lbl)
 
@@ -215,6 +242,8 @@ func _rebuild_tiles() -> void:
 		_flow.add_tile(wrapper)   # enters tree → _ready() fires before setup()
 		tile.setup(res_id, buf_qty, "input", _building_id, instance.tile)
 		_input_tiles[res_id] = tile
+		_input_rate_labels[res_id] = rate_lbl
+		_input_base_qty[res_id] = spec_qty
 
 	# ── Arrow separator (only when there are inputs) ──────────────────────────
 	if not inputs.is_empty():
@@ -242,7 +271,7 @@ func _rebuild_tiles() -> void:
 		if cycle_ticks > 0:
 			var per_day: float = (float(base_qty) * instance.get_effective_efficiency()) \
 					* ticks_per_day / float(cycle_ticks)
-			rate_lbl.text = "~%d/day" % int(per_day)  # TODO: localize
+			rate_lbl.text = "~%d/day" % roundi(per_day)  # TODO: localize
 			rate_lbl.tooltip_text = "%.2f/day" % per_day
 		wrapper.add_child(rate_lbl)
 
@@ -252,6 +281,8 @@ func _rebuild_tiles() -> void:
 		_flow.add_tile(wrapper)   # enters tree → _ready() fires before setup()
 		tile.setup(res_id, buf_qty, "output", _building_id, instance.tile)
 		_output_tiles[res_id] = tile
+		_output_rate_labels[res_id] = rate_lbl
+		_output_base_qty[res_id] = base_qty
 
 
 
