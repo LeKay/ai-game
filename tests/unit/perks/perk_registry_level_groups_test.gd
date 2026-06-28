@@ -52,25 +52,37 @@ func test_level_2_can_produce_three_cards_with_same_good() -> void:
 	assert_bool(produced_three_cards).is_true()
 
 
-# ---- AC-5: Level 3+ uses the full perk-eligible pool ------------------------
+# ---- Level 3 → group 2 (pottery, leather, furniture) -----------------------
 
-func test_level_3_uses_full_pool() -> void:
+func test_level_3_draws_only_from_group_2() -> void:
 	# NPC mit Profession + bereits 1 Perk → kein Calling-Pfad mehr;
-	# generate_choices nimmt LEVEL_PERK_GROUPS.get(3, 0) == 0 → voller Pool.
+	# generate_choices nimmt LEVEL_PERK_GROUPS.get(3, 0) == 2 → nur Gruppe-2-Goods.
 	var first_perk := {&"perk_id": &"berufung", &"good": &"clothing", &"building_type": 0}
 	var npc := _stub(3, BuildingRegistry.BuildingType.LUMBER_CAMP, [first_perk])
+	var allowed: Array[StringName] = [&"pottery", &"leather", &"furniture"]
 
-	var seen_non_clothing := false
-	for _i in 100:
+	for _i in 50:
+		var cards: Array = PerkRegistry.generate_choices(npc, 3)
+		assert_array(cards).is_not_empty()
+		for card: Dictionary in cards:
+			var good: StringName = card[&"good"]
+			if good == &"":
+				continue  # non-good-bound perk
+			assert_array(allowed).contains([good])
+
+
+func test_level_3_eventually_draws_each_group_2_member() -> void:
+	# Sanity: Pool ist tatsächlich {pottery, leather, furniture}, nicht nur ein Element.
+	var first_perk := {&"perk_id": &"berufung", &"good": &"clothing", &"building_type": 0}
+	var npc := _stub(3, BuildingRegistry.BuildingType.LUMBER_CAMP, [first_perk])
+	var seen: Dictionary = {&"pottery": false, &"leather": false, &"furniture": false}
+	for _i in 200:
 		var cards: Array = PerkRegistry.generate_choices(npc, 3)
 		for card: Dictionary in cards:
 			var good: StringName = card[&"good"]
-			if good != &"" and good != &"clothing":
-				seen_non_clothing = true
-				break
-		if seen_non_clothing:
+			if seen.has(good):
+				seen[good] = true
+		if seen[&"pottery"] and seen[&"leather"] and seen[&"furniture"]:
 			break
-	# Mit dem vollen Pool (Plank, Cloth, Clothing, Axe, Spindle, Pottery, Salt) und
-	# 100 Iterationen × bis zu 3 good-bound Karten ist es extrem unwahrscheinlich,
-	# dass nur clothing gezogen wird — würde auf eine fehlerhafte Pool-Auswahl deuten.
-	assert_bool(seen_non_clothing).is_true()
+	for id: StringName in seen:
+		assert_bool(seen[id]).is_true()

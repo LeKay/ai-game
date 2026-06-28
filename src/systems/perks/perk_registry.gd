@@ -33,6 +33,7 @@ const POOL_INPUT_PROCESSING := &"input_processing"
 ## docs/superpowers/specs/2026-06-28-perk-good-groups-design.md.
 const LEVEL_PERK_GROUPS: Dictionary = {
 	2: 1,
+	3: 2,
 }
 
 # ---- Perk catalog (data only) -------------------------------------------------
