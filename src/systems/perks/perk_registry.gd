@@ -25,6 +25,16 @@ const EFFECT_PROFESSION_XP    := &"profession_xp"      # set profession + +% wor
 const POOL_PRODUCTION_ALL := &"production_all"
 const POOL_INPUT_PROCESSING := &"input_processing"
 
+# ---- Level → perk-group mapping -----------------------------------------------
+
+## At a given NPC level (post-level-up), perk cards' bound goods are drawn ONLY
+## from resources whose perk_group matches this value. Levels not listed fall
+## back to the full perk-eligible pool (legacy behaviour). See
+## docs/superpowers/specs/2026-06-28-perk-good-groups-design.md.
+const LEVEL_PERK_GROUPS: Dictionary = {
+	2: 1,
+}
+
 # ---- Perk catalog (data only) -------------------------------------------------
 ## Keys: id, name, desc, effect, magnitude, good_bound, building_bound, pool,
 ## is_profession, requires_profession.
@@ -139,6 +149,19 @@ static func get_def(perk_id: StringName) -> Dictionary:
 	return {}
 
 # ---- Card generation ----------------------------------------------------------
+
+## Returns the perk-eligible goods pool a level-up at `level` should draw from.
+## Falls back to the full perk-eligible pool when no group is configured for this
+## level OR when the configured group is empty (safety: never soft-lock).
+static func _goods_pool_for_level(level: int) -> Array[StringName]:
+	var group: int = int(LEVEL_PERK_GROUPS.get(level, 0))
+	if group <= 0:
+		return ResourceRegistry.get_perk_eligible_ids()
+	var pool: Array[StringName] = ResourceRegistry.get_perk_eligible_ids_for_group(group)
+	if pool.is_empty():
+		return ResourceRegistry.get_perk_eligible_ids()
+	return pool
+
 
 ## Builds up to `count` distinct perk cards for a level-up choice, respecting the profession gate.
 ## `npc` is an NPCSystem.NPCInstance (typed Object to avoid load-order coupling). Each card is a
