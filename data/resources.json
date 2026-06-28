@@ -115,7 +115,6 @@
 	{
 	  "id": "plank",
 	  "display_name": "Plank",
-	  "perk_eligible": true,
 	  "category": "production_good",
 	  "subcategory": "intermediate",
 	  "stack_limit": 99,
@@ -139,7 +138,6 @@
 	{
 	  "id": "cloth",
 	  "display_name": "Cloth",
-	  "perk_eligible": true,
 	  "category": "production_good",
 	  "subcategory": "intermediate",
 	  "stack_limit": 99,
@@ -155,7 +153,6 @@
 	{
 	  "id": "clothing",
 	  "display_name": "Clothing",
-	  "perk_eligible": true,
 	  "perk_group": 1,
 	  "category": "production_good",
 	  "subcategory": "trade_good",
@@ -174,7 +171,6 @@
 	{
 	  "id": "axe",
 	  "display_name": "Axe",
-	  "perk_eligible": true,
 	  "category": "production_good",
 	  "subcategory": "tool",
 	  "stack_limit": 10,
@@ -209,7 +205,6 @@
 	{
 	  "id": "spindle",
 	  "display_name": "Spindle",
-	  "perk_eligible": true,
 	  "category": "production_good",
 	  "subcategory": "tool",
 	  "stack_limit": 10,
@@ -558,7 +553,6 @@
 	{
 	  "id": "pottery",
 	  "display_name": "Pottery",
-	  "perk_eligible": true,
 	  "perk_group": 2,
 	  "category": "production_good",
 	  "subcategory": "trade_good",
@@ -594,7 +588,6 @@
 	{
 	  "id": "leather",
 	  "display_name": "Leather",
-	  "perk_eligible": true,
 	  "perk_group": 2,
 	  "category": "production_good",
 	  "subcategory": "intermediate",
@@ -611,7 +604,6 @@
 	{
 	  "id": "furniture",
 	  "display_name": "Furniture",
-	  "perk_eligible": true,
 	  "perk_group": 2,
 	  "category": "production_good",
 	  "subcategory": "intermediate",
@@ -715,7 +707,6 @@
 	{
 	  "id": "salt",
 	  "display_name": "Salt",
-	  "perk_eligible": true,
 	  "category": "production_good",
 	  "subcategory": "trade_good",
 	  "stack_limit": 99,

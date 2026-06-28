@@ -15,7 +15,7 @@ func _make_registry() -> ResourceRegistry:
 	return reg
 
 
-func test_group_1_returns_only_perk_eligible_non_deprecated_members() -> void:
+func test_group_1_returns_only_non_deprecated_members() -> void:
 	var reg := _make_registry()
 	var ids: Array[StringName] = reg.get_perk_eligible_ids_for_group(1)
 	assert_array(ids).contains_exactly_in_any_order([&"alpha", &"beta"])
@@ -28,6 +28,8 @@ func test_group_2_returns_single_member() -> void:
 
 
 func test_group_0_returns_resources_without_group_assignment() -> void:
+	# perk_group == 0 (default) means "not perk-eligible". delta is the only
+	# fixture entry without a perk_group field.
 	var reg := _make_registry()
 	var ids: Array[StringName] = reg.get_perk_eligible_ids_for_group(0)
 	assert_array(ids).contains_exactly_in_any_order([&"delta"])

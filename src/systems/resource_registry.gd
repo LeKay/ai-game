@@ -37,10 +37,9 @@ class _ResourceDefinition:
 	var world_icon_path: String = ""
 	## Fallback dot color when world_icon_path art is missing.
 	var fallback_color: Color = Color(0.8, 0.8, 0.8)
-	## Eligible to be drawn as a perk's bound good (Perk System). Default false.
-	var perk_eligible: bool = false
-	## Perk-Gut-Gruppe (Perk System). 0 = nicht zugeordnet.
-	## Nur relevant wenn perk_eligible == true. Mapping Level→Gruppe in perk_registry.gd.
+	## Perk-Gut-Gruppe (Perk System). 0 = nicht perk-fähig.
+	## Eine Ressource ist perk-eligible genau dann, wenn perk_group > 0. Mapping
+	## Level→Gruppe in perk_registry.gd (LEVEL_PERK_GROUPS).
 	var perk_group: int = 0
 	## True for resources planned but not yet wired into progression (hidden from all UI lists).
 	var placeholder: bool = false
@@ -206,24 +205,26 @@ func get_nutrition(id: StringName) -> float:
 	return def.nutrition if def != null else 0.0
 
 
-## Returns all non-deprecated resource IDs flagged `perk_eligible` (Perk System bound-good pool).
+## Returns all non-deprecated resource IDs that belong to any perk group (perk_group > 0).
+## A resource is perk-eligible iff it has been assigned to a group.
 func get_perk_eligible_ids() -> Array[StringName]:
 	var result: Array[StringName] = []
 	for id: StringName in _definitions:
 		var def: _ResourceDefinition = _definitions[id]
-		if def.perk_eligible and not def.deprecated:
+		if def.perk_group > 0 and not def.deprecated:
 			result.append(id)
 	result.sort()
 	return result
 
 
-## Returns perk-eligible (non-deprecated) resource IDs whose perk_group matches `group`.
-## Used by PerkRegistry to draw the bound good from a level-restricted pool.
+## Returns non-deprecated resource IDs whose perk_group matches `group`. Callers should
+## pass `group > 0`; passing 0 returns ungrouped (non-eligible) resources and is only
+## meaningful for diagnostics.
 func get_perk_eligible_ids_for_group(group: int) -> Array[StringName]:
 	var result: Array[StringName] = []
 	for id: StringName in _definitions:
 		var def: _ResourceDefinition = _definitions[id]
-		if def.perk_eligible and not def.deprecated and def.perk_group == group:
+		if def.perk_group == group and not def.deprecated:
 			result.append(id)
 	result.sort()
 	return result
@@ -368,9 +369,6 @@ func _apply_optional_fields(def: _ResourceDefinition, entry: Dictionary) -> void
 	var raw_fallback: Variant = entry.get("fallback_color")
 	if raw_fallback is Array and raw_fallback.size() >= 3:
 		def.fallback_color = Color(float(raw_fallback[0]), float(raw_fallback[1]), float(raw_fallback[2]))
-
-	var raw_perk_eligible: Variant = entry.get("perk_eligible")
-	def.perk_eligible = raw_perk_eligible if raw_perk_eligible is bool else false
 
 	var raw_perk_group: Variant = entry.get("perk_group")
 	def.perk_group = int(raw_perk_group) if raw_perk_group is float or raw_perk_group is int else 0

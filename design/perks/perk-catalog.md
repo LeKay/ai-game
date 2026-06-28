@@ -15,8 +15,9 @@
 - **Bound good (Ware)**: every perk card is tied to a **randomly chosen good**. The perk's effect
   is only active while the NPC is **supplied that good**, assigned in the NPC detail UI exactly
   like food (consumed per day).
-- **Eligible goods**: only goods **explicitly flagged** in the data structure (e.g.
-  `perk_eligible: true` in `data/resources.json`) can be drawn as a perk's bound good.
+- **Eligible goods**: only goods **assigned to a perk group** (`perk_group: <int>` in
+  `data/resources.json`) can be drawn as a perk's bound good. The group selected for a given
+  level-up is defined by `LEVEL_PERK_GROUPS` in `src/systems/perks/perk_registry.gd`.
 - **Effect domain**: perks change **balancing** — e.g. less nutrition needed per day, more XP in a
   profession, higher max efficiency, faster travel, etc. Perks are permanent once chosen (the good
   supply gates whether the bonus is *currently* active).
@@ -55,8 +56,9 @@
 
 Phased build (no GDD; catalog is the design source).
 
-- **Phase 1 — Foundation ✅ (parse-verified):** `perk_eligible` flag in `resources.json` (6 goods) +
-  `ResourceRegistry.get_perk_eligible_ids()`; `PerkRegistry` (`src/systems/perks/perk_registry.gd`)
+- **Phase 1 — Foundation ✅ (parse-verified):** `perk_group` field in `resources.json` (group-tagged
+  goods are perk-eligible) + `ResourceRegistry.get_perk_eligible_ids_for_group(group)`;
+  `PerkRegistry` (`src/systems/perks/perk_registry.gd`)
   with the 10 perk defs + `generate_choices(npc)` (profession-gated) + `building_type_name`;
   `NPCInstance` gains `profession`/`perks`/`pending_perk_choices`/`active_perks` + serialization;
   `grant_xp` queues one perk choice per level gained; `apply_perk_choice()`/`skip_perk_choice()` +

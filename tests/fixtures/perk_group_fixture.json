@@ -9,7 +9,6 @@
       "weight": 1.0,
       "base_value": 1,
       "max_charge": 100.0,
-      "perk_eligible": true,
       "perk_group": 1,
       "icon_path": "tests/fixtures/_stub.png"
     },
@@ -21,7 +20,6 @@
       "weight": 1.0,
       "base_value": 1,
       "max_charge": 100.0,
-      "perk_eligible": true,
       "perk_group": 1,
       "icon_path": "tests/fixtures/_stub.png"
     },
@@ -33,7 +31,6 @@
       "weight": 1.0,
       "base_value": 1,
       "max_charge": 100.0,
-      "perk_eligible": true,
       "perk_group": 2,
       "icon_path": "tests/fixtures/_stub.png"
     },
@@ -45,19 +42,6 @@
       "weight": 1.0,
       "base_value": 1,
       "max_charge": 100.0,
-      "perk_eligible": true,
-      "icon_path": "tests/fixtures/_stub.png"
-    },
-    {
-      "id": "epsilon",
-      "display_name": "Epsilon",
-      "category": "production_good",
-      "stack_limit": 99,
-      "weight": 1.0,
-      "base_value": 1,
-      "max_charge": 100.0,
-      "perk_eligible": false,
-      "perk_group": 1,
       "icon_path": "tests/fixtures/_stub.png"
     },
     {
@@ -68,7 +52,6 @@
       "weight": 1.0,
       "base_value": 1,
       "max_charge": 100.0,
-      "perk_eligible": true,
       "perk_group": 1,
       "deprecated": true,
       "icon_path": "tests/fixtures/_stub.png"
