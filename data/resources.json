@@ -156,6 +156,7 @@
 	  "id": "clothing",
 	  "display_name": "Clothing",
 	  "perk_eligible": true,
+	  "perk_group": 1,
 	  "category": "production_good",
 	  "subcategory": "trade_good",
 	  "stack_limit": 50,
