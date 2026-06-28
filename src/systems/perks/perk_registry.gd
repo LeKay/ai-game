@@ -167,7 +167,9 @@ static func _goods_pool_for_level(level: int) -> Array[StringName]:
 ## `npc` is an NPCSystem.NPCInstance (typed Object to avoid load-order coupling). Each card is a
 ## Dictionary: {perk_id, name, desc, effect, magnitude, good, building_type}.
 ## `good` is a perk-eligible resource id; `building_type` is an int (or -1 if not building-bound).
-## Returns fewer than `count` cards only if the candidate or good pools are too small.
+## Returns fewer than `count` cards only if the candidate pool is too small. The goods pool is
+## level-restricted via LEVEL_PERK_GROUPS — when restricted, the same good may appear on multiple
+## cards (cards differ in perk and/or building).
 static func generate_choices(npc: Object, count: int = 3) -> Array:
 	var has_profession: bool = npc != null and int(npc.profession) != -1
 
@@ -176,7 +178,7 @@ static func generate_choices(npc: Object, count: int = 3) -> Array:
 	# Falls through to the normal mix only if no production building is unlocked yet, so the choice
 	# is never empty.
 	if npc != null and not has_profession and (npc.perks as Array).is_empty():
-		var calling_cards: Array = _calling_cards(count)
+		var calling_cards: Array = _calling_cards(npc, count)
 		if not calling_cards.is_empty():
 			return calling_cards
 
@@ -194,22 +196,21 @@ static func generate_choices(npc: Object, count: int = 3) -> Array:
 		candidates.append(p)
 	candidates.shuffle()
 
-	# 2) Pool of perk-eligible goods (distinct per draw).
-	var goods: Array[StringName] = ResourceRegistry.get_perk_eligible_ids()
-	goods.shuffle()
+	# 2) Goods pool restricted by NPC level (LEVEL_PERK_GROUPS). May be small — duplicate goods
+	#    across cards are allowed (cards still differ in perk).
+	var level: int = int(npc.level) if npc != null else 0
+	var goods: Array[StringName] = _goods_pool_for_level(level)
 
 	# 3) Build up to `count` distinct cards.
 	var cards: Array = []
-	var good_idx: int = 0
 	for p: Dictionary in candidates:
 		if cards.size() >= count:
 			break
 		var good: StringName = &""
 		if p["good_bound"]:
-			if good_idx >= goods.size():
-				continue  # ran out of distinct goods
-			good = goods[good_idx]
-			good_idx += 1
+			if goods.is_empty():
+				continue  # no eligible goods at all — cannot bind this perk
+			good = goods[randi() % goods.size()]
 		var building_type: int = -1
 		if p["building_bound"]:
 			if p["is_profession"]:
@@ -232,27 +233,26 @@ static func generate_choices(npc: Object, count: int = 3) -> Array:
 
 
 ## Builds up to `count` Calling (profession) cards, each bound to a DISTINCT already-unlocked
-## production building and a distinct perk-eligible good. Empty if no production building is
+## production building. The bound good is drawn from the NPC's level-restricted pool
+## (LEVEL_PERK_GROUPS) — duplicates across cards are allowed. Empty if no production building is
 ## unlocked yet. Used for the first level-up's forced profession choice.
-static func _calling_cards(count: int) -> Array:
+static func _calling_cards(npc: Object, count: int) -> Array:
 	var def: Dictionary = get_def(&"berufung")
 	if def.is_empty():
 		return []
 	var pros: Array[int] = unlocked_production_types()
 	pros.shuffle()
-	var goods: Array[StringName] = ResourceRegistry.get_perk_eligible_ids()
-	goods.shuffle()
+	var level: int = int(npc.level) if npc != null else 0
+	var goods: Array[StringName] = _goods_pool_for_level(level)
 	var cards: Array = []
-	var good_idx: int = 0
 	for t: int in pros:
 		if cards.size() >= count:
 			break
 		var good: StringName = &""
 		if def["good_bound"]:
-			if good_idx >= goods.size():
-				break  # ran out of distinct goods
-			good = goods[good_idx]
-			good_idx += 1
+			if goods.is_empty():
+				break  # no eligible goods at all
+			good = goods[randi() % goods.size()]
 		cards.append({
 			&"perk_id": def["id"],
 			&"name": def["name"],
