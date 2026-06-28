@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "resources": [
+    {
+      "id": "alpha",
+      "display_name": "Alpha",
+      "category": "production_good",
+      "stack_limit": 99,
+      "weight": 1.0,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "perk_eligible": true,
+      "perk_group": 1,
+      "icon_path": "tests/fixtures/_stub.png"
+    },
+    {
+      "id": "beta",
+      "display_name": "Beta",
+      "category": "production_good",
+      "stack_limit": 99,
+      "weight": 1.0,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "perk_eligible": true,
+      "perk_group": 1,
+      "icon_path": "tests/fixtures/_stub.png"
+    },
+    {
+      "id": "gamma",
+      "display_name": "Gamma",
+      "category": "production_good",
+      "stack_limit": 99,
+      "weight": 1.0,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "perk_eligible": true,
+      "perk_group": 2,
+      "icon_path": "tests/fixtures/_stub.png"
+    },
+    {
+      "id": "delta",
+      "display_name": "Delta",
+      "category": "production_good",
+      "stack_limit": 99,
+      "weight": 1.0,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "perk_eligible": true,
+      "icon_path": "tests/fixtures/_stub.png"
+    },
+    {
+      "id": "epsilon",
+      "display_name": "Epsilon",
+      "category": "production_good",
+      "stack_limit": 99,
+      "weight": 1.0,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "perk_eligible": false,
+      "perk_group": 1,
+      "icon_path": "tests/fixtures/_stub.png"
+    },
+    {
+      "id": "zeta",
+      "display_name": "Zeta",
+      "category": "production_good",
+      "stack_limit": 99,
+      "weight": 1.0,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "perk_eligible": true,
+      "perk_group": 1,
+      "deprecated": true,
+      "icon_path": "tests/fixtures/_stub.png"
+    }
+  ]
+}
