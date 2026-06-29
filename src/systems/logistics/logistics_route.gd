@@ -68,6 +68,11 @@ var deactivation_reason: String = ""
 ## Item this carrier is configured to pick up from a storage source. &"" for non-storage sources.
 var source_item_id: StringName = &""
 
+## Ticks the carrier has been stuck in WAITING_DESTINATION. Reset on entry, incremented
+## per tick while waiting. When it crosses WAITING_DESTINATION_RESCUE_TICKS the carrier
+## dumps cargo on the map and moves on (anti-lockup, 2026-06-28).
+var waiting_dest_ticks: int = 0
+
 # ---- Observed day stats (post-hoc, reset each day) --------------------------
 
 ## Items delivered on this route during the last complete day.

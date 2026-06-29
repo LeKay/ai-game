@@ -70,6 +70,10 @@ func _ready() -> void:
 	_action_feedback.setup(self, _drag_controller, _resource_badges)
 	_drag_controller.set_action(_action_feedback)
 	WorldSaveManager.register_world_grid(grid)
+	WorldSaveManager.register_player_character(_player)
+	var _cam := get_node_or_null("../CameraController") as CameraController
+	if _cam != null:
+		WorldSaveManager.register_camera_controller(_cam)
 	_interaction_panel = _TILE_PANEL_SCENE.instantiate() as TileInteractionPanel
 	add_child(_interaction_panel)
 	_interaction_panel.world_click_at.connect(_on_panel_world_click)
@@ -294,21 +298,26 @@ func _update_map_select_highlight() -> void:
 	_map_select_highlight.visible = true
 
 
-## Wires BuildingDetailPanel.storage_drag_started to this scene.
+## Wires Buildings Drawer drag signals and route-lines to this scene.
+## BuildingDetailPanel has been replaced by BuildingsDrawer (CanvasLayer).
+## Drag signals are forwarded through BuildingsDrawerContent → BuildingDetailView.
 func _wire_building_detail() -> void:
 	var hud: HUD = get_tree().get_first_node_in_group(&"hud") as HUD
 	_hud = hud
 	if hud == null:
-		push_warning("[MapRoot] HUD not found — storage drag not wired")
+		push_warning("[MapRoot] HUD not found — drag signals not wired")
 		return
-	var panel: BuildingDetailPanel = hud.get_node_or_null("BuildingDetailPanel") as BuildingDetailPanel
-	if panel == null:
-		push_warning("[MapRoot] BuildingDetailPanel not found in HUD — storage drag not wired")
-		return
-	panel.storage_drag_started.connect(_drag_controller._on_storage_drag_started)
-	panel.input_drag_started.connect(_drag_controller._on_input_drag_started)
-	panel.output_drag_started.connect(_drag_controller._on_output_drag_started)
 	hud.set_route_lines(_route_lines)
+	var drawer: BuildingsDrawer = hud.get_node_or_null("BuildingsDrawer") as BuildingsDrawer
+	if drawer == null:
+		push_warning("[MapRoot] BuildingsDrawer not found in HUD — storage drag not wired")
+	else:
+		_drag_controller.set_buildings_drawer(drawer)
+		var detail_view: BuildingDetailView = drawer._content._detail_view
+		if detail_view != null:
+			detail_view.storage_drag_started.connect(_drag_controller._on_storage_drag_started)
+			detail_view.input_drag_started.connect(_drag_controller._on_input_drag_started)
+			detail_view.output_drag_started.connect(_drag_controller._on_output_drag_started)
 	if _visiting_coord != Vector2i(-1, -1):
 		_apply_visiting_hud_mode()
 

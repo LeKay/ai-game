@@ -150,6 +150,12 @@ class BuildingInstance:
 	var storage_min_limits: Dictionary[StringName, int] = {}
 	## Upgrade IDs currently installed on this building (e.g. &"crafting_bench").
 	var active_upgrades: Array[StringName] = []
+	## Outstanding input-buffer reservations, keyed by holder_id (e.g. logistics route id
+	## or NPC id). Each entry is {resource_id: StringName, quantity: int}. One per holder.
+	## Reservations count against the per-resource input_capacity in is_input_full() and
+	## receive_input_from_world(), guaranteeing the holder can deposit on arrival even
+	## when other actors try to fill the slot in the meantime.
+	var input_reservations: Dictionary = {}
 
 	## Returns true if the named upgrade is currently installed on this building.
 	func has_upgrade(upgrade_id: StringName) -> bool:
@@ -1208,6 +1214,7 @@ func initiate_build(building_type: int, tile: Vector2i) -> int:
 	_refresh_water_bonus(instance)
 	_spawn_visual(instance)
 	_insert_sorted(instance)
+	_init_default_recipe(instance)
 	building_placed.emit(building_id, building_type, tile)
 	return PlacementResult.SUCCESS
 
@@ -1250,6 +1257,7 @@ func place_starter_building(building_type: int, tile: Vector2i) -> int:
 	if building_type == BuildingType.COLLECTION_POINT or building_type == BuildingType.STORAGE_BUILDING:
 		_setup_storage_for(instance)
 	_insert_sorted(instance)
+	_init_default_recipe(instance)
 	building_placed.emit(building_id, building_type, tile)
 	return PlacementResult.SUCCESS
 
@@ -1404,17 +1412,124 @@ func remove_from_input(building_id: String, resource_id: StringName, qty: int) -
 ## Adds qty units directly to the building's input_buffer without consuming from
 ## any InventoryContainer. The caller must have already removed the resource from
 ## its source (WorldGrid tile).
-func receive_input_from_world(building_id: String, resource_id: StringName, qty: int) -> bool:
+##
+## When `holder_id` is non-empty and that holder has an outstanding input reservation
+## for `resource_id`, the holder's reservation absorbs the deposit (up to its reserved
+## quantity); any excess must still fit in unreserved free capacity. Holders without
+## a reservation, and foreign depositors, only see the unreserved free capacity —
+## attempts that would exceed it are rejected (return false), preventing them from
+## eating space promised to in-flight carriers.
+func receive_input_from_world(building_id: String, resource_id: StringName, qty: int,
+		holder_id: StringName = &"") -> bool:
 	var instance: BuildingInstance = get_building_instance(building_id)
 	if instance == null:
 		return false
 	var allowed: Array[StringName] = get_active_input_resource_ids(building_id)
 	if not resource_id in allowed:
 		return false
+	if not _input_deposit_fits(instance, resource_id, qty, holder_id):
+		return false
 	instance.input_buffer[resource_id] = instance.input_buffer.get(resource_id, 0.0) + float(qty)
 	instance.input_pending = true
+	_consume_input_reservation(instance, holder_id, qty)
 	building_input_changed.emit(building_id)
 	return true
+
+
+## True when depositing `qty` of `resource_id` into `instance.input_buffer` fits within
+## input_capacity, accounting for foreign reservations. input_capacity == 0 means no limit.
+##
+## When no foreign reservation exists for this resource, the deposit is always allowed —
+## this preserves the legacy behaviour where the input_buffer could exceed input_capacity
+## (player drag "return to source" can over-fill the slot, by design). The reservation
+## check only kicks in when somebody actually holds space, ensuring foreign deposits
+## (including drag put-back) cannot eat a carrier's promised slot.
+func _input_deposit_fits(instance: BuildingInstance, resource_id: StringName, qty: int,
+		holder_id: StringName) -> bool:
+	if not RECIPES.has(instance.type):
+		return true
+	var input_capacity: int = get_active_recipe(instance).get("input_capacity", 0)
+	if input_capacity <= 0:
+		return true
+	var foreign_reserved: int = _input_reserved_for(instance, resource_id) \
+			- _input_reserved_for_holder_and_resource(instance, holder_id, resource_id)
+	if foreign_reserved <= 0:
+		return true  # No competing reservation — legacy soft-cap behaviour.
+	var used: float = instance.input_buffer.get(resource_id, 0.0)
+	return used + float(foreign_reserved) + float(qty) <= float(input_capacity)
+
+
+## Decrements `holder_id`'s input reservation (for matching resource_id) by `qty`.
+## Releases the reservation when it hits zero. No-op if absent or resource mismatch.
+func _consume_input_reservation(instance: BuildingInstance, holder_id: StringName, qty: int) -> void:
+	if holder_id == &"" or not instance.input_reservations.has(holder_id):
+		return
+	var entry: Dictionary = instance.input_reservations[holder_id]
+	var remaining: int = int(entry.get("quantity", 0)) - qty
+	if remaining <= 0:
+		instance.input_reservations.erase(holder_id)
+	else:
+		entry["quantity"] = remaining
+
+
+## Sum of all reservations on `instance` for a specific resource (across all holders).
+func _input_reserved_for(instance: BuildingInstance, resource_id: StringName) -> int:
+	var total: int = 0
+	for entry: Dictionary in instance.input_reservations.values():
+		if entry.get("resource_id", &"") == resource_id:
+			total += int(entry.get("quantity", 0))
+	return total
+
+
+## Returns the holder's reservation quantity iff its resource_id matches `resource_id`.
+func _input_reserved_for_holder_and_resource(instance: BuildingInstance,
+		holder_id: StringName, resource_id: StringName) -> int:
+	if holder_id == &"" or not instance.input_reservations.has(holder_id):
+		return 0
+	var entry: Dictionary = instance.input_reservations[holder_id]
+	if entry.get("resource_id", &"") != resource_id:
+		return 0
+	return int(entry.get("quantity", 0))
+
+
+## Reserves `qty` units of `resource_id` in the building's input slot on behalf of
+## `holder_id`. Replaces any previous reservation by the same holder (one per holder).
+## Returns false when the reservation would exceed input_capacity for that resource.
+func reserve_input_slot(building_id: String, resource_id: StringName,
+		holder_id: StringName, qty: int) -> bool:
+	if qty <= 0:
+		return false
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null:
+		return false
+	if not RECIPES.has(instance.type):
+		return false
+	var input_capacity: int = get_active_recipe(instance).get("input_capacity", 0)
+	if input_capacity <= 0:
+		return false  # No-limit slots cannot be reserved (and don't need to be).
+	var existing: int = _input_reserved_for_holder_and_resource(instance, holder_id, resource_id)
+	var foreign_reserved: int = _input_reserved_for(instance, resource_id) - existing
+	var used: float = instance.input_buffer.get(resource_id, 0.0)
+	if used + float(foreign_reserved) + float(qty) > float(input_capacity):
+		return false
+	instance.input_reservations[holder_id] = {"resource_id": resource_id, "quantity": qty}
+	return true
+
+
+## Releases the reservation held by `holder_id` on this building. No-op if absent.
+func release_input_reservation(building_id: String, holder_id: StringName) -> void:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null:
+		return
+	instance.input_reservations.erase(holder_id)
+
+
+## Sum of all reservations on this building for a specific resource.
+func get_input_reserved(building_id: String, resource_id: StringName) -> int:
+	var instance: BuildingInstance = get_building_instance(building_id)
+	if instance == null:
+		return 0
+	return _input_reserved_for(instance, resource_id)
 
 
 ## Returns the first container ID that holds at least one unit of resource_id.
@@ -1484,17 +1599,21 @@ func get_available_recipe_indices(building_id: String) -> Array[int]:
 	var recipes: Array = RECIPES.get(instance.type, [])
 	if recipes.is_empty():
 		return []
-	if instance.type != BuildingType.GATHERING_HUT and instance.type != BuildingType.FARM:
-		var all_indices: Array[int] = []
-		for i: int in range(recipes.size()):
-			all_indices.append(i)
-		return all_indices
 	var result: Array[int] = []
 	for i: int in range(recipes.size()):
-		for res_id: StringName in recipes[i].get("output", {}).keys():
-			if instance.gathering_output.has(res_id):
-				result.append(i)
-				break
+		var recipe: Dictionary = recipes[i]
+		var recipe_id: StringName = recipe.get("id", StringName(str(i)))
+		if not ProgressionSystem.is_building_recipe_unlocked(instance.type, recipe_id):
+			continue
+		if instance.type == BuildingType.GATHERING_HUT or instance.type == BuildingType.FARM:
+			var included := false
+			for res_id: StringName in recipe.get("output", {}).keys():
+				if instance.gathering_output.has(res_id):
+					included = true
+					break
+			if not included:
+				continue
+		result.append(i)
 	return result
 
 
@@ -1741,6 +1860,15 @@ func _setup_storage_for(instance: BuildingInstance) -> void:
 	instance.assigned_container_id = container_id
 
 
+## Sets active_recipe_index to the first progression-unlocked recipe for the building type.
+## Must be called after the instance is registered in _all_buildings so that
+## get_available_recipe_indices() can resolve it.
+func _init_default_recipe(instance: BuildingInstance) -> void:
+	var available: Array[int] = get_available_recipe_indices(instance.building_id)
+	if not available.is_empty():
+		instance.active_recipe_index = available[0]
+
+
 ## Appends instance to _all_buildings and maintains ascending building_id sort order.
 func _insert_sorted(instance: BuildingInstance) -> void:
 	_all_buildings.append(instance)
@@ -1855,9 +1983,16 @@ func get_output_buffer_resource(building_id: String) -> StringName:
 
 
 ## Returns true when the given resource slot in the building's input buffer has reached
-## its per-slot input_capacity. input_capacity == 0 means no limit.
-## Used by LogisticsSystem to block carrier delivery when the target slot is full.
-func is_input_full(building_id: String, resource_id: StringName) -> bool:
+## its per-slot input_capacity, accounting for outstanding reservations from in-flight
+## carriers. input_capacity == 0 means no limit. Used by LogisticsSystem to block
+## carrier delivery / pre-trip pickup when the target slot is full or fully promised.
+##
+## When `holder_id` is non-empty, that holder's own reservation is excluded — the holder
+## should be able to land on space it already reserved. Foreign reservations always count
+## as "occupied" from the holder's perspective. Public callers without a holder context
+## see total occupancy (used + all reservations).
+func is_input_full(building_id: String, resource_id: StringName,
+		holder_id: StringName = &"") -> bool:
 	var instance: BuildingInstance = get_building_instance(building_id)
 	if instance == null:
 		return false
@@ -1866,7 +2001,10 @@ func is_input_full(building_id: String, resource_id: StringName) -> bool:
 	var input_capacity: int = get_active_recipe(instance).get("input_capacity", 0)
 	if input_capacity <= 0:
 		return false
-	return instance.input_buffer.get(resource_id, 0.0) >= float(input_capacity)
+	var used: float = instance.input_buffer.get(resource_id, 0.0)
+	var reserved: int = _input_reserved_for(instance, resource_id) \
+			- _input_reserved_for_holder_and_resource(instance, holder_id, resource_id)
+	return used + float(reserved) >= float(input_capacity)
 
 
 ## Returns the quantity of a specific resource in the output buffer, or 0 if absent.

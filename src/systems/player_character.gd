@@ -249,13 +249,13 @@ const FORAGE_TABLE: Array = [
 
 ## Seed byproduct table: action_type → [chance 0-100, seed_resource_id].
 const SEED_BYPRODUCT_CHANCES: Dictionary = {
-	ManualActionType.CHOP_TREE:     [5,  &"tree_seed"],
-	ManualActionType.PICK_BERRIES:  [5,  &"berry_seed"],
-	ManualActionType.HARVEST_FIBER: [5,  &"grass_seed"],
-	ManualActionType.CLEAR_TREE:    [20, &"tree_seed"],
-	ManualActionType.CLEAR_BERRY:   [20, &"berry_seed"],
-	ManualActionType.CLEAR_GRASS:   [20, &"grass_seed"],
-	ManualActionType.HARVEST_WHEAT: [5,  &"wheat_seed"],
+	ManualActionType.CHOP_TREE:     [7.5, &"tree_seed"],
+	ManualActionType.PICK_BERRIES:  [7.5, &"berry_seed"],
+	ManualActionType.HARVEST_FIBER: [7.5, &"grass_seed"],
+	ManualActionType.CLEAR_TREE:    [20,  &"tree_seed"],
+	ManualActionType.CLEAR_BERRY:   [20,  &"berry_seed"],
+	ManualActionType.CLEAR_GRASS:   [20,  &"grass_seed"],
+	ManualActionType.HARVEST_WHEAT: [7.5, &"wheat_seed"],
 	ManualActionType.CLEAR_WHEAT:   [20, &"wheat_seed"],
 }
 
@@ -1068,3 +1068,91 @@ func get_action_output_resource(action_type: int) -> StringName:
 	if config == null:
 		return &""
 	return config.output_resource
+
+
+# ── Persistence ──────────────────────────────────────────────────────────────
+
+## Serializes energy, active action slot, and queued actions.
+func serialize() -> Dictionary:
+	var active: Dictionary = {
+		"state": _action_slot.state,
+		"action_type": _action_slot.action_type,
+		"accumulated_ticks": _action_slot.accumulated_ticks,
+		"total_ticks": _action_slot.total_ticks,
+		"effective_output": _action_slot.effective_output,
+		"tile_x": _active_tile.x,
+		"tile_y": _active_tile.y,
+		"building_id": _active_building_id,
+		"upgrade_id": str(_active_upgrade_id),
+		"seed_type": str(_active_seed_type),
+	}
+	var queue: Array = []
+	for entry: Dictionary in _action_queue:
+		var tile: Vector2i = entry.get("tile", Vector2i(-1, -1))
+		queue.append({
+			"type": entry.get("type", -1),
+			"tile_x": tile.x,
+			"tile_y": tile.y,
+			"seed_type": str(entry.get("seed_type", &"")),
+			"building_id": entry.get("building_id", ""),
+			"upgrade_id": str(entry.get("upgrade_id", &"")),
+		})
+	return {
+		"energy": _energy_pool.current,
+		"active_action": active,
+		"action_queue": queue,
+	}
+
+
+## Restores energy, active action, and queued actions from serialized data.
+## Action signals are deferred so they fire after map_root has connected its handlers.
+## Passing an empty dict resets to defaults (full energy, no active actions).
+func deserialize(data: Dictionary) -> void:
+	var saved_energy: int = data.get("energy", _energy_pool.max_energy)
+	_energy_pool.current = clampi(saved_energy, 0, _energy_pool.max_energy)
+	energy_changed.emit(_energy_pool.current, _energy_pool.max_energy)
+
+	_action_slot.free_slot()
+	_active_tile = Vector2i(-1, -1)
+	_active_building_id = ""
+	_active_upgrade_id = &""
+	_active_seed_type = &""
+	_action_queue.clear()
+
+	var active: Dictionary = data.get("active_action", {})
+	if active.get("state", ActionSlot.State.FREE) == ActionSlot.State.WORKING:
+		var action_type: int = active.get("action_type", -1)
+		var config: ManualActionConfig = _action_configs.get(action_type, null)
+		if action_type != -1 and config != null:
+			_action_slot.state = ActionSlot.State.WORKING
+			_action_slot.action_type = action_type
+			_action_slot.config = config
+			_action_slot.accumulated_ticks = active.get("accumulated_ticks", 0)
+			_action_slot.total_ticks = active.get("total_ticks", config.tick_cost)
+			_action_slot.effective_output = active.get("effective_output", config.base_output)
+			_active_tile = Vector2i(active.get("tile_x", -1), active.get("tile_y", -1))
+			_active_building_id = active.get("building_id", "")
+			_active_upgrade_id = StringName(active.get("upgrade_id", ""))
+			_active_seed_type = StringName(active.get("seed_type", ""))
+			action_started.emit.call_deferred(action_type, _action_slot.total_ticks, _active_tile)
+
+	for entry_data: Dictionary in data.get("action_queue", []):
+		var entry_type: int = entry_data.get("type", -1)
+		if entry_type == -1:
+			continue
+		var entry: Dictionary = {
+			"type": entry_type,
+			"tile": Vector2i(entry_data.get("tile_x", -1), entry_data.get("tile_y", -1)),
+		}
+		var seed: String = entry_data.get("seed_type", "")
+		if seed != "":
+			entry["seed_type"] = StringName(seed)
+		var bld: String = entry_data.get("building_id", "")
+		if bld != "":
+			entry["building_id"] = bld
+		var upg: String = entry_data.get("upgrade_id", "")
+		if upg != "":
+			entry["upgrade_id"] = StringName(upg)
+		_action_queue.append(entry)
+		var q_tile: Vector2i = entry.get("tile", Vector2i(-1, -1))
+		action_queued.emit.call_deferred(entry_type, _action_queue.size(), q_tile)

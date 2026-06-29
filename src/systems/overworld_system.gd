@@ -34,9 +34,6 @@ const _ALL_8_OFFSETS: Array[Vector2i] = [
 	Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0),
 	Vector2i(1, -1), Vector2i(1, 1), Vector2i(-1, 1), Vector2i(-1, -1),
 ]
-## Max fraction of terrain-band shift per neighbor biome. 0.5 keeps own biome dominant
-## even when all 8 neighbors are a different biome.
-const _NEIGHBORHOOD_MAX_BLEND: float = 0.5
 ## Extra fertility-roll weight added per neighbor-fraction unit (see _compute_neighborhood_fertility_bias).
 const _NEIGHBOR_WILD_WEIGHT: int = 12    ## forest neighbors → wild
 const _NEIGHBOR_MARBLE_WEIGHT: int = 16  ## mountain neighbors → marble
@@ -598,14 +595,25 @@ func _count_neighbor_biomes(coord: Vector2i) -> Dictionary:
 	return counts
 
 
-## Terrain-band blend fractions (0.0–_NEIGHBORHOOD_MAX_BLEND) passed to WorldGrid.generate()
-## as neighborhood_bias, shifting elevation cutoffs toward dominant-neighbour biomes.
-func _compute_neighborhood_bias(coord: Vector2i) -> Dictionary:
-	var counts := _count_neighbor_biomes(coord)
-	var bias: Dictionary = {}
-	for biome_class: int in counts:
-		bias[biome_class] = (float(counts[biome_class]) / float(_ALL_8_OFFSETS.size())) * _NEIGHBORHOOD_MAX_BLEND
-	return bias
+## Maps each of the 8 overworld neighbors (whose biome differs from the tile's own) to the
+## TerrainProfile that biome implies. Returned dict is keyed by 2D offset (Vector2i in -1..1),
+## used by WorldGrid to apply per-tile directional band blending so neighbor biomes influence
+## the side of the tactical map that faces them.
+func _compute_neighbor_profiles(coord: Vector2i) -> Dictionary:
+	var tile := get_tile(coord)
+	if tile == null:
+		return {}
+	var own_profile: int = _biome_to_profile(tile.biome)
+	var profiles: Dictionary = {}
+	for offset: Vector2i in _ALL_8_OFFSETS:
+		var neighbor := get_tile(coord + offset)
+		if neighbor == null or _is_water(neighbor.biome):
+			continue
+		var neighbor_profile: int = _biome_to_profile(neighbor.biome)
+		if neighbor_profile == own_profile:
+			continue
+		profiles[offset] = neighbor_profile
+	return profiles
 
 
 ## Extra fertility-roll weights driven by neighbour biome counts. Added on top of the tile's
@@ -783,8 +791,37 @@ func generate_tactical_map(grid: WorldGrid, coord: Vector2i) -> bool:
 		and tile.river_edges.is_empty()
 		and tile.lake_edges.is_empty()
 		and tile.coast_edges.is_empty())
-	grid.generate(tile.tile_seed, tile.fertilities, tile.coast_edges, _biome_to_profile(tile.biome), tile.river_edges, tile.lake_edges, force_water, _compute_neighborhood_bias(coord))
+	grid.generate(tile.tile_seed, tile.fertilities, tile.coast_edges, _biome_to_profile(tile.biome), tile.river_edges, tile.lake_edges, force_water, _compute_neighbor_profiles(coord))
+	_log_tactical_map_summary(grid, coord, tile)
 	return true
+
+
+## Debug log: per generated tactical map, prints the tile's own biome, every overworld neighbor's
+## biome by direction, and the resulting % distribution of terrain types. Lets us correlate
+## "feels too foresty / too few stones" with the actual mix and the neighbor input that drove it.
+const _DIR_NAMES: Dictionary = {
+	Vector2i(0, -1): "N", Vector2i(1, -1): "NE", Vector2i(1, 0): "E", Vector2i(1, 1): "SE",
+	Vector2i(0, 1): "S", Vector2i(-1, 1): "SW", Vector2i(-1, 0): "W", Vector2i(-1, -1): "NW",
+}
+func _log_tactical_map_summary(grid: WorldGrid, coord: Vector2i, tile: OverworldTile) -> void:
+	var neighbor_strs: Array[String] = []
+	for offset: Vector2i in _ALL_8_OFFSETS:
+		var n := get_tile(coord + offset)
+		var biome_name: String = "—" if n == null else Biome.keys()[n.biome]
+		neighbor_strs.append("%s=%s" % [_DIR_NAMES[offset], biome_name])
+	var counts: Dictionary = grid.get_terrain_type_counts()
+	var total: int = WorldGrid.GRID_SIZE * WorldGrid.GRID_SIZE
+	var order: Array[int] = [WorldGrid.TileType.TREE, WorldGrid.TileType.STONE,
+		WorldGrid.TileType.EMPTY, WorldGrid.TileType.WATER, WorldGrid.TileType.BERRY,
+		WorldGrid.TileType.GRASS, WorldGrid.TileType.IMPASSABLE, WorldGrid.TileType.COAST]
+	var parts: Array[String] = []
+	for t: int in order:
+		var n: int = counts.get(t, 0)
+		if n > 0:
+			parts.append("%s=%.1f%%" % [WorldGrid.TileType.keys()[t], 100.0 * n / total])
+	print("[Tactical %s] self=%s | neighbors %s | %s" % [
+		coord, Biome.keys()[tile.biome], " ".join(neighbor_strs), ", ".join(parts),
+	])
 
 
 ## Maps an overworld biome onto the tactical WorldGrid.TerrainProfile that biases its terrain.

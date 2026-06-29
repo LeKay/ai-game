@@ -10,6 +10,9 @@ class_name ResourceBadgeLayer extends Node2D
 ## See docs/architecture/refactor-plan-code-consolidation-2026-06-13.md (Phase 5).
 
 var _root: MapRoot
+## Persistent parent for all auto-spawned badges (initial map load + later reconciliation
+## via terrain_changed). Drag-spawned badges still parent to _root with their own animation.
+var _badge_container: Node2D = null
 
 ## One entry per spawned resource icon: {node, tile, resource_idx, resource_id, base_pos, phase}.
 var _resource_icons: Array = []
@@ -19,12 +22,14 @@ func setup(root: MapRoot) -> void:
 	_root = root
 
 
-## Spawns individual icon nodes for every resource instance at map load.
+## Spawns individual icon nodes for every resource instance at map load. Also subscribes
+## to grid.terrain_changed so that resources added later (rescue cargo dumps, future
+## auto-drops) get a badge without the caller having to call _spawn_badge manually.
 func _spawn_resource_badges() -> void:
-	var container := Node2D.new()
-	container.name = "ResourceBadges"
-	container.z_index = 1
-	_root.add_child(container)
+	_badge_container = Node2D.new()
+	_badge_container.name = "ResourceBadges"
+	_badge_container.z_index = 1
+	_root.add_child(_badge_container)
 	for x in range(WorldGrid.GRID_SIZE):
 		for y in range(WorldGrid.GRID_SIZE):
 			var tile := Vector2i(x, y)
@@ -34,7 +39,47 @@ func _spawn_resource_badges() -> void:
 			var ids: Array[StringName] = []
 			for rd: WorldGrid.ResourceTileData in resources:
 				ids.append(rd.resource_id)
-			_spawn_badge(tile, ids, container)
+			_spawn_badge(tile, ids, _badge_container)
+	if _root.grid != null and not _root.grid.terrain_changed.is_connected(_on_terrain_changed):
+		_root.grid.terrain_changed.connect(_on_terrain_changed)
+
+
+## Schedules a reconciliation pass for `tile`. Deferred so manual _spawn_badge calls from
+## the drag controller (which run after add_resource_to_tile in the same frame) finish
+## first; otherwise we'd double-spawn for drag-dropped items.
+func _on_terrain_changed(tile: Vector2i, layer: int) -> void:
+	if layer != WorldGrid.RESOURCE_LAYER or _badge_container == null:
+		return
+	_reconcile_tile.call_deferred(tile)
+
+
+## Adds badges for resources present in the grid but not yet visualised (e.g. items dumped
+## by the logistics rescue). Doesn't remove badges — the drag controller owns the remove
+## path with its own animations.
+func _reconcile_tile(tile: Vector2i) -> void:
+	if _badge_container == null or _root == null or _root.grid == null:
+		return
+	var resources: Array = _root.grid.get_resources(tile)
+	# Count displayed badges per resource_id on this tile (in-transit drag icons excluded —
+	# they aren't backed by grid state until they land).
+	var displayed_counts: Dictionary = {}
+	for entry: Dictionary in _resource_icons:
+		if entry.tile != tile or entry.get("in_transit", false):
+			continue
+		var rid: StringName = entry.resource_id
+		displayed_counts[rid] = displayed_counts.get(rid, 0) + 1
+	# Count grid truth per resource_id.
+	var grid_counts: Dictionary = {}
+	for rd: WorldGrid.ResourceTileData in resources:
+		grid_counts[rd.resource_id] = grid_counts.get(rd.resource_id, 0) + 1
+	# Spawn badges for the surplus (grid > displayed).
+	var to_spawn: Array[StringName] = []
+	for rid: StringName in grid_counts:
+		var diff: int = grid_counts[rid] - displayed_counts.get(rid, 0)
+		for _i in range(diff):
+			to_spawn.append(rid)
+	if not to_spawn.is_empty():
+		_spawn_badge(tile, to_spawn, _badge_container, 0.0, true, Time.get_ticks_msec())
 
 
 ## Unified badge builder: one independent Node2D per resource instance, parented to

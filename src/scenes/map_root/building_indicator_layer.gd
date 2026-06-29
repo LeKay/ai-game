@@ -90,7 +90,7 @@ func refresh(building_id: String) -> void:
 		return
 
 	# Show upgrade-install progress using the same construction ring.
-	var player: PlayerCharacter = get_tree().get_first_node_in_group(&"player_character") as PlayerCharacter
+	var player: PlayerCharacter = (get_tree().get_first_node_in_group(&"player_character") if get_tree() != null else null) as PlayerCharacter
 	if player != null \
 			and player.get_active_action_id() == PlayerCharacter.ManualActionType.INSTALL_UPGRADE \
 			and player.get_active_building_id() == building_id:

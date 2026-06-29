@@ -82,6 +82,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				_apply_zoom(delta)
 				_apply_boundary_clamp()
 				get_viewport().set_input_as_handled()
+	elif event is InputEventMagnifyGesture:
+		if _input_context != null and _input_context.get_current() == WORLD_ACTIVE_CONTEXT:
+			var mg := event as InputEventMagnifyGesture
+			# Mac trackpad pinch: convert multiplicative factor into the additive delta
+			# that _apply_zoom expects (delta * zoom_sensitivity is added to zoom.x).
+			var delta: float = (mg.factor - 1.0) / zoom_sensitivity
+			_apply_zoom(delta)
+			_apply_boundary_clamp()
+			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion:
 		if _middle_drag_active:
 			var motion := event as InputEventMouseMotion
@@ -243,3 +252,14 @@ func _on_action_pressed(action: StringName) -> void:
 
 func _on_action_released(action: StringName) -> void:
 	_held_directions.erase(action)
+
+
+func serialize() -> Dictionary:
+	return {"position_x": position.x, "position_y": position.y, "zoom": zoom.x}
+
+
+func deserialize(data: Dictionary) -> void:
+	position = Vector2(float(data.get("position_x", 0.0)), float(data.get("position_y", 0.0)))
+	var z: float = clampf(float(data.get("zoom", zoom.x)), MIN_ZOOM, MAX_ZOOM)
+	zoom = Vector2(z, z)
+	_apply_boundary_clamp()

@@ -41,6 +41,10 @@ signal load_completed
 var _registered_systems: Array[String] = []
 ## Scene-level WorldGrid node — not an Autoload, registered by MapRoot after it is ready.
 var _world_grid: WorldGrid = null
+## Scene-level PlayerCharacter node — not an Autoload, registered by MapRoot after it is ready.
+var _player_character: PlayerCharacter = null
+## Scene-level CameraController node — not an Autoload, registered by MapRoot after it is ready.
+var _camera_controller: CameraController = null
 
 ## Staged load — populated by load_game(), consumed by apply_pending_load().
 var _pending_load_data: Dictionary = {}
@@ -71,6 +75,16 @@ func register_save_system(system_name: String) -> void:
 ## Register the scene-level WorldGrid node. Called by MapRoot before apply_pending_load().
 func register_world_grid(grid: WorldGrid) -> void:
 	_world_grid = grid
+
+
+## Register the scene-level PlayerCharacter node. Called by MapRoot before apply_pending_load().
+func register_player_character(player: PlayerCharacter) -> void:
+	_player_character = player
+
+
+## Register the scene-level CameraController node. Called by MapRoot before apply_pending_load().
+func register_camera_controller(cam: CameraController) -> void:
+	_camera_controller = cam
 
 
 ## Returns list of available (non-empty) save slot numbers.
@@ -115,6 +129,12 @@ func save_game(slot: int) -> bool:
 
 	if _world_grid != null:
 		data["WorldGrid"] = _world_grid.serialize()
+
+	if _player_character != null:
+		data["PlayerCharacter"] = _player_character.serialize()
+
+	if _camera_controller != null:
+		data["CameraController"] = _camera_controller.serialize()
 
 	for system_name in SAVE_SYSTEMS:
 		var system: Node = get_node_or_null("/root/" + system_name)
@@ -346,11 +366,20 @@ func consume_pending_map_switch() -> Vector2i:
 
 ## Internal: apply deserialized data in dependency order.
 ## WorldGrid is restored first so terrain is valid when BuildingRegistry calls place_building().
+## PlayerCharacter is restored before Autoloads so energy is set before any system reads it.
 func _process_deserialize_order(data: Dictionary) -> void:
 	if _world_grid != null:
 		var grid_data: Variant = data.get("WorldGrid")
 		if grid_data is Dictionary:
 			_world_grid.deserialize(grid_data)
+	if _player_character != null:
+		var player_data: Variant = data.get("PlayerCharacter")
+		if player_data is Dictionary:
+			_player_character.deserialize(player_data)
+	if _camera_controller != null:
+		var cam_data: Variant = data.get("CameraController")
+		if cam_data is Dictionary:
+			_camera_controller.deserialize(cam_data)
 	for system_name in LOAD_ORDER:
 		var system: Node = get_node_or_null("/root/" + system_name)
 		if system == null or not system.has_method("deserialize"):
@@ -373,6 +402,8 @@ func reset_new_game() -> void:
 	_current_map_coord = Vector2i(-1, -1)
 	_pending_load_data = {}
 	_has_pending_load = false
+	if _player_character != null:
+		_player_character.deserialize({})
 
 
 ## Scan for and delete orphaned .tmp files left by a crashed save operation.

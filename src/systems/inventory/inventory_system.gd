@@ -192,7 +192,8 @@ func get_resource_quantity(id: StringName, resource_id: StringName) -> int:
 ## registry Autoload is not present, e.g. during unit tests).
 ## Emits storage_changed on SUCCESS. Returns FAILURE_NO_CONTAINER if the
 ## container does not exist.
-func try_deposit(container_id: StringName, resource_id: StringName, quantity: int) -> InventoryContainer.DepositResult:
+func try_deposit(container_id: StringName, resource_id: StringName, quantity: int,
+		holder_id: StringName = &"") -> InventoryContainer.DepositResult:
 	var c: InventoryContainer = _containers.get(container_id, null)
 	if c == null:
 		return InventoryContainer.DepositResult.FAILURE_NO_CONTAINER
@@ -204,11 +205,58 @@ func try_deposit(container_id: StringName, resource_id: StringName, quantity: in
 		if def != null:
 			stack_limit = def.stack_limit
 			max_charge = def.max_charge
-	var result: InventoryContainer.DepositResult = c.try_deposit(resource_id, quantity, stack_limit, max_charge)
+	var result: InventoryContainer.DepositResult = c.try_deposit(
+			resource_id, quantity, stack_limit, max_charge, holder_id)
 	if result == InventoryContainer.DepositResult.SUCCESS:
 		storage_changed.emit(container_id)
 		item_deposited.emit(resource_id, quantity)
 	return result
+
+
+# ---------------------------------------------------------------------------
+# Reservations (storage capacity holds for in-flight carriers / workers)
+# ---------------------------------------------------------------------------
+
+## Reserves space in `container_id` for `holder_id`. See InventoryContainer.reserve().
+## Returns false when the container does not exist or the reservation would exceed capacity.
+func reserve_space(container_id: StringName, holder_id: StringName,
+		resource_id: StringName, quantity: int) -> bool:
+	var c: InventoryContainer = _containers.get(container_id, null)
+	if c == null:
+		return false
+	return c.reserve(holder_id, resource_id, quantity)
+
+
+## Releases the reservation held by `holder_id` on `container_id`. No-op on unknown ids.
+func release_reservation(container_id: StringName, holder_id: StringName) -> void:
+	var c: InventoryContainer = _containers.get(container_id, null)
+	if c == null:
+		return
+	c.release_reservation(holder_id)
+
+
+## Total reserved units across all holders for a container (0 if unknown).
+func get_reserved_total(container_id: StringName) -> int:
+	var c: InventoryContainer = _containers.get(container_id, null)
+	if c == null:
+		return 0
+	return c.get_reserved_total()
+
+
+## Total reserved units of a specific resource across all holders (0 if unknown).
+func get_reserved_for(container_id: StringName, resource_id: StringName) -> int:
+	var c: InventoryContainer = _containers.get(container_id, null)
+	if c == null:
+		return 0
+	return c.get_reserved_for(resource_id)
+
+
+## Quantity reserved by a specific holder (0 if none / unknown container).
+func get_reserved_for_holder(container_id: StringName, holder_id: StringName) -> int:
+	var c: InventoryContainer = _containers.get(container_id, null)
+	if c == null:
+		return 0
+	return c.get_reserved_for_holder(holder_id)
 
 
 ## Withdraws `quantity` units of `resource_id` from the named container.

@@ -12,8 +12,6 @@ signal route_deleted(route_id: StringName)
 
 # ---- Constants ---------------------------------------------------------------
 
-## Maximum output carrier slots per building (MVP: always 1).
-const MAX_OUTPUT_SLOTS: int = 1
 ## Fallback max input slots for buildings with no PRODUCTION_TABLE entry (storage, unknown).
 const MAX_INPUT_SLOTS: int = 1
 ## Base ticks per tile of carrier travel = the travel time at 100% carrier efficiency.
@@ -32,6 +30,15 @@ var carrier_waiting_timeout: int = 300
 ## Ticks between work-checks when a carrier finds all its routes have no work.
 ## Prevents calling _route_has_work for every route every tick when sources are empty.
 const IDLE_RECHECK_INTERVAL: int = 10
+## Grace period (in ticks) for WAITING_DESTINATION. If the destination still cannot accept the
+## carrier's cargo after this many ticks, the carrier dumps cargo on the destination tile
+## (player can pick it back up) and picks the next route. Prevents permanent lockups when a
+## production building's input AND output are both full (cycle can't run → input never frees).
+const WAITING_DESTINATION_RESCUE_TICKS: int = 100
+
+## When true, route lifecycle, FSM transitions, and cargo movements are printed to the console.
+## Off in unit tests by default — set via `_logistics.verbose_logging = true` to enable.
+var verbose_logging: bool = true
 
 # ---- Dependencies (injectable for tests) ------------------------------------
 
@@ -97,13 +104,7 @@ func create_route(
 	if source_id == destination_id:
 		return _failure("Source and destination cannot be the same building.")
 
-	if route_type == LogisticsRoute.RouteType.OUTPUT:
-		var used: int = _count_routes_by_type(source_id, LogisticsRoute.RouteType.OUTPUT, true)
-		var max_slots: int = _get_max_output_slots(source_id)
-		if used >= max_slots:
-			return _failure("Building '%s' has no free output slots." % source_id)
-
-	elif route_type == LogisticsRoute.RouteType.INPUT:
+	if route_type == LogisticsRoute.RouteType.INPUT:
 		var used: int = _count_routes_by_type(destination_id, LogisticsRoute.RouteType.INPUT, false)
 		var max_slots: int = _get_max_input_slots(destination_id)
 		if used >= max_slots:
@@ -123,12 +124,18 @@ func create_route(
 		route.path_valid = true
 		_active_routes.append(route)
 		_assign_carrier_to_building(route)
+		_log(route, "CREATED type=%s src=%s dst=%s item=%s" % [
+				"OUTPUT" if route_type == LogisticsRoute.RouteType.OUTPUT else "INPUT",
+				source_id, destination_id, source_item_id])
 		route_created.emit(route)
 		return {"success": true, "route": route, "error": ""}
 
 	var route := LogisticsRoute.create(source_id, destination_id, npc_id, route_type, source_item_id)
 	_active_routes.append(route)
 	_assign_carrier_to_building(route)
+	_log(route, "CREATED type=%s src=%s dst=%s item=%s" % [
+			"OUTPUT" if route_type == LogisticsRoute.RouteType.OUTPUT else "INPUT",
+			source_id, destination_id, source_item_id])
 	route_created.emit(route)
 	return {"success": true, "route": route, "error": ""}
 
@@ -196,7 +203,9 @@ func delete_route(route_id: StringName) -> void:
 		if _active_routes[i].id == route_id:
 			var route: LogisticsRoute = _active_routes[i]
 			var npc_id: StringName = route.npc_id
+			_log(route, "DELETED (had %d×%s in hand)" % [route.cargo, route.cargo_resource])
 			route.active = false
+			_release_destination_reservation(route)
 			_on_route_active_changed(route)   # clears the active-route map entry if this was it
 			_active_routes.remove_at(i)
 			if _carrier_routes(npc_id).is_empty():
@@ -216,6 +225,8 @@ func pause_route(route_id: StringName) -> void:
 		return
 	route.lifecycle_state = LogisticsRoute.LifecycleState.PAUSED
 	route.active = false
+	_log(route, "PAUSED")
+	_release_destination_reservation(route)
 	_on_route_active_changed(route)
 
 
@@ -228,6 +239,7 @@ func resume_route(route_id: StringName) -> void:
 		return
 	route.lifecycle_state = LogisticsRoute.LifecycleState.ACTIVE
 	route.active = true
+	_log(route, "RESUMED")
 	_carrier_idle_cooldown.erase(route.npc_id)
 	_assign_carrier_to_building(route)
 
@@ -462,22 +474,32 @@ func _process_carrier(route: LogisticsRoute) -> void:
 					# Delivered → decision point: switch to the next route with work (round-robin).
 					_carrier_pick_next(route.npc_id, route)
 				else:
+					route.waiting_dest_ticks = 0
 					_set_carrier_state(route, LogisticsRoute.CarrierState.WAITING_DESTINATION)
 			else:
+				route.waiting_dest_ticks = 0
 				_set_carrier_state(route, LogisticsRoute.CarrierState.WAITING_DESTINATION)
 
 		LogisticsRoute.CarrierState.WAITING_DESTINATION:
-			# Holding cargo and the destination was full — must wait here (switching now would
-			# pick up new cargo before delivering the held one, destroying it). Once space frees,
-			# deposit and go to the decision point.
+			# Holding cargo and the destination was full — wait here, but only for a bounded
+			# grace period. After WAITING_DESTINATION_RESCUE_TICKS the cargo is dumped on the
+			# destination tile (player can pick it back up) and the carrier moves on. Without
+			# this rescue, a building stuck with both input and output full would lock the
+			# carrier permanently (cycle can't run → input never consumed).
 			var has_space: bool = _destination_has_space(route)
 			if has_space:
 				if _do_deposit(route):
 					route.cargo = 0
 					route.cargo_resource = null
+					route.waiting_dest_ticks = 0
 					if _npc_system != null:
 						_npc_system.add_pending_xp(route.npc_id,
 								ExperienceFormulas.xp_for_carrier(route.delivery_leg_nominal_ticks))
+					_carrier_pick_next(route.npc_id, route)
+			else:
+				route.waiting_dest_ticks += 1
+				if route.waiting_dest_ticks >= WAITING_DESTINATION_RESCUE_TICKS:
+					_rescue_dump_cargo(route)
 					_carrier_pick_next(route.npc_id, route)
 
 		LogisticsRoute.CarrierState.RETURN_HOME:
@@ -508,6 +530,8 @@ func _deactivate_route(route: LogisticsRoute, reason: String) -> void:
 	route.lifecycle_state = LogisticsRoute.LifecycleState.DEACTIVATED
 	route.active = false
 	route.deactivation_reason = reason
+	_log(route, "DEACTIVATED — %s" % reason)
+	_release_destination_reservation(route)
 	_on_route_active_changed(route)
 
 
@@ -524,7 +548,10 @@ func _set_carrier_state(route: LogisticsRoute, new_state: int) -> void:
 				route.remaining_ticks, _carrier_efficiency(route))
 		# Capture the effective leg duration so the overlay animations stay in sync with F4.
 		route.current_leg_total_ticks = route.remaining_ticks
+	var prev_state: int = route.carrier_state
 	route.carrier_state = new_state
+	if prev_state != new_state:
+		_log(route, "state %s → %s" % [_state_name(prev_state), _state_name(new_state)])
 	if _npc_system != null:
 		_npc_system.set_carrier_state(route.npc_id, new_state)
 
@@ -550,6 +577,8 @@ func _get_building_tile(building_id: StringName) -> Vector2i:
 ## (or at least 1 item when cargo is not yet loaded — pre-trip check).
 ## Storage buildings: checks InventoryContainer total against capacity, accounting for cargo qty.
 ## Production buildings: checks input_buffer against input_capacity (PRODUCTION_TABLE).
+## Foreign reservations (other carriers/workers holding space) count against the destination's
+## free room. The route's own reservation does NOT — once we've reserved, the space is ours.
 func _destination_has_space(route: LogisticsRoute) -> bool:
 	if _building_registry == null:
 		return true
@@ -566,27 +595,37 @@ func _destination_has_space(route: LogisticsRoute) -> bool:
 		var container_id: StringName = _get_container_id(route.destination_building_id)
 		var used: int = _inventory_system.get_total_quantity(container_id)
 		var cap: int = _inventory_system.get_capacity(container_id)
-		var needed: int = maxi(route.cargo, 1)
-		if used + needed > cap:
+		var foreign_reserved: int = _inventory_system.get_reserved_total(container_id) \
+				- _inventory_system.get_reserved_for_holder(container_id, route.id)
+		# Pre-pickup (cargo == 0): the carrier WILL load up to its capacity, so reserve must
+		# cover the full intended pickup — otherwise we land in WAITING_DESTINATION because
+		# we picked up 2 but the storage only had room for 1.
+		var needed: int = route.cargo if route.cargo > 0 else _carrier_capacity(route)
+		if used + foreign_reserved + needed > cap:
 			return false
-		# Per-resource delivery limit set by the player.
+		# Per-resource delivery limit set by the player. Counts in-flight reservations of
+		# this resource so multiple carriers can't all see "1 slot free" and pick up.
 		var res_id: StringName = route.cargo_resource \
 			if route.cargo_resource != null else route.source_item_id
 		if res_id != &"":
 			var limit: int = instance.storage_limits.get(res_id, -1)
 			if limit >= 0:
 				var current_of_res: int = _inventory_system.get_resource_quantity(container_id, res_id)
-				if current_of_res >= limit:
+				var reserved_of_res: int = _inventory_system.get_reserved_for(container_id, res_id) \
+						- _inventory_system.get_reserved_for_holder(container_id, route.id)
+				if current_of_res + reserved_of_res + needed > limit:
 					return false
 		return true
 	# Production buildings: check per-slot input_capacity from PRODUCTION_TABLE.
 	# Before pickup cargo_resource is null — fall back to source_item_id so the pre-trip check
-	# still gates on destination capacity instead of blindly returning true.
+	# still gates on destination capacity instead of blindly returning true. Pass route.id so
+	# the carrier's own reservation isn't counted against the cap (otherwise reserving the last
+	# free slot would make is_input_full return true for the same carrier).
 	var resource_to_check: StringName = route.cargo_resource \
 		if route.cargo_resource != null else route.source_item_id
 	if resource_to_check == &"":
 		return true
-	return not _building_registry.is_input_full(dest_id, resource_to_check)
+	return not _building_registry.is_input_full(dest_id, resource_to_check, route.id)
 
 
 ## Resolves a building ID to its inventory container ID via BuildingRegistry.
@@ -647,18 +686,31 @@ func _do_deposit(route: LogisticsRoute) -> bool:
 		return false
 	var dest_id := str(route.destination_building_id)
 	var instance: Object = _building_registry.get_building_instance(dest_id)
+	var before: int = _destination_quantity(route, route.cargo_resource)
 	if instance != null and BuildingRegistry.STORAGE_CAPACITY.has(instance.type):
 		if _inventory_system == null:
 			return false
 		var result: InventoryContainer.DepositResult = _inventory_system.try_deposit(
 			_get_container_id(route.destination_building_id),
 			route.cargo_resource,
-			route.cargo)
+			route.cargo,
+			route.id)
 		if result != InventoryContainer.DepositResult.SUCCESS:
+			_log(route, "deposit FAILED (storage full) %d×%s → %s" % [
+					route.cargo, route.cargo_resource, route.destination_building_id])
 			return false
+		_log(route, "deposit %d×%s → storage %s (dest %d → %d)" % [
+				route.cargo, route.cargo_resource, route.destination_building_id,
+				before, before + route.cargo])
 	else:
-		if not _building_registry.receive_input_from_world(dest_id, route.cargo_resource, route.cargo):
+		if not _building_registry.receive_input_from_world(
+				dest_id, route.cargo_resource, route.cargo, route.id):
+			_log(route, "deposit FAILED (input slot full) %d×%s → %s" % [
+					route.cargo, route.cargo_resource, route.destination_building_id])
 			return false
+		_log(route, "deposit %d×%s → input-buffer %s (dest %d → %d)" % [
+				route.cargo, route.cargo_resource, route.destination_building_id,
+				before, before + route.cargo])
 	_route_items_today[route.id] = _route_items_today.get(route.id, 0) + route.cargo
 	return true
 
@@ -674,6 +726,9 @@ func _carrier_capacity(route: LogisticsRoute) -> int:
 
 ## Storage source: consumes route.source_item_id from InventoryContainer.
 ## Production source: removes from buffered_output, filtered by source_item_id when set.
+## After cargo is loaded, immediately reserves matching space at the destination so
+## foreign depositors (player drag, other routes finishing first) cannot consume the
+## space we're about to fill — preventing the WAITING_DESTINATION lockup.
 func _do_pickup(route: LogisticsRoute) -> void:
 	if _is_storage_source(route):
 		var container_id := _get_container_id(route.source_building_id)
@@ -689,6 +744,9 @@ func _do_pickup(route: LogisticsRoute) -> void:
 		_inventory_system.try_consume(container_id, route.source_item_id, pickup)
 		route.cargo = pickup
 		route.cargo_resource = route.source_item_id
+		_log(route, "pickup %d×%s from %s (source %d → %d)" % [
+				pickup, route.source_item_id, route.source_building_id,
+				available, available - pickup])
 	else:
 		var res_id: StringName
 		if route.source_item_id != &"":
@@ -701,6 +759,114 @@ func _do_pickup(route: LogisticsRoute) -> void:
 		_building_registry.remove_from_output(str(route.source_building_id), res_id, pickup)
 		route.cargo = pickup
 		route.cargo_resource = res_id
+		_log(route, "pickup %d×%s from %s output-buffer (source %d → %d)" % [
+				pickup, res_id, route.source_building_id,
+				available, available - pickup])
+	_reserve_destination_for_cargo(route)
+
+
+## Reserves cargo-quantity space at the destination for `route` (storage container or
+## production input buffer). Idempotent: replaces any prior reservation by this route.
+## Called immediately after _do_pickup so the space is held for the entire delivery leg.
+func _reserve_destination_for_cargo(route: LogisticsRoute) -> void:
+	if route.cargo <= 0 or _building_registry == null:
+		return
+	var dest_id := str(route.destination_building_id)
+	var instance: Object = _building_registry.get_building_instance(dest_id)
+	if instance == null:
+		return
+	if BuildingRegistry.STORAGE_CAPACITY.has(instance.type):
+		if _inventory_system == null:
+			return
+		var container_id: StringName = _get_container_id(route.destination_building_id)
+		_inventory_system.reserve_space(container_id, route.id, route.cargo_resource, route.cargo)
+	else:
+		_building_registry.reserve_input_slot(dest_id, route.cargo_resource, route.id, route.cargo)
+
+
+## Drops the carrier's cargo onto the destination building's tile (or the nearest passable
+## tile) so the player can pick the items back up, releases the destination reservation,
+## and clears the cargo fields. Called from WAITING_DESTINATION when the grace period
+## elapses. The route stays active — the carrier will try other routes (and may eventually
+## come back to this one if the building unblocks).
+func _rescue_dump_cargo(route: LogisticsRoute) -> void:
+	var res_id: StringName = route.cargo_resource if route.cargo_resource != null else &""
+	var qty: int = route.cargo
+	var dropped: int = 0
+	var drop_tile: Vector2i = Vector2i(-1, -1)
+	if qty > 0 and res_id != &"" and _grid_map != null:
+		drop_tile = _find_drop_tile_near(route.destination_building_id, res_id)
+		if drop_tile != Vector2i(-1, -1):
+			for _i: int in range(qty):
+				if _grid_map.add_resource_to_tile(drop_tile, res_id, true):
+					dropped += 1
+	if dropped == qty:
+		_log(route, "RESCUE — gave up after %d ticks, dropped %d×%s at %s (dest %s full)" % [
+				route.waiting_dest_ticks, dropped, res_id, drop_tile, route.destination_building_id])
+	else:
+		_log(route, "RESCUE — gave up after %d ticks, LOST %d×%s (no drop tile found near %s)" % [
+				route.waiting_dest_ticks, qty - dropped, res_id, route.destination_building_id])
+	_release_destination_reservation(route)
+	route.cargo = 0
+	route.cargo_resource = null
+	route.waiting_dest_ticks = 0
+
+
+## Returns a tile near the destination building where dropped cargo can actually be placed.
+## Searches outward in concentric rings (ring 1 = 8 neighbours, ring 2, ring 3 …) up to the
+## RESCUE_DROP_SEARCH_RADIUS. A tile counts only if WorldGrid.add_resource_to_tile would
+## accept it — we do a dry-run via the grid's own bounds/blocking checks. Returns (-1,-1)
+## when nothing in range works (dropped cargo is lost — extremely cramped layouts).
+const RESCUE_DROP_SEARCH_RADIUS: int = 4
+
+func _find_drop_tile_near(building_id: StringName, _res_id: StringName) -> Vector2i:
+	if _grid_map == null:
+		return Vector2i(-1, -1)
+	var origin: Vector2i = _get_building_tile(building_id)
+	if origin == Vector2i(-1, -1):
+		return Vector2i(-1, -1)
+	for radius: int in range(1, RESCUE_DROP_SEARCH_RADIUS + 1):
+		for dy: int in range(-radius, radius + 1):
+			for dx: int in range(-radius, radius + 1):
+				# Only the outer ring of this radius (skip interior — already searched).
+				if absi(dx) != radius and absi(dy) != radius:
+					continue
+				var t: Vector2i = origin + Vector2i(dx, dy)
+				if _can_drop_on_tile(t):
+					return t
+	return Vector2i(-1, -1)
+
+
+## True when `tile` is in-bounds, passable, and not occupied by a building — i.e. a tile
+## WorldGrid.add_resource_to_tile will actually accept. (We mirror the grid's own checks
+## so the search loop doesn't keep returning tiles the grid then silently rejects.)
+func _can_drop_on_tile(tile: Vector2i) -> bool:
+	if not _grid_map.is_in_bounds(tile):
+		return false
+	if not _grid_map.is_passable(tile):
+		return false
+	if _grid_map.has_method("get_building") and _grid_map.get_building(tile) != "":
+		return false
+	return true
+
+
+## Releases any destination reservation held by `route` (storage container or production input).
+## No-op when nothing is reserved. Called on successful deposit, route delete/pause, and on
+## destination changes — anywhere the cargo-bound promise is cancelled or fulfilled.
+func _release_destination_reservation(route: LogisticsRoute) -> void:
+	if _building_registry == null:
+		return
+	var dest_id := str(route.destination_building_id)
+	var instance: Object = _building_registry.get_building_instance(dest_id)
+	if instance == null:
+		return
+	if BuildingRegistry.STORAGE_CAPACITY.has(instance.type):
+		if _inventory_system == null:
+			return
+		var container_id: StringName = _get_container_id(route.destination_building_id)
+		_inventory_system.release_reservation(container_id, route.id)
+	else:
+		_building_registry.release_input_reservation(dest_id, route.id)
 
 
 ## Manhattan distance travel time in ticks. Uses floor() per Formula 1 (ADR-0011).
@@ -729,23 +895,6 @@ func _get_max_input_slots(building_id: StringName) -> int:
 
 ## Returns the maximum number of OUTPUT routes allowed for building_id.
 ## Derived from the number of distinct output resources in the building's active recipe —
-## mirrors _get_max_input_slots so each output resource type can have its own carrier.
-## Falls back to MAX_OUTPUT_SLOTS (1) for storage buildings and unknown types.
-func _get_max_output_slots(building_id: StringName) -> int:
-	if _building_registry == null:
-		return MAX_OUTPUT_SLOTS
-	var instance: Object = _building_registry.get_building_instance(str(building_id))
-	if instance == null:
-		return MAX_OUTPUT_SLOTS
-	if BuildingRegistry.STORAGE_CAPACITY.has(instance.type):
-		return MAX_OUTPUT_SLOTS
-	if not BuildingRegistry.is_production_building(instance.type):
-		return MAX_OUTPUT_SLOTS
-	var recipe: Dictionary = BuildingRegistry.get_active_recipe(instance)
-	var outputs: Dictionary = recipe.get("output", {})
-	return maxi(outputs.size(), 1)
-
-
 ## Deletes routes that are no longer compatible with a building's new active recipe.
 ## Called when BuildingRegistry emits building_recipe_changed.
 ## INPUT routes delivering a resource no longer in the recipe's inputs are deleted.
@@ -922,6 +1071,11 @@ func deserialize(data: Dictionary) -> void:
 		if route.active and route.carrier_state != LogisticsRoute.CarrierState.IDLE \
 				and not _carrier_active_route.has(route.npc_id):
 			_carrier_active_route[route.npc_id] = route.id
+	# Restore destination reservations for routes that were mid-delivery when saved.
+	# Reservations themselves are not persisted (the holding route is the source of truth).
+	for route: LogisticsRoute in _active_routes:
+		if route.active and route.cargo > 0 and route.cargo_resource != null:
+			_reserve_destination_for_cargo(route)
 
 
 func _serialize_route(route: LogisticsRoute) -> Dictionary:
@@ -1024,3 +1178,62 @@ func _on_route_active_changed(route: LogisticsRoute) -> void:
 				str(route.source_building_id), &"")
 			# Do NOT set STALLED immediately — building transitions naturally when
 			# next production cycle completes with output_carrier_id empty.
+
+
+# ---- Logging ----------------------------------------------------------------
+
+## Prints a route-tagged log line when verbose_logging is on. Format keeps lines greppable:
+##   [logistics] npc=<id> route=<id> <message>
+func _log(route: LogisticsRoute, message: String) -> void:
+	if not verbose_logging:
+		return
+	print("[logistics] npc=%s route=%s %s" % [route.npc_id, route.id, message])
+
+
+## Human-readable carrier-state name for log messages.
+func _state_name(state: int) -> String:
+	match state:
+		LogisticsRoute.CarrierState.IDLE: return "IDLE"
+		LogisticsRoute.CarrierState.TRAVEL_TO_SOURCE: return "TRAVEL_TO_SOURCE"
+		LogisticsRoute.CarrierState.AT_SOURCE: return "AT_SOURCE"
+		LogisticsRoute.CarrierState.WAITING_SOURCE: return "WAITING_SOURCE"
+		LogisticsRoute.CarrierState.TRAVEL_TO_DESTINATION: return "TRAVEL_TO_DESTINATION"
+		LogisticsRoute.CarrierState.AT_DESTINATION: return "AT_DESTINATION"
+		LogisticsRoute.CarrierState.WAITING_DESTINATION: return "WAITING_DESTINATION"
+		LogisticsRoute.CarrierState.RETURN_HOME: return "RETURN_HOME"
+		_: return "STATE_%d" % state
+
+
+## Reads the current available quantity of `resource_id` at the source building (storage
+## InventoryContainer or production output buffer). Returns 0 when unresolved — used only for
+## logging the before/after deltas of pickups.
+func _source_quantity(route: LogisticsRoute, resource_id: StringName) -> int:
+	if resource_id == &"":
+		return 0
+	if _is_storage_source(route):
+		if _inventory_system == null:
+			return 0
+		return _inventory_system.get_resource_quantity(
+				_get_container_id(route.source_building_id), resource_id)
+	if _building_registry == null:
+		return 0
+	return _building_registry.get_output_buffer_resource_quantity(
+			str(route.source_building_id), resource_id)
+
+
+## Reads the current quantity of `resource_id` at the destination building (storage
+## InventoryContainer total for that resource, or production input_buffer entry).
+## Returns 0 when unresolved.
+func _destination_quantity(route: LogisticsRoute, resource_id: StringName) -> int:
+	if resource_id == &"" or _building_registry == null:
+		return 0
+	var dest_id := str(route.destination_building_id)
+	var instance: Object = _building_registry.get_building_instance(dest_id)
+	if instance == null:
+		return 0
+	if BuildingRegistry.STORAGE_CAPACITY.has(instance.type):
+		if _inventory_system == null:
+			return 0
+		return _inventory_system.get_resource_quantity(
+				_get_container_id(route.destination_building_id), resource_id)
+	return int(instance.input_buffer.get(resource_id, 0.0))

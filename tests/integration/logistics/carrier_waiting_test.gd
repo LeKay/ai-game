@@ -40,11 +40,16 @@ class NPCStub extends Node:
 	func on_npc_at_location(_npc_id: StringName, _building_id: StringName) -> void:
 		pass
 
+	func add_pending_xp(_npc_id: StringName, _amount: int) -> void: pass
+	func npc_perk_bonus(_npc_id: StringName, _effect: StringName) -> float: return 0.0
+
 
 ## Minimal building instance double exposing the fields LogisticsSystem reads.
 class BuildingInstanceStub:
 	var type: int = 0
 	var assigned_container_id: StringName = &""
+	var storage_limits: Dictionary = {}
+	var storage_min_limits: Dictionary = {}
 
 
 class BuildingRegistryStub extends Node:
@@ -125,9 +130,18 @@ class InventoryStub extends Node:
 	func try_consume(_id: StringName, _resource_id: StringName, _qty: int) -> int:
 		return 0
 
-	func try_deposit(container_id: StringName, resource_id: StringName, quantity: int) -> Dictionary:
+	func try_deposit(container_id: StringName, resource_id: StringName, quantity: int,
+			_holder_id: StringName = &"") -> int:
 		deposit_calls.append({"container_id": container_id, "resource_id": resource_id, "quantity": quantity})
-		return {"success": true}
+		return InventoryContainer.DepositResult.SUCCESS
+
+	# Reservation no-op stubs — these tests don't exercise reservation semantics.
+	func reserve_space(_cid: StringName, _holder: StringName, _res: StringName, _qty: int) -> bool:
+		return true
+	func release_reservation(_cid: StringName, _holder: StringName) -> void: pass
+	func get_reserved_total(_cid: StringName) -> int: return 0
+	func get_reserved_for(_cid: StringName, _res: StringName) -> int: return 0
+	func get_reserved_for_holder(_cid: StringName, _holder: StringName) -> int: return 0
 
 	func set_full(container_id: StringName) -> void:
 		totals[container_id] = 10
@@ -180,6 +194,7 @@ func before_test() -> void:
 	_logistics = LogisticsSystemScript.new()
 	add_child(_logistics)
 	auto_free(_logistics)
+	_logistics.verbose_logging    = false
 	_logistics._npc_system        = _npc
 	_logistics._building_registry = _buildings
 	_logistics._inventory_system  = _inventory
@@ -246,10 +261,14 @@ func test_carrier_picks_up_capacity_limited_cargo_at_source() -> void:
 
 
 # =============================================================================
-# AC-W3: WAITING_DESTINATION holds cargo indefinitely — no timeout, no discard
+# AC-W3 (amended 2026-06-28): WAITING_DESTINATION holds cargo for the grace
+# period (WAITING_DESTINATION_RESCUE_TICKS), then rescues — dumps cargo on the
+# map and moves on. Replaces the prior "no timeout, hold forever" contract:
+# the unbounded wait deadlocked carriers when a production building's input AND
+# output were both full (cycle can't run → input never frees).
 # =============================================================================
 
-func test_waiting_destination_holds_cargo_with_no_timeout() -> void:
+func test_waiting_destination_holds_cargo_during_grace_period() -> void:
 	# Arrange — cargo at source; destination fills up while the carrier is en route
 	# (a route with a full destination has no "work", so the trip must start first)
 	_buildings.set_output(SRC, &"wood", 2)
@@ -260,10 +279,10 @@ func test_waiting_destination_holds_cargo_with_no_timeout() -> void:
 	_logistics._advance_tick(TICKS_PER_LEG + 1)  # arrive → destination full → wait
 	assert_int(route.carrier_state).is_equal(LogisticsRouteScript.CarrierState.WAITING_DESTINATION)
 
-	# Act — far beyond the old 300-tick timeout
-	_logistics._advance_tick(500)
+	# Act — advance just under the rescue threshold
+	_logistics._advance_tick(LogisticsSystemScript.WAITING_DESTINATION_RESCUE_TICKS - 1)
 
-	# Assert — still waiting, cargo intact, route alive, nothing deposited
+	# Assert — still waiting, cargo intact, nothing deposited (grace period still active)
 	assert_int(route.carrier_state).is_equal(LogisticsRouteScript.CarrierState.WAITING_DESTINATION)
 	assert_int(route.cargo).is_equal(2)
 	assert_bool(route.active).is_true()

@@ -16,6 +16,8 @@ var _root: MapRoot
 var _action: ActionFeedback
 ## World resource-icon data + display (spawn / float / hit-test / pickup floats).
 var _badges: ResourceBadgeLayer
+## Buildings Drawer reference — used to cancel drags released inside the panel.
+var _buildings_drawer: BuildingsDrawer = null
 
 # ── Drag / interaction state (owned here; MapRoot holds only the scene refs) ───
 
@@ -66,6 +68,11 @@ func set_action(action: ActionFeedback) -> void:
 ## Injects the ResourceBadgeLayer sibling.
 func set_badges(badges: ResourceBadgeLayer) -> void:
 	_badges = badges
+
+
+## Injects the BuildingsDrawer so drags released over it are cancelled.
+func set_buildings_drawer(drawer: BuildingsDrawer) -> void:
+	_buildings_drawer = drawer
 
 
 # ── Building-panel drag cost ──────────────────────────────────────────────────
@@ -145,12 +152,9 @@ func _update_drag_overlays() -> void:
 
 
 func _is_mouse_over_building_panel() -> bool:
-	if _root._hud == null:
+	if _buildings_drawer == null:
 		return false
-	var panel := _root._hud.get_node_or_null("BuildingDetailPanel") as BuildingDetailPanel
-	if panel == null:
-		return false
-	return panel.contains_global_point(get_viewport().get_mouse_position())
+	return _buildings_drawer.is_mouse_over_panel()
 
 
 func _update_storage_drag_overlays() -> void:
@@ -298,11 +302,16 @@ func _restore_batch_extras() -> void:
 	if extra_count <= 0 or _drag_src_tile == Vector2i(-1, -1) or _drag_icon_entry.is_empty():
 		return
 	var res_id: StringName = _drag_icon_entry.resource_id
+	var overflow: int = 0
 	for i in range(extra_count):
 		if _root.grid.add_resource_to_tile(_drag_src_tile, res_id, true):
 			var ids_r: Array[StringName] = [res_id]
 			_badges._spawn_badge(_drag_src_tile, ids_r, _root, 0.0, true, Time.get_ticks_msec() + i * 37)
 			_badges._resource_icons.back().resource_idx = _root.grid.get_resources(_drag_src_tile).size() - 1
+		else:
+			overflow += 1
+	if overflow > 0:
+		_drop_overflow_to_world(res_id, overflow, _drag_src_tile)
 
 
 # ── Drag start (building panels) ──────────────────────────────────────────────
@@ -384,6 +393,11 @@ func _finish_output_drag() -> void:
 	_drag_collected_count = 1
 	_drag_hold_timer = 0.0
 	_drag_count_label.visible = false
+	if _is_mouse_over_building_panel():
+		icon_node.queue_free()
+		_root._registry.receive_output_to_buffer(building_id, res_id, batch_count)
+		get_viewport().set_input_as_handled()
+		return
 	if _root.grid.is_in_bounds(target_tile):
 		var target_building_id: String = _root.grid.get_building(target_tile)
 		if target_building_id != "":
@@ -455,6 +469,11 @@ func _finish_input_drag() -> void:
 	_drag_collected_count = 1
 	_drag_hold_timer = 0.0
 	_drag_count_label.visible = false
+	if _is_mouse_over_building_panel():
+		icon_node.queue_free()
+		_root._registry.receive_input_from_world(building_id, res_id, batch_count)
+		get_viewport().set_input_as_handled()
+		return
 	if _root.grid.is_in_bounds(target_tile) and _root.grid.is_passable(target_tile):
 		var ticks_needed: int = _calc_drag_ticks(from_tile, target_tile, res_id)
 		_park_panel_icon_pending(icon_node, from_tile, target_tile, ticks_needed, func() -> void:
@@ -496,10 +515,28 @@ func _finish_storage_drag() -> void:
 	_drag_hold_timer = 0.0
 	_drag_count_label.visible = false
 
-	# Cancel if released inside the building detail panel — item stays in storage.
+	# Short click on a food item inside the panel → consume it (gain energy).
+	# "Short click" = mouse never left the tile (active_drag_source still set) and
+	# no batch-collect happened. Using mouse-on-tile as the signal avoids false
+	# positives from slow-release drags that happen to end inside the panel.
+	var is_tap: bool = batch_count == 1 and ItemTile.active_drag_source != null
+	if _is_mouse_over_building_panel() and is_tap and PlayerCharacter.is_food(res_id):
+		icon_node.queue_free()
+		if _root._player != null:
+			var energy := _root._player.consume_food(res_id)
+			if energy:
+				var mouse_world: Vector2 = get_global_mouse_position()
+				var energy_val: int = PlayerCharacter.food_energy_value(res_id)
+				_badges._spawn_pickup_float(mouse_world, "+%d ⚡" % energy_val)
+		get_viewport().set_input_as_handled()
+		return
+
+	# Cancel if released inside the building detail panel — try to return to storage,
+	# fall back to dropping on the world if storage is now full.
 	if _is_mouse_over_building_panel():
 		icon_node.queue_free()
-		InventorySystem.try_deposit(container_id, res_id, batch_count)
+		if InventorySystem.try_deposit(container_id, res_id, batch_count) != InventoryContainer.DepositResult.SUCCESS:
+			_drop_overflow_to_world(res_id, batch_count, from_tile)
 		get_viewport().set_input_as_handled()
 		return
 
@@ -555,8 +592,40 @@ func _finish_storage_drag() -> void:
 			return
 
 	icon_node.queue_free()
-	InventorySystem.try_deposit(container_id, res_id, batch_count)
+	if InventorySystem.try_deposit(container_id, res_id, batch_count) != InventoryContainer.DepositResult.SUCCESS:
+		_drop_overflow_to_world(res_id, batch_count, from_tile)
 	get_viewport().set_input_as_handled()
+
+
+## Drops [param count] of [param res_id] on the nearest passable tiles to [param origin_tile].
+## Searches in expanding rings (radius 0–5). Spawns a resource badge at origin_tile.
+## Used when try_deposit fails due to the storage filling up during a drag.
+func _drop_overflow_to_world(res_id: StringName, count: int, origin_tile: Vector2i) -> void:
+	var placed: int = 0
+	for radius: int in range(0, 6):
+		for dx: int in range(-radius, radius + 1):
+			for dy: int in range(-radius, radius + 1):
+				if abs(dx) != radius and abs(dy) != radius:
+					continue
+				var tile := origin_tile + Vector2i(dx, dy)
+				if not _root.grid.is_in_bounds(tile) or not _root.grid.is_passable(tile):
+					continue
+				while placed < count:
+					if _root.grid.add_resource_to_tile(tile, res_id, true):
+						placed += 1
+					else:
+						break
+				if placed >= count:
+					break
+			if placed >= count:
+				break
+		if placed >= count:
+			break
+	if placed > 0:
+		var ids: Array[StringName] = []
+		for _j: int in range(placed):
+			ids.append(res_id)
+		_badges._spawn_badge(origin_tile, ids, _root, 0.0, true, Time.get_ticks_msec())
 
 
 ## Parks a building-panel drag icon at the target tile and registers a pending transport.
@@ -826,20 +895,23 @@ func _process(delta: float) -> void:
 			else:
 				_drag_hold_timer = 0.0
 		elif _drag_from_container_id != &"" or _drag_from_output_building_id != "" or _drag_from_input_building_id != "":
-			_drag_hold_timer += delta
-			var _hold_threshold: float = (
-				_HOLD_COLLECT_DELAY if _drag_collected_count == 1
-				else maxf(_HOLD_COLLECT_MIN_INTERVAL,
-					_HOLD_COLLECT_BASE_INTERVAL * pow(_HOLD_COLLECT_DECAY, _drag_collected_count - 1))
-			)
-			if _drag_hold_timer >= _hold_threshold:
-				_drag_hold_timer -= _hold_threshold
-				if _drag_from_container_id != &"":
-					_try_batch_collect_from_container()
-				elif _drag_from_output_building_id != "":
-					_try_batch_collect_from_output()
-				else:
-					_try_batch_collect_from_input()
+			if ItemTile.active_drag_source != null:
+				_drag_hold_timer += delta
+				var _hold_threshold: float = (
+					_HOLD_COLLECT_DELAY if _drag_collected_count == 1
+					else maxf(_HOLD_COLLECT_MIN_INTERVAL,
+						_HOLD_COLLECT_BASE_INTERVAL * pow(_HOLD_COLLECT_DECAY, _drag_collected_count - 1))
+				)
+				if _drag_hold_timer >= _hold_threshold:
+					_drag_hold_timer -= _hold_threshold
+					if _drag_from_container_id != &"":
+						_try_batch_collect_from_container()
+					elif _drag_from_output_building_id != "":
+						_try_batch_collect_from_output()
+					else:
+						_try_batch_collect_from_input()
+			else:
+				_drag_hold_timer = 0.0
 		if _drag_count_label.visible:
 			_drag_count_label.position = get_global_mouse_position() + Vector2(18.0, 10.0)
 	_update_drag_overlays()
@@ -999,14 +1071,19 @@ func _unhandled_input(event: InputEvent) -> void:
 							_badges._spawn_badge(c_target_tile, ids_e, _root, 0.0, false,
 								Time.get_ticks_msec() + pi * 31)
 							_badges._resource_icons.back().resource_idx = size_before + pi
-						# Extra items that couldn't be placed — restore to source.
+						# Extra items that couldn't be placed — restore to source, fall back to nearby tile.
 						var failed_extras: int = c_total_items - maxi(placed_count, 1)
 						var seed_off: int = Time.get_ticks_msec()
+						var src_overflow: int = 0
 						for ri in range(failed_extras):
 							if _root.grid.add_resource_to_tile(c_src_tile, c_res_id, true):
 								var ids_r: Array[StringName] = [c_res_id]
 								_badges._spawn_badge(c_src_tile, ids_r, _root, 0.0, true, seed_off + ri * 41)
 								_badges._resource_icons.back().resource_idx = _root.grid.get_resources(c_src_tile).size() - 1
+							else:
+								src_overflow += 1
+						if src_overflow > 0:
+							_drop_overflow_to_world(c_res_id, src_overflow, c_src_tile)
 				})
 				TickSystem.set_pause(false)
 			PlayerCharacter.RelocationResult.SNAP_BACK_SAME_TILE:

@@ -55,9 +55,9 @@ enum TerrainProfile { PLAINS, FOREST, MOUNTAIN }
 ## PLAINS uses stone_hi = 1.01 so the peak branch is unreachable — byte-identical to the
 ## original thresholds (0.15 / 0.30 / 0.55 / 0.75, else STONE).
 const _ELEV_BANDS: Dictionary = {
-	TerrainProfile.PLAINS:   [0.15, 0.30, 0.55, 0.68, 1.01],  # tree_hi lowered 0.75→0.68 (~35% fewer trees)
-	TerrainProfile.FOREST:   [0.15, 0.30, 0.45, 0.82, 1.01],
-	TerrainProfile.MOUNTAIN: [0.12, 0.24, 0.40, 0.47, 0.82],  # tree_hi lowered 0.58→0.47 (~61% fewer trees)
+	TerrainProfile.PLAINS:   [0.15, 0.33, 0.55, 0.68, 1.01],  # veg_lo 0.30→0.33 widens BERRY/GRASS band
+	TerrainProfile.FOREST:   [0.15, 0.33, 0.45, 0.82, 1.01],
+	TerrainProfile.MOUNTAIN: [0.12, 0.26, 0.45, 0.48, 0.85],  # narrow TREE band (mountains shouldn't be forests)
 }
 
 ## Tile types that cluster exclusively with their own kind during smoothing.
@@ -186,13 +186,6 @@ const BIOME_PLAINS: int = 0
 const BIOME_FOREST: int = 1
 const BIOME_MOUNTAIN: int = 2
 const BIOME_COAST: int = 3
-## Maps BIOME_* classes to the TerrainProfile used for band blending in _blend_bands().
-const _BIOME_CLASS_TO_PROFILE: Dictionary = {
-	BIOME_FOREST:   TerrainProfile.FOREST,
-	BIOME_MOUNTAIN: TerrainProfile.MOUNTAIN,
-	BIOME_PLAINS:   TerrainProfile.PLAINS,
-	BIOME_COAST:    TerrainProfile.PLAINS,
-}
 ## Mineable-deposit fertilities → the pit TileType reveal converts the tile to. The single
 ## source of truth for "which fertilities are hidden deposits" (clay's mechanic, generalized).
 const DEPOSIT_TILE_TYPE: Dictionary = {
@@ -291,13 +284,13 @@ const _ORTHO_OFFSETS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector
 ## overworld tile has no river/lake/coast adjacency and the random lake roll misses.
 func generate(world_seed: int, fertility_override: Array = [], coast_edges: Array = [],
 		terrain_profile: int = TerrainProfile.PLAINS, river_edges: Array = [], lake_edges: Array = [],
-		force_water: bool = false, neighborhood_bias: Dictionary = {}) -> void:
+		force_water: bool = false, neighbor_profiles: Dictionary = {}) -> void:
 	assert(not _generation_done, "generate() called after terrain was locked")
 
 	var terrain: Array
 	var succeeded := false
 	for attempt in range(5):
-		terrain = _sample_noise(world_seed + attempt, terrain_profile, neighborhood_bias)
+		terrain = _sample_noise(world_seed + attempt, terrain_profile, neighbor_profiles)
 		terrain = _smooth_terrain(terrain, world_seed + attempt)
 		terrain = _cleanup_clusters(terrain)
 		terrain = _carve_water(terrain, world_seed + attempt, coast_edges, river_edges, lake_edges, force_water)
@@ -323,6 +316,17 @@ func generate(world_seed: int, fertility_override: Array = [], coast_edges: Arra
 	_populate_hidden_deposits(world_seed)
 
 	_generation_done = true
+
+
+## Returns a flat tally of every TileType currently on the terrain layer (post-generation).
+## Used by callers (e.g. OverworldSystem) for distribution logging.
+func get_terrain_type_counts() -> Dictionary:
+	var counts: Dictionary = {}
+	for x in range(GRID_SIZE):
+		for y in range(GRID_SIZE):
+			var t: int = _terrain[x][y]
+			counts[t] = counts.get(t, 0) + 1
+	return counts
 
 
 ## Converts a few EMPTY tiles to WHEAT and seeds them with wheat resources.
@@ -619,7 +623,11 @@ func reveal_hidden_deposit(tile: Vector2i) -> StringName:
 ## Uses FastNoiseLite (Godot 4.x noise class — FastNoise does not exist in Godot 4).
 ## terrain_profile selects the elevation band cutoffs (_ELEV_BANDS) so forest/mountain maps
 ## skew toward trees / stone+peaks respectively; PLAINS reproduces the original thresholds.
-func _sample_noise(noise_seed: int, terrain_profile: int = TerrainProfile.PLAINS, neighborhood_bias: Dictionary = {}) -> Array:
+## neighbor_profiles: {Vector2i offset → TerrainProfile} for each overworld neighbor whose biome
+## differs from base. Bands are blended PER-TILE based on each tile's proximity to the edge that
+## faces that neighbor — so a mountain neighbor to the north makes the north edge mountain-like
+## while the south stays plains. This spatial coherence lets STONE clusters survive smoothing.
+func _sample_noise(noise_seed: int, terrain_profile: int = TerrainProfile.PLAINS, neighbor_profiles: Dictionary = {}) -> Array:
 	var elevation := FastNoiseLite.new()
 	elevation.noise_type = FastNoiseLite.TYPE_PERLIN
 	elevation.seed = noise_seed
@@ -636,12 +644,13 @@ func _sample_noise(noise_seed: int, terrain_profile: int = TerrainProfile.PLAINS
 	moisture.fractal_octaves = 3
 	moisture.frequency = 0.08
 
-	var bands: Array = _blend_bands(terrain_profile, neighborhood_bias)
+	var base_bands: Array = _ELEV_BANDS[terrain_profile]
 	var terrain: Array = []
 	for x in range(GRID_SIZE):
 		var row: Array[int] = []
 		terrain.append(row)
 		for y in range(GRID_SIZE):
+			var bands: Array = _blend_bands_directional(x, y, base_bands, neighbor_profiles)
 			var elev_norm: float = (elevation.get_noise_2d(x, y) + 1.0) / 2.0
 			var mois_norm: float = (moisture.get_noise_2d(x, y) + 1.0) / 2.0
 			var tile_type: int
@@ -661,19 +670,46 @@ func _sample_noise(noise_seed: int, terrain_profile: int = TerrainProfile.PLAINS
 	return terrain
 
 
-## Returns the elevation bands for `base_profile` blended toward neighbor-biome profiles
-## proportionally to the fractions in `bias` (keys: BIOME_* → 0.0–0.5). Applied sequentially;
-## own biome stays dominant because the max blend per neighbor type is capped at 0.5.
-static func _blend_bands(base_profile: int, bias: Dictionary) -> Array:
-	var bands: Array = (_ELEV_BANDS[base_profile] as Array).duplicate()
-	for biome_class: int in _BIOME_CLASS_TO_PROFILE:
-		var weight: float = float(bias.get(biome_class, 0.0))
+## Per-tile band blending: for each neighbor profile, lerp the base bands toward that profile
+## weighted by how close (x, y) is to the edge in that neighbor's direction. A tile on the right
+## edge with a mountain neighbor at offset (1, 0) gets bands fully lerped to mountain; the same
+## tile gets no influence from a forest neighbor at (-1, 0). Corner-neighbor proximities average
+## both axes so diagonals contribute to both adjacent edges at half strength.
+static func _blend_bands_directional(x: int, y: int, base_bands: Array, neighbor_profiles: Dictionary) -> Array:
+	if neighbor_profiles.is_empty():
+		return base_bands
+	var bands: Array = base_bands.duplicate()
+	for offset_key: Variant in neighbor_profiles:
+		var offset: Vector2i = offset_key
+		var weight: float = _proximity_to_edge(x, y, offset)
 		if weight <= 0.0:
 			continue
-		var target: Array = _ELEV_BANDS[_BIOME_CLASS_TO_PROFILE[biome_class]]
+		var target: Array = _ELEV_BANDS[int(neighbor_profiles[offset])]
 		for i in range(bands.size()):
 			bands[i] = lerpf(float(bands[i]), float(target[i]), weight)
 	return bands
+
+
+## Returns 0..1, where 1.0 means the tile sits on the edge facing `offset` (the side closest to
+## that overworld neighbor), and 0.0 means it sits on the opposite edge. Diagonals average both
+## axes. Coordinate convention: y=0 is top (north), x=0 is left.
+static func _proximity_to_edge(x: int, y: int, offset: Vector2i) -> float:
+	var denom: float = float(GRID_SIZE - 1)
+	var nx: float = 0.0
+	var ny: float = 0.0
+	if offset.x > 0:
+		nx = float(x) / denom
+	elif offset.x < 0:
+		nx = 1.0 - float(x) / denom
+	if offset.y > 0:
+		ny = float(y) / denom
+	elif offset.y < 0:
+		ny = 1.0 - float(y) / denom
+	if offset.x == 0:
+		return ny
+	if offset.y == 0:
+		return nx
+	return (nx + ny) * 0.5
 
 
 ## Step 2: 2 smoothing iterations. Adopts dominant 8-neighbor type with 60% probability.
