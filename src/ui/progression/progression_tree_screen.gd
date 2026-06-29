@@ -405,6 +405,13 @@ func _on_background_gui_input(event: InputEvent) -> void:
 			_zoom_at(_background.get_local_mouse_position(), 1.0 / ZOOM_STEP)
 		return
 
+	var mg := event as InputEventMagnifyGesture
+	if mg != null:
+		# Mac trackpad pinch — use background-local mouse pos as pivot (gesture.position
+		# is viewport-space; _zoom_at expects the same space as _world.position).
+		_zoom_at(_background.get_local_mouse_position(), mg.factor)
+		return
+
 	var mm := event as InputEventMouseMotion
 	if mm != null and _panning:
 		_world.position += mm.relative

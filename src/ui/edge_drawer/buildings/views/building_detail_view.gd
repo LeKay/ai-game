@@ -109,10 +109,15 @@ var _transport_section:   Control
 var _upgrades_section:    Control
 var _residents_section:   Control  ## residents grid — only visible for RESIDENTIAL_HOUSE
 
+var _crafting_btn_host: Control    ## container for crafting button — storage+bench only
+var _crafting_section:  Control    ## inline crafting view — replaces body sections when open
+var _crafting_grid:     CraftingGrid  ## recipe grid inside crafting section
+
 # ── State ─────────────────────────────────────────────────────────────────────
 
 var _building_id: String = ""
 var _is_rename_active: bool = false
+var _crafting_view_open: bool = false
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -168,8 +173,17 @@ func _ready() -> void:
 	vbox.add_child(_transport_section)
 	vbox.add_child(_upgrades_section)
 
+	_crafting_btn_host = _build_crafting_btn()
+	vbox.add_child(_crafting_btn_host)
+	_crafting_section = _build_crafting_section_view()
+	vbox.add_child(_crafting_section)
+
 	_picker_popup = _build_picker_popup()
 	add_child(_picker_popup)
+
+	CraftingRegistry.crafting_started.connect(_on_bdv_crafting_started)
+	CraftingRegistry.crafting_progress.connect(_on_bdv_crafting_progress)
+	CraftingRegistry.recipe_crafted.connect(_on_bdv_recipe_crafted)
 
 
 func _input(event: InputEvent) -> void:
@@ -210,6 +224,12 @@ func _notification(what: int) -> void:
 			InventorySystem.storage_changed.disconnect(_on_storage_changed)
 		if TickSystem.ticks_advanced.is_connected(_on_ticks_advanced):
 			TickSystem.ticks_advanced.disconnect(_on_ticks_advanced)
+		if CraftingRegistry.crafting_started.is_connected(_on_bdv_crafting_started):
+			CraftingRegistry.crafting_started.disconnect(_on_bdv_crafting_started)
+		if CraftingRegistry.crafting_progress.is_connected(_on_bdv_crafting_progress):
+			CraftingRegistry.crafting_progress.disconnect(_on_bdv_crafting_progress)
+		if CraftingRegistry.recipe_crafted.is_connected(_on_bdv_recipe_crafted):
+			CraftingRegistry.recipe_crafted.disconnect(_on_bdv_recipe_crafted)
 
 
 func _on_ticks_advanced(_delta: int) -> void:
@@ -383,6 +403,17 @@ func refresh() -> void:
 		var us := _upgrades_section as UpgradesSection
 		us.refresh()
 		us.visible = us.is_visible_section()
+
+	# ── Crafting button — visible when storage has crafting bench upgrade ──────
+	var has_bench: bool = is_storage and BuildingRegistry.has_upgrade(_building_id, &"crafting_bench")
+	_crafting_btn_host.visible = has_bench and not _crafting_view_open
+
+	# When crafting view is open, keep all body sections hidden.
+	if _crafting_view_open:
+		_production_section.visible = false
+		_residents_section.visible = false
+		_transport_section.visible = false
+		_upgrades_section.visible = false
 
 
 ## Returns true while the inline rename LineEdit is active.
@@ -1031,3 +1062,201 @@ func cancel_all_editors() -> void:
 		(_production_section as ProductionSection).cancel_picker()
 	if _transport_section is TransportSection:
 		(_transport_section as TransportSection).cancel_editor()
+	if _crafting_view_open:
+		_close_crafting_view()
+
+
+# ── Crafting button ───────────────────────────────────────────────────────────
+
+func _build_crafting_btn() -> Control:
+	var host := VBoxContainer.new()
+	host.name = "CraftingBtnHost"
+	host.add_theme_constant_override("separation", 0)
+	host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	host.visible = false
+
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.add_child(spacer)
+
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override("margin_left",   8)
+	pad.add_theme_constant_override("margin_right",  8)
+	pad.add_theme_constant_override("margin_top",    4)
+	pad.add_theme_constant_override("margin_bottom", 8)
+	host.add_child(pad)
+
+	var btn := Button.new()
+	btn.name = "CraftingBtn"
+	btn.text = "⚒ Crafting"  # TODO: localize
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.pressed.connect(_open_crafting_view)
+	pad.add_child(btn)
+	return host
+
+
+# ── Inline crafting section ───────────────────────────────────────────────────
+
+func _build_crafting_section_view() -> Control:
+	var vbox := VBoxContainer.new()
+	vbox.name = "CraftingSection"
+	vbox.add_theme_constant_override("separation", 0)
+	vbox.visible = false
+
+	vbox.add_child(_make_separator())
+
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override("margin_left",   12)
+	pad.add_theme_constant_override("margin_right",  12)
+	pad.add_theme_constant_override("margin_top",     8)
+	pad.add_theme_constant_override("margin_bottom",  0)
+	vbox.add_child(pad)
+
+	var header_row := HBoxContainer.new()
+	header_row.add_theme_constant_override("separation", 0)
+	pad.add_child(header_row)
+
+	var title := Label.new()
+	title.name = "CraftingTitle"
+	title.text = "Crafting"  # TODO: localize
+	title.add_theme_font_size_override("font_size", 11)
+	title.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+	header_row.add_child(title)
+
+	var fill := Control.new()
+	fill.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header_row.add_child(fill)
+
+	var close_btn := Button.new()
+	close_btn.name = "CraftingCloseBtn"
+	close_btn.text = "✕"
+	close_btn.flat = true
+	close_btn.add_theme_font_size_override("font_size", 11)
+	close_btn.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+	close_btn.add_theme_color_override("font_hover_color", COLOR_TEXT)
+	close_btn.pressed.connect(_close_crafting_view)
+	header_row.add_child(close_btn)
+
+	var grid_pad := MarginContainer.new()
+	grid_pad.add_theme_constant_override("margin_left",   8)
+	grid_pad.add_theme_constant_override("margin_right",  8)
+	grid_pad.add_theme_constant_override("margin_top",    4)
+	grid_pad.add_theme_constant_override("margin_bottom", 8)
+	vbox.add_child(grid_pad)
+
+	_crafting_grid = CraftingGrid.new()
+	_crafting_grid.name = "BuildingCraftingGrid"
+	_crafting_grid.recipe_selected.connect(_on_building_recipe_selected)
+	grid_pad.add_child(_crafting_grid)
+
+	return vbox
+
+
+func _open_crafting_view() -> void:
+	cancel_all_editors()  # closes rename, speed editor, pickers (_crafting_view_open still false here)
+	_crafting_view_open = true
+	_crafting_btn_host.visible = false
+	_production_section.visible = false
+	_residents_section.visible = false
+	_transport_section.visible = false
+	_upgrades_section.visible = false
+	_crafting_section.visible = true
+	CraftingRegistry.set_selected_storage(_building_id)
+	_crafting_grid.populate(_build_crafting_list(),
+			CraftingRegistry.get_active_recipe_id(), 0.0)
+
+
+func _close_crafting_view() -> void:
+	_crafting_view_open = false
+	_crafting_section.visible = false
+	_production_section.visible = true
+	refresh()
+
+
+func _build_crafting_list() -> Array[Dictionary]:
+	var player: Node = get_tree().get_first_node_in_group(&"player_character")
+	var current_energy: int = player.get_current_energy() if player != null else 0
+	var result: Array[Dictionary] = []
+	for recipe_id: StringName in CraftingRegistry.RECIPE_ORDER:
+		if not ProgressionSystem.is_recipe_unlocked(recipe_id):
+			continue
+		var cost: Dictionary      = CraftingRegistry.RECIPE_COST.get(recipe_id, {})
+		var energy_cost: int      = CraftingRegistry.RECIPE_ENERGY_COST.get(recipe_id, 0)
+		var display_name: String  = CraftingRegistry.RECIPE_DISPLAY_NAME.get(recipe_id, str(recipe_id))
+		var available: Dictionary = {}
+		var can_afford: bool      = true
+		for res_id: StringName in cost:
+			var have: int     = InventorySystem.get_global_quantity(res_id)
+			available[res_id] = have
+			if have < cost[res_id]:
+				can_afford = false
+		if energy_cost > 0 and current_energy < energy_cost:
+			can_afford = false
+		if DebugSettings.ignore_costs:
+			can_afford = true
+		result.append({
+			&"recipe_id":      recipe_id,
+			&"display_name":   display_name,
+			&"cost":           cost,
+			&"available":      available,
+			&"can_afford":     can_afford,
+			&"energy_cost":    energy_cost,
+			&"current_energy": current_energy,
+		})
+	return result
+
+
+func _on_building_recipe_selected(recipe_id: StringName) -> void:
+	if CraftingRegistry.is_crafting():
+		_spawn_bdv_craft_float("Already crafting!", Color("#E05050"))  # TODO: localize
+		return
+	var result: int = CraftingRegistry.try_craft(recipe_id)
+	match result:
+		CraftingRegistry.CraftResult.NO_STORAGE:
+			_spawn_bdv_craft_float("No storage available!", Color("#E05050"))  # TODO: localize
+		CraftingRegistry.CraftResult.LOCKED:
+			_spawn_bdv_craft_float("Locked — unlock in tech tree", Color("#E05050"))  # TODO: localize
+		CraftingRegistry.CraftResult.SUCCESS:
+			TickSystem.set_pause(false)
+
+
+func _on_bdv_crafting_started(_recipe_id: StringName, _total_ticks: int) -> void:
+	if _crafting_view_open:
+		_crafting_grid.populate(_build_crafting_list(),
+				CraftingRegistry.get_active_recipe_id(), 0.0)
+
+
+func _on_bdv_crafting_progress(_recipe_id: StringName, progress: float) -> void:
+	if _crafting_view_open:
+		_crafting_grid.update_progress(progress)
+
+
+func _on_bdv_recipe_crafted(recipe_id: StringName, qty: int) -> void:
+	if not _crafting_view_open:
+		return
+	_crafting_grid.populate(_build_crafting_list())
+	var display_name: String = CraftingRegistry.RECIPE_DISPLAY_NAME.get(recipe_id, str(recipe_id))
+	_spawn_bdv_craft_float("+%d %s" % [qty, display_name])
+
+
+func _spawn_bdv_craft_float(text: String, color: Color = Color("#D4A85C")) -> void:
+	var craft_rect: Rect2 = _crafting_grid.get_global_rect()
+	var local_origin := Vector2(
+		craft_rect.position.x + craft_rect.size.x * 0.5,
+		craft_rect.position.y + 60.0
+	) - global_position
+	var label := Label.new()
+	label.text     = text
+	label.position = local_origin + Vector2(-40.0, 0.0)
+	label.add_theme_font_size_override("font_size", 22)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.9))
+	label.add_theme_constant_override("outline_size", 4)
+	add_child(label)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(label, "position:y", label.position.y - 64.0, 1.6)
+	tween.tween_property(label, "modulate:a", 0.0, 1.6)
+	tween.finished.connect(label.queue_free)

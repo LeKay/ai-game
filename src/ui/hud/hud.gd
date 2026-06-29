@@ -755,6 +755,8 @@ func _on_transport_route_deleted(route_id: StringName) -> void:
 
 func _on_save_load_completed() -> void:
 	_transport_drawer.refresh()
+	_task_dialog.refresh()
+	_buildings_drawer.refresh()
 
 
 func _on_start_selected(_coord: Vector2i) -> void:

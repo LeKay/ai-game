@@ -108,8 +108,18 @@ func _ready() -> void:
 
 	_show_view(_list_view)
 
+	BuildingRegistry.building_placed.connect(_emit_badge.unbind(3))
+	BuildingRegistry.building_demolished.connect(_emit_badge.unbind(1))
+	BuildingRegistry.building_state_changed.connect(_emit_badge.unbind(3))
+	_emit_badge()
+
 
 # --- DrawerContentBase API ---------------------------------------------------
+
+## Refreshes the badge. Call after external state changes (e.g. save load).
+func refresh() -> void:
+	_emit_badge()
+
 
 ## Called by EdgeDrawerController each time the panel slides open.
 func on_drawer_opened() -> void:

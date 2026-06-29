@@ -5,7 +5,8 @@ class_name RouteEditor extends PanelContainer
 ## Two modes:
 ##   - locked  : tiles are read-only, the header shows the carrier status and an ✏️ Edit button.
 ##   - editing : tiles are interactive (click to pick building / item / carrier) and the header shows
-##               ✓ Save + ✕ Cancel buttons in place of Edit.
+##               ✓ Save + ✕ Cancel buttons in place of Edit. For existing routes a 🗑 Delete button
+##               is also shown; pressing it arms an inline "Delete? 🗑 ✕" confirm in the same header.
 ##
 ## A brand-new route starts in editing mode with empty tiles (init_new()).
 ##
@@ -61,7 +62,7 @@ signal delete_requested()
 
 var _route: LogisticsRoute = null   # null = creating a new route
 var _locked := true
-var _confirm_delete := false        # locked card showing the inline "Delete route?" confirm
+var _confirm_delete := false        # editing card showing the inline "Delete route?" confirm
 
 var _from: StringName = &""
 var _to: StringName = &""
@@ -99,6 +100,7 @@ var _npc_list: VBoxContainer
 func init_existing(route: LogisticsRoute, locked: bool) -> void:
 	_route = route
 	_locked = locked
+	_confirm_delete = false
 	_from = route.source_building_id
 	_to = route.destination_building_id
 	_npc = route.npc_id
@@ -111,6 +113,7 @@ func init_existing(route: LogisticsRoute, locked: bool) -> void:
 func init_new(prefill_from: StringName = &"", prefill_to: StringName = &"") -> void:
 	_route = null
 	_locked = false
+	_confirm_delete = false
 	_from = prefill_from
 	_to = prefill_to
 	_npc = &""
@@ -205,7 +208,15 @@ func _build_header() -> Control:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(spacer)
 
-	if _locked and _confirm_delete:
+	if _locked:
+		var edit_btn := Button.new()
+		edit_btn.text = "✏"
+		edit_btn.tooltip_text = "Edit route"
+		edit_btn.custom_minimum_size = Vector2(32, 28)
+		edit_btn.focus_mode = Control.FOCUS_NONE
+		edit_btn.pressed.connect(func() -> void: edit_requested.emit())
+		header.add_child(edit_btn)
+	elif _confirm_delete:
 		var confirm_lbl := Label.new()
 		confirm_lbl.text = "Delete?"
 		confirm_lbl.add_theme_font_size_override("font_size", 12)
@@ -228,22 +239,6 @@ func _build_header() -> Control:
 		no_btn.focus_mode = Control.FOCUS_NONE
 		no_btn.pressed.connect(_on_delete_cancel)
 		header.add_child(no_btn)
-	elif _locked:
-		var edit_btn := Button.new()
-		edit_btn.text = "✏"
-		edit_btn.tooltip_text = "Edit route"
-		edit_btn.custom_minimum_size = Vector2(32, 28)
-		edit_btn.focus_mode = Control.FOCUS_NONE
-		edit_btn.pressed.connect(func() -> void: edit_requested.emit())
-		header.add_child(edit_btn)
-
-		var del_btn := Button.new()
-		del_btn.text = "🗑"
-		del_btn.tooltip_text = "Delete route"
-		del_btn.custom_minimum_size = Vector2(32, 28)
-		del_btn.focus_mode = Control.FOCUS_NONE
-		del_btn.pressed.connect(_on_delete_pressed)
-		header.add_child(del_btn)
 	else:
 		_save_btn = Button.new()
 		_save_btn.text = "✓"
@@ -261,16 +256,26 @@ func _build_header() -> Control:
 		cancel_btn.pressed.connect(func() -> void: cancel_requested.emit())
 		header.add_child(cancel_btn)
 
+		# Delete is only meaningful for existing routes (a brand-new route has nothing to delete).
+		if _route != null:
+			var del_btn := Button.new()
+			del_btn.text = "🗑"
+			del_btn.tooltip_text = "Delete route"
+			del_btn.custom_minimum_size = Vector2(32, 28)
+			del_btn.focus_mode = Control.FOCUS_NONE
+			del_btn.pressed.connect(_on_delete_pressed)
+			header.add_child(del_btn)
+
 	return header
 
 
-## First 🗑 click on a locked card: arm the inline "Delete?" confirm (avoids accidental deletes).
+## First 🗑 click in edit mode: arm the inline "Delete?" confirm (avoids accidental deletes).
 func _on_delete_pressed() -> void:
 	_confirm_delete = true
 	_build()
 
 
-## ✕ on the confirm: keep the route, return to the normal locked header.
+## ✕ on the confirm: keep the route, return to the normal editing header.
 func _on_delete_cancel() -> void:
 	_confirm_delete = false
 	_build()

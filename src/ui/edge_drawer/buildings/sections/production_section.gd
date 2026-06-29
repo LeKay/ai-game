@@ -26,6 +26,7 @@ const COLOR_TEXT_DIM := Color(0.55, 0.55, 0.60, 1.0)
 # ── Node refs ─────────────────────────────────────────────────────────────────
 
 var _recipe_btn: Button
+var _section_label: Label
 var _flow: TileFlowContainer
 ## Container wrapping the rate label + tile flow (hidden while picker is visible).
 var _body_container: VBoxContainer
@@ -66,13 +67,13 @@ func _ready() -> void:
 	pad_h.add_child(header)
 	add_child(pad_h)
 
-	var section_label := Label.new()
-	section_label.name = "SectionLabel"
-	section_label.text = "Production"  # TODO: localize
-	section_label.add_theme_font_size_override("font_size", 12)
-	section_label.add_theme_color_override("font_color", COLOR_TEXT)
-	section_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(section_label)
+	_section_label = Label.new()
+	_section_label.name = "SectionLabel"
+	_section_label.text = "Production"  # TODO: localize
+	_section_label.add_theme_font_size_override("font_size", 12)
+	_section_label.add_theme_color_override("font_color", COLOR_TEXT)
+	_section_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(_section_label)
 
 	_recipe_btn = Button.new()
 	_recipe_btn.name    = "RecipeBtn"
@@ -100,7 +101,6 @@ func _ready() -> void:
 	_recipe_picker_view = RecipePickerView.new()
 	_recipe_picker_view.name    = "RecipePickerView"
 	_recipe_picker_view.visible = false
-	_recipe_picker_view.back_pressed.connect(_hide_picker)
 	_recipe_picker_view.recipe_selected.connect(_on_recipe_selected)
 	add_child(_recipe_picker_view)
 
@@ -288,23 +288,30 @@ func _rebuild_tiles() -> void:
 
 # ── Picker sub-state ──────────────────────────────────────────────────────────
 
-## Called when the ⚙️ button is pressed. Emits the external signal and shows the picker.
+## Called when the ⚙️/✕ button is pressed — toggles the picker open/closed.
 func _on_recipe_btn_pressed() -> void:
-	recipe_picker_requested.emit()
-	_show_picker()
+	if _recipe_picker_view.visible:
+		_hide_picker()
+	else:
+		recipe_picker_requested.emit()
+		_show_picker()
 
 
 ## Shows the recipe picker and hides the body content.
 func _show_picker() -> void:
 	_recipe_picker_view.setup(_building_id)
-	_body_container.visible      = false
-	_recipe_picker_view.visible  = true
+	_body_container.visible     = false
+	_recipe_picker_view.visible = true
+	_recipe_btn.text = "✕"
+	_section_label.text = "Recipes"  # TODO: localize
 
 
 ## Hides the recipe picker and restores the body content.
 func _hide_picker() -> void:
 	_recipe_picker_view.visible = false
 	_body_container.visible     = true
+	_recipe_btn.text = "⚙"
+	_section_label.text = "Production"  # TODO: localize
 
 
 ## Closes the recipe picker without confirming a selection. No-op if not open.

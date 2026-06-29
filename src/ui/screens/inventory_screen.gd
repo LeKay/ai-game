@@ -31,10 +31,10 @@ const COLOR_CAP_RED           := Color("#E05555")
 const ANIM_OPEN_SEC  := 0.10
 const ANIM_CLOSE_SEC := 0.08
 
-const TABS: Array[String] = ["Inventory", "Crafting", "Buildings", "NPCs"]
+const TABS: Array[String] = ["Inventory", "Crafting", "NPCs"]
 
 var _is_open:    bool = false
-var _active_tab: int  = 2  ## Default to Buildings — always unlocked at game start.
+var _active_tab: int  = 0  ## Default to Inventory.
 
 ## Root Control — single fade target (CanvasLayer has no modulate).
 var _panel_root: Control
@@ -47,7 +47,6 @@ var _capacity_bar_fill: ColorRect
 
 var _zone3_vbox:     VBoxContainer
 var _item_grid:      ItemGrid
-var _building_grid:  BuildingGrid
 var _crafting_grid:  CraftingGrid
 var _npc_grid:        NpcGrid
 var _npc_detail_panel: NpcDetailPanel
@@ -82,10 +81,6 @@ func _exit_tree() -> void:
 		BuildingRegistry.upgrade_installed.disconnect(_on_upgrade_changed_iv)
 	if BuildingRegistry.upgrade_removed.is_connected(_on_upgrade_changed_iv):
 		BuildingRegistry.upgrade_removed.disconnect(_on_upgrade_changed_iv)
-	if BuildingRegistry.building_placed.is_connected(_on_building_placed_iv):
-		BuildingRegistry.building_placed.disconnect(_on_building_placed_iv)
-	if BuildingRegistry.building_demolished.is_connected(_on_building_demolished_iv):
-		BuildingRegistry.building_demolished.disconnect(_on_building_demolished_iv)
 	if ProgressionSystem.node_unlocked.is_connected(_on_progression_unlocked):
 		ProgressionSystem.node_unlocked.disconnect(_on_progression_unlocked)
 	var npc_sys: Node = NPCSystem
@@ -306,11 +301,6 @@ func _build_zone3(parent: VBoxContainer) -> void:
 	_crafting_grid.visible = false
 	_zone3_vbox.add_child(_crafting_grid)
 
-	_building_grid = BuildingGrid.new()
-	_building_grid.name    = "BuildingGrid"
-	_building_grid.visible = false
-	_zone3_vbox.add_child(_building_grid)
-
 	_npc_grid = NpcGrid.new()
 	_npc_grid.name    = "NpcGrid"
 	_npc_grid.center  = true
@@ -338,7 +328,6 @@ func _connect_signals() -> void:
 	InventorySystem.container_capacity_changed.connect(_on_capacity_changed)
 	_item_grid.item_clicked.connect(_on_item_clicked)
 	_crafting_grid.recipe_selected.connect(_on_recipe_selected)
-	_building_grid.building_selected.connect(_on_building_selected)
 	_npc_grid.npc_clicked.connect(_open_npc_detail)
 	_npc_detail_panel.food_assigned.connect(_on_npc_food_assigned)
 	_npc_detail_panel.food_cleared.connect(_on_npc_food_cleared)
@@ -348,8 +337,6 @@ func _connect_signals() -> void:
 	CraftingRegistry.recipe_crafted.connect(_on_crafting_completed)
 	BuildingRegistry.upgrade_installed.connect(_on_upgrade_changed_iv)
 	BuildingRegistry.upgrade_removed.connect(_on_upgrade_changed_iv)
-	BuildingRegistry.building_placed.connect(_on_building_placed_iv)
-	BuildingRegistry.building_demolished.connect(_on_building_demolished_iv)
 	ProgressionSystem.node_unlocked.connect(_on_progression_unlocked)
 	var npc_sys: Node = NPCSystem
 	if npc_sys != null:
@@ -441,8 +428,6 @@ func _refresh() -> void:
 		if CraftingRegistry.has_crafting_bench():
 			_crafting_grid.populate(_crafting_list(), CraftingRegistry.get_active_recipe_id(), CraftingRegistry.get_crafting_progress())
 	elif _active_tab == 2:
-		_building_grid.populate(_building_list())
-	elif _active_tab == 3:
 		_npc_grid.populate(_npc_list())
 
 
@@ -541,14 +526,13 @@ func _apply_tab_styles() -> void:
 
 func _refresh_zone3() -> void:
 	for child in _zone3_vbox.get_children():
-		if child != _item_grid and child != _crafting_grid and child != _building_grid and child != _npc_grid and child != _crafting_gate_label and child != _crafting_bench_dropdown:
+		if child != _item_grid and child != _crafting_grid and child != _npc_grid and child != _crafting_gate_label and child != _crafting_bench_dropdown:
 			child.queue_free()
 
 	_item_grid.visible              = false
 	_crafting_grid.visible          = false
 	_crafting_gate_label.visible    = false
 	_crafting_bench_dropdown.visible = false
-	_building_grid.visible          = false
 	_npc_grid.visible               = false
 
 	if _active_tab == 0:
@@ -564,9 +548,6 @@ func _refresh_zone3() -> void:
 			_refresh_bench_dropdown()
 			_crafting_grid.populate(_crafting_list(), CraftingRegistry.get_active_recipe_id(), CraftingRegistry.get_crafting_progress())
 	elif _active_tab == 2:
-		_building_grid.visible = true
-		_building_grid.populate(_building_list())
-	elif _active_tab == 3:
 		_npc_grid.visible = true
 		_npc_grid.populate(_npc_list())
 	else:
@@ -643,83 +624,6 @@ func _spawn_craft_float(text: String, color: Color = Color("#D4A85C")) -> void:
 	tween.finished.connect(label.queue_free)
 
 
-# ── Buildings tab ─────────────────────────────────────────────────────────────
-
-func _building_list() -> Array[Dictionary]:
-	var resources: Dictionary = _compute_summary()[&"resources"]
-	var player: Node = get_tree().get_first_node_in_group(&"player_character")
-	var current_energy: int = player.get_current_energy() if player != null else 0
-	var result: Array[Dictionary] = []
-
-	# Demolish entry — no cost, always available.
-	result.append({
-		&"building_type":  BuildingGrid.DEMOLISH_SENTINEL,
-		&"display_name":   "Demolish",
-		&"cost":           {},
-		&"available":      {},
-		&"can_afford":     true,
-		&"energy_cost":    0,
-		&"current_energy": current_energy,
-	})
-
-	# Path entry — free to place, no resource cost.
-	# Progression gate (UI layer): hidden until the Paving node unlocks path-laying.
-	if ProgressionSystem.is_gather_unlocked(PlayerCharacter.ManualActionType.CONSTRUCT_PATH):
-		result.append({
-			&"building_type":  PathSystem.PATH_SENTINEL,
-			&"display_name":   "Path",
-			&"cost":           {},
-			&"available":      {},
-			&"can_afford":     true,
-			&"energy_cost":    0,
-			&"current_energy": current_energy,
-		})
-
-	for btype: int in BuildingRegistry.BUILDABLE_TYPES:
-		# Progression gate (UI layer): hide building types not yet unlocked.
-		if not ProgressionSystem.is_building_unlocked(btype):
-			continue
-		var cost: Dictionary = BuildingRegistry.get_effective_build_cost(btype)
-		var available: Dictionary = {}
-		var can_afford: bool = true
-		for res_id: StringName in cost:
-			var have: int = resources.get(res_id, 0)
-			available[res_id] = have
-			if have < cost[res_id]:
-				can_afford = false
-		var total_res: int = 0
-		for res_id: StringName in cost:
-			total_res += cost[res_id]
-		var energy_cost: int = int(floor(float(total_res) * BuildingRegistry.ENERGY_PER_RESOURCE))
-		if energy_cost > 0 and current_energy < energy_cost:
-			can_afford = false
-		if DebugSettings.ignore_costs:
-			can_afford = true
-		result.append({
-			&"building_type":   btype,
-			&"display_name":    BuildingRegistry.get_type_display_name(btype),
-			&"cost":            cost,
-			&"available":       available,
-			&"can_afford":      can_afford,
-			&"energy_cost":     energy_cost,
-			&"current_energy":  current_energy,
-		})
-	return result
-
-
-func _on_building_selected(building_type: int) -> void:
-	if building_type == BuildingGrid.DEMOLISH_SENTINEL:
-		_close()
-		demolish_mode_requested.emit()
-		return
-	if building_type == PathSystem.PATH_SENTINEL:
-		_close()
-		path_mode_requested.emit()
-		return
-	_close()
-	build_mode_requested.emit(building_type)
-
-
 # ── Crafting tab ──────────────────────────────────────────────────────────────
 
 func _crafting_list() -> Array[Dictionary]:
@@ -793,8 +697,8 @@ func _on_crafting_completed(recipe_id: StringName, qty: int) -> void:
 			TickSystem.set_pause(true)
 		if _active_tab == 1:
 			_crafting_grid.populate(_crafting_list())
-	var display_name: String = CraftingRegistry.RECIPE_DISPLAY_NAME.get(recipe_id, str(recipe_id))
-	_spawn_craft_float("+%d %s" % [qty, display_name])
+		var display_name: String = CraftingRegistry.RECIPE_DISPLAY_NAME.get(recipe_id, str(recipe_id))
+		_spawn_craft_float("+%d %s" % [qty, display_name])
 
 
 func _refresh_bench_dropdown() -> void:
@@ -835,22 +739,6 @@ func _on_progression_unlocked(_node_id: StringName) -> void:
 		_refresh_zone3()
 
 
-func _on_building_placed_iv(_building_id: String, _type: int, _tile: Vector2i) -> void:
-	if _type == BuildingRegistry.BuildingType.COLLECTION_POINT:
-		ProgressionSystem.set_flag(&"collection_point_ever_built")
-	_apply_tab_styles()
-
-
-func _on_building_demolished_iv(_building_id: StringName) -> void:
-	_apply_tab_styles()
-	if _is_open and not _is_tab_unlocked(_active_tab):
-		for i: int in range(TABS.size()):
-			if _is_tab_unlocked(i):
-				_active_tab = i
-				break
-		_refresh_zone3()
-
-
 # ── Tab gate helpers ──────────────────────────────────────────────────────────
 
 func _is_tab_unlocked(idx: int) -> bool:
@@ -861,7 +749,7 @@ func _is_tab_unlocked(idx: int) -> bool:
 			return _has_collection_point() or ProgressionSystem.has_flag(&"collection_point_ever_built")
 		1:  ## Crafting — requires Toolmaking node
 			return ProgressionSystem.is_unlocked(&"toolmaking")
-		3:  ## NPCs — requires Shelter node
+		2:  ## NPCs — requires Shelter node
 			return ProgressionSystem.is_unlocked(&"shelter")
 		_:
 			return true
@@ -878,7 +766,7 @@ func _tab_lock_hint(idx: int) -> String:
 	match idx:
 		0:  return "Build a Collection Point first"
 		1:  return "Unlock Toolmaking in the Tech Tree"
-		3:  return "Unlock Shelter in the Tech Tree"
+		2:  return "Unlock Shelter in the Tech Tree"
 		_:  return ""
 
 
@@ -911,27 +799,27 @@ func _npc_warnings(npc_id: StringName, npc: Object) -> Array:
 
 
 func _on_npc_recruited_iv(_npc_id: StringName, _home: Vector2i) -> void:
-	if _is_open and _active_tab == 3:
+	if _is_open and _active_tab == 2:
 		_npc_grid.populate(_npc_list())
 
 
 func _on_npc_sn_iv(_npc_id: StringName) -> void:
-	if _is_open and _active_tab == 3:
+	if _is_open and _active_tab == 2:
 		_npc_grid.populate(_npc_list())
 
 
 func _on_npc_sn_sn_iv(_npc_id: StringName, _other: StringName) -> void:
-	if _is_open and _active_tab == 3:
+	if _is_open and _active_tab == 2:
 		_npc_grid.populate(_npc_list())
 
 
 func _on_npc_xp_gained_iv(_npc_id: StringName, _total_xp: int, _into: int, _span: int) -> void:
-	if _is_open and _active_tab == 3:
+	if _is_open and _active_tab == 2:
 		_npc_grid.populate(_npc_list())
 
 
 func _on_npc_leveled_up_iv(_npc_id: StringName, _new_level: int) -> void:
-	if _is_open and _active_tab == 3:
+	if _is_open and _active_tab == 2:
 		_npc_grid.populate(_npc_list())
 
 

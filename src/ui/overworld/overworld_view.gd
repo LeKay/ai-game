@@ -118,6 +118,10 @@ func _rebuild_biome_texture() -> void:
 # --- Toggle / open / close ---------------------------------------------------
 
 func _input(event: InputEvent) -> void:
+	# Block hotkeys while the player is typing in a text field.
+	var focus := get_viewport().gui_get_focus_owner()
+	if focus is LineEdit or focus is TextEdit:
+		return
 	if event.is_action_pressed(InputActions.OVERWORLD_TOGGLE):
 		# In pick mode the player must commit a start before the view can be dismissed.
 		if not _pick_mode:
@@ -248,6 +252,12 @@ func _handle_view_input(event: InputEvent) -> void:
 				_dragging = false
 				if _drag_travel <= _CLICK_MAX_TRAVEL:
 					_on_tile_clicked(_screen_to_tile(mb.position))
+		get_viewport().set_input_as_handled()
+	elif event is InputEventMagnifyGesture:
+		# Mac trackpad pinch — anchor at gesture position so the world point under the
+		# fingers stays put (same contract as wheel zoom).
+		var mg := event as InputEventMagnifyGesture
+		_zoom_at(mg.position, mg.factor)
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion

@@ -142,14 +142,18 @@ func _fill_npc_xp(summary: Array) -> void:
 	_levelup_buttons.clear()
 	for child in _npc_xp_list.get_children():
 		child.queue_free()
-	if summary.is_empty():
+	# Only show NPCs whose XP total actually increased (bar was not already clamped at the cap).
+	var visible: Array = summary.filter(
+		func(e: Dictionary) -> bool: return int(e[&"xp_after"]) > int(e[&"xp_before"])
+	)
+	if visible.is_empty():
 		var lbl := Label.new()
 		lbl.text = "No experience gained"
 		lbl.add_theme_font_size_override("font_size", 13)
 		lbl.modulate = Color("#A8A49C")
 		_npc_xp_list.add_child(lbl)
 		return
-	for entry: Dictionary in summary:
+	for entry: Dictionary in visible:
 		_npc_xp_list.add_child(_make_npc_xp_row(entry))
 
 

@@ -130,14 +130,16 @@ func _process(_delta: float) -> void:
 		return
 
 	var result := BuildingRegistry.check_build_conditions(_building_type, tile)
-	_ghost.modulate = COLOR_VALID if result == BuildingRegistry.PlacementResult.SUCCESS else COLOR_INVALID
+	var placeable: bool = result == BuildingRegistry.PlacementResult.SUCCESS \
+			or result == BuildingRegistry.PlacementResult.INSUFFICIENT_ENERGY
+	_ghost.modulate = COLOR_VALID if placeable else COLOR_INVALID
 	match result:
 		BuildingRegistry.PlacementResult.SUCCESS:
 			_label.text = "Click to place"
 		BuildingRegistry.PlacementResult.INSUFFICIENT_RESOURCES:
 			_label.text = "Not enough resources"
 		BuildingRegistry.PlacementResult.INSUFFICIENT_ENERGY:
-			_label.text = "Not enough energy"
+			_label.text = "Click to place (needs construction work)"
 		BuildingRegistry.PlacementResult.BLOCKED_BY_ADJACENCY:
 			_label.text = _adjacency_hint_label(_building_type)
 		BuildingRegistry.PlacementResult.LOCKED:
@@ -259,9 +261,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif _is_path_mode:
 			PathSystem.initiate_path(tile)
 			# Stay in path mode for continuous painting.
-		elif BuildingRegistry.check_build_conditions(_building_type, tile) == BuildingRegistry.PlacementResult.SUCCESS:
-			BuildingRegistry.initiate_build(_building_type, tile)
-			_cancel()
+		else:
+			var place_result := BuildingRegistry.check_build_conditions(_building_type, tile)
+			if place_result == BuildingRegistry.PlacementResult.SUCCESS \
+					or place_result == BuildingRegistry.PlacementResult.INSUFFICIENT_ENERGY:
+				BuildingRegistry.initiate_build(_building_type, tile)
+				_cancel()
 		get_viewport().set_input_as_handled()
 
 
