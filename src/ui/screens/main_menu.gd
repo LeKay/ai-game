@@ -233,8 +233,7 @@ func _read_version() -> String:
 	var major: int = data.get("major", 0)
 	var minor: int = data.get("minor", 1)
 	var build: int = data.get("build", 0)
-	var commit: String = data.get("commit", "")
-	return "v%d.%d.%d (%s)" % [major, minor, build, commit]
+	return "v%d.%d.%d" % [major, minor, build]
 
 
 ## Quit to desktop — clean process exit.
