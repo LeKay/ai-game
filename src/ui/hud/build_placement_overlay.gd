@@ -1,8 +1,9 @@
 class_name BuildPlacementOverlay extends CanvasLayer
 ## Ghost overlay for building placement mode.
-## Activates via InventoryScreen.build_mode_requested signal (found via "inventory_screen" group).
+## Activated by HUD (_on_build_mode_requested) via start_placement / start_path_placement, driven by
+## the Buildings drawer's build picker.
 ## Draws a coloured tile highlight snapped to the world grid.
-## Left-click places; ESC or right-click cancels. Opening inventory also cancels.
+## Left-click places; ESC or right-click cancels.
 
 const TILE_SIZE := WorldGrid.TILE_SIZE
 
@@ -26,7 +27,6 @@ func _ready() -> void:
 	layer   = 5
 	visible = false
 	_build_ghost()
-	_connect_inventory_screen()
 
 
 func _build_ghost() -> void:
@@ -54,20 +54,6 @@ func _build_ghost() -> void:
 		hr.visible      = false
 		add_child(hr)
 		_hint_rects.append(hr)
-
-
-func _connect_inventory_screen() -> void:
-	var nodes := get_tree().get_nodes_in_group(&"inventory_screen")
-	for node: Node in nodes:
-		if node.has_signal(&"build_mode_requested"):
-			node.build_mode_requested.connect(start_placement)
-		if node.has_signal(&"path_mode_requested"):
-			node.path_mode_requested.connect(start_path_placement)
-		if node.has_signal(&"demolish_mode_requested"):
-			node.demolish_mode_requested.connect(start_demolish_mode)
-		if node.has_signal(&"inventory_opened"):
-			node.inventory_opened.connect(_cancel)
-		break
 
 
 ## Activates ghost placement for the given building type.

@@ -481,6 +481,35 @@ func set_perk_amount(npc_id: StringName, index: int, amount: int) -> void:
 	perk[&"amount"] = clampi(amount, 0, maxi(required, 0))
 
 
+## Immediately consumes one perk's bound good from inventory and activates the perk for the rest of
+## the current day, without waiting for the day transition. Mirrors HungerSystem.feed_npc_now — the
+## daily resolution (_refresh_active_perks) still runs independently at the next day change. Returns
+## true on success. No-op (false) when: unknown NPC/index, the perk is already active, it has no
+## bound good, the assigned amount is below the requirement, or the good is out of stock.
+func consume_perk_now(npc_id: StringName, index: int) -> bool:
+	var npc: NPCInstance = all_npcs.get(npc_id)
+	if npc == null or index < 0 or index >= npc.perks.size():
+		return false
+	var perk: Dictionary = npc.perks[index]
+	if bool(perk.get(&"active", false)):
+		return false
+	var good: StringName = perk.get(&"good", &"")
+	if good == &"":
+		return false
+	var required: int = int(PerkRegistry.get_def(perk.get(&"perk_id", &"")).get("required", 1))
+	var assigned: int = int(perk.get(&"amount", 1))
+	if assigned < required:
+		return false
+	if not _consume_good_amount(good, assigned):
+		return false
+	# Inactive perks are never in active_perks (it is rebuilt active-only each day), so a plain
+	# append is safe — no duplicate guard needed.
+	perk[&"active"] = true
+	npc.active_perks.append(perk)
+	npc.recalculate_efficiency()
+	return true
+
+
 ## Returns NPC IDs that still have at least one unresolved perk choice.
 func get_npcs_with_pending_perk_choices() -> Array[StringName]:
 	var result: Array[StringName] = []

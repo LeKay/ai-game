@@ -24,7 +24,6 @@ var _last_action_tile: Vector2i = Vector2i(-1, -1)
 var _last_confirmed_action: int = -1
 
 
-var _inventory_screen: InventoryScreen = null
 
 ## Owns per-building sprites + status indicators (Phase 5 extraction).
 var _building_layer: BuildingIndicatorLayer = null
@@ -124,9 +123,6 @@ func _ready() -> void:
 	_player.action_queue_cleared.connect(_action_feedback._on_action_queue_cleared)
 	_player.action_interrupted.connect(_action_feedback._on_action_interrupted)
 	_drag_controller._setup_drag_overlays()
-	_inventory_screen = InventoryScreen.new()
-	_inventory_screen.name = "InventoryScreen"
-	add_child(_inventory_screen)
 	_setup_map_select_highlight()
 	_route_lines = RouteLines.new()
 	_route_lines.name = "RouteLines"
@@ -145,7 +141,6 @@ func _ready() -> void:
 	add_child(_fertility_indicator)
 	_fertility_indicator.init_dependencies(grid)
 	call_deferred(&"_wire_building_detail")
-	call_deferred(&"_wire_inventory_hud")
 	call_deferred(&"_wire_overworld_travel")
 
 
@@ -476,15 +471,6 @@ func _on_ticks_advanced_indicators(_delta: int) -> void:
 	for tile: Vector2i in _path_indicators:
 		var indicator: BuildingStatusIndicator = _path_indicators[tile]
 		indicator.set_construction_progress(_player.get_active_progress_for_tile(tile))
-
-
-
-## Connects inventory screen signals to the HUD storage panel after all _ready() calls complete.
-## Deferred so the HUD CanvasLayer has added itself to the "hud" group first.
-func _wire_inventory_hud() -> void:
-	if _hud == null:
-		push_warning("[MapRoot] HUD not found in group 'hud' — inventory↔HUD signals not wired")
-		return
 
 
 

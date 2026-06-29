@@ -10,7 +10,7 @@ const BITMASK_E: int = 2
 const BITMASK_S: int = 4
 const BITMASK_W: int = 8
 
-## Sentinel passed through BuildingGrid so InventoryScreen can distinguish path clicks.
+## Sentinel passed through BuildingGrid so callers can distinguish path clicks.
 const PATH_SENTINEL: int = -100
 ## Ticks required for a player to manually build one path tile.
 const PATH_CONSTRUCTION_TICKS: int = 120

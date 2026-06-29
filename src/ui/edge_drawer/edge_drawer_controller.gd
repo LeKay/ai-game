@@ -126,8 +126,20 @@ func set_badge(text: String, color: Color) -> void:
 
 # --- Input handling -----------------------------------------------------------
 
+## True while a full-screen modal that must block drawer auto-close is showing (e.g. the perk
+## choice panel opened from a detail view). Such modals join the group and expose is_showing().
+func _is_blocking_modal_open() -> bool:
+	for node: Node in get_tree().get_nodes_in_group(&"blocks_edge_drawer_autoclose"):
+		if node.has_method("is_showing") and node.is_showing():
+			return true
+	return false
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not _pinned:
+		return
+	# A blocking modal (e.g. perk choice) owns ESC while it is up — don't let it close the drawer.
+	if _is_blocking_modal_open():
 		return
 	var key := event as InputEventKey
 	if key == null or not key.pressed or key.keycode != KEY_ESCAPE:
@@ -145,6 +157,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _input(event: InputEvent) -> void:
 	if not _pinned:
+		return
+	# While a blocking modal (e.g. the perk choice panel) is up, ignore outside-clicks so selecting
+	# a card / clicking the overlay does not auto-close the drawer beneath it.
+	if _is_blocking_modal_open():
 		return
 	var mb := event as InputEventMouseButton
 	if mb == null or not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:

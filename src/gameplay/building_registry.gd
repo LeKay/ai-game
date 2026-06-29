@@ -229,7 +229,7 @@ const BUILD_COST: Dictionary = {
 }
 
 ## Canonical list of player-buildable types, in build-menu display order.
-## Single source of truth for the build menu (see inventory_screen._building_list()).
+## Single source of truth for the build menu (see the Buildings drawer's BuildPickerView).
 ## Excludes ROAD (placed via the Path tool).
 ## The future Progression Tree gates this list with a single is_building_unlocked() guard.
 const BUILDABLE_TYPES: Array[int] = [

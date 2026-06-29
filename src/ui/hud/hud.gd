@@ -38,7 +38,7 @@ var _play_pause_btn:  Button
 var _energy_segments: Array[ColorRect] = []
 
 var _buildings_drawer:  BuildingsDrawer
-var _npc_detail_panel:  NpcDetailPanel
+var _npcs_drawer:       NpcsDrawer
 var _transport_drawer:       TransportDrawer
 var _route_toggle_btn:       Button
 var _map_btn:                Button
@@ -260,6 +260,11 @@ func _set_drawers_visible(v: bool) -> void:
 		if not v:
 			_buildings_drawer.close()
 		_buildings_drawer.visible = v
+	if _npcs_drawer != null:
+		var npcs_visible: bool = v and ProgressionSystem.is_unlocked(&"shelter")
+		if not npcs_visible:
+			_npcs_drawer.close()
+		_npcs_drawer.visible = npcs_visible
 
 
 func _on_overworld_close_pressed() -> void:
@@ -500,20 +505,12 @@ func _add_stubs() -> void:
 	_buildings_drawer.visible = false
 	add_child(_buildings_drawer)
 
-	_npc_detail_panel = NpcDetailPanel.new()
-	_npc_detail_panel.name = "NpcDetailPanel"
-	_npc_detail_panel.panel_x_offset = 0.0
-	_npc_detail_panel.panel_closed.connect(_on_npc_panel_closed_routes)
-	_npc_detail_panel.food_assigned.connect(
-		func(npc_id: StringName, resource_id: StringName) -> void:
-			HungerSystem.assign_food(npc_id, resource_id))
-	_npc_detail_panel.food_cleared.connect(
-		func(npc_id: StringName) -> void:
-			HungerSystem.clear_food_assignment(npc_id))
-	_npc_detail_panel.food_amount_changed.connect(
-		func(npc_id: StringName, amount: int) -> void:
-			HungerSystem.set_food_amount(npc_id, amount))
-	add_child(_npc_detail_panel)
+	# Workers drawer — right-edge tab (mirrors the Buildings drawer). Hosts the worker list and the
+	# per-worker detail view (efficiency / food / perks). Gated by the Shelter research node.
+	_npcs_drawer = NpcsDrawer.new()
+	_npcs_drawer.name = "NpcsDrawer"
+	_npcs_drawer.visible = false
+	add_child(_npcs_drawer)
 
 	# Progression Tree overlay — its own CanvasLayer, toggled by the 🌳 HUD button.
 	_progression_screen = preload(
@@ -600,6 +597,11 @@ func _connect_systems() -> void:
 	_buildings_drawer._content.route_delete_requested.connect(_on_transport_route_deleted)
 	_buildings_drawer._content.map_select_requested.connect(_on_buildings_map_select_requested)
 
+	# Workers drawer: focus drives the map route-line filter (highlight the focused worker's routes).
+	# _route_lines is injected later by MapRoot, so the null check lives inside the handler.
+	if _npcs_drawer != null:
+		_npcs_drawer._content.npc_focus_changed.connect(_on_npc_focus_changed_routes)
+
 	# Hide the edge drawers (Tasks + Transport) while the full-screen progression tree is up.
 	if _progression_screen != null:
 		_progression_screen.opened.connect(func() -> void: _set_drawers_visible(false))
@@ -650,8 +652,6 @@ func _on_energy_changed(current: int, max_energy: int) -> void:
 ## Called by DayOverviewPanel before it shows.
 func close_all_panels_for_day_transition() -> void:
 	_day_transitioning = true
-	if _npc_detail_panel != null:
-		_npc_detail_panel.close()
 	if _progression_screen != null:
 		_progression_screen.close()
 	_set_drawers_visible(false)
@@ -673,9 +673,9 @@ func close_open_panels() -> bool:
 	if _progression_screen != null and _progression_screen.visible:
 		any_open = true
 		_progression_screen.close()
-	if _npc_detail_panel != null and _npc_detail_panel.visible:
+	if _npcs_drawer != null and _npcs_drawer.is_open():
 		any_open = true
-		_npc_detail_panel.close()
+		_npcs_drawer.close()
 	if _buildings_drawer != null and _buildings_drawer.is_open():
 		any_open = true
 		_buildings_drawer.close()
@@ -757,6 +757,8 @@ func _on_save_load_completed() -> void:
 	_transport_drawer.refresh()
 	_task_dialog.refresh()
 	_buildings_drawer.refresh()
+	if _npcs_drawer != null:
+		_npcs_drawer.refresh()
 
 
 func _on_start_selected(_coord: Vector2i) -> void:
@@ -868,13 +870,6 @@ func open_building_detail(building_id: String) -> void:
 		_buildings_drawer.open_for_building(building_id)
 
 
-func _on_npc_detail_requested(npc_id: StringName, npc_state: int) -> void:
-	if _npc_detail_panel != null:
-		_npc_detail_panel.open_for_npc(npc_id, npc_state)
-	if _route_lines != null:
-		_route_lines.set_npc_filter(npc_id)
-
-
 ## Triggered by BuildingsDrawer when the player confirms an inline rename.
 func _on_building_demolish_requested(building_id: String) -> void:
 	BuildingRegistry.demolish_building(building_id)
@@ -920,12 +915,10 @@ func _on_npc_released(building_id: String, _npc_id: StringName) -> void:
 	BuildingRegistry.assign_npc(building_id, &"")
 
 
-## Opens the NPC detail panel for a worker tapped inside the Buildings Drawer.
+## Opens the Workers drawer at the detail view for a worker tapped inside the Buildings Drawer.
 func _on_npc_detail_requested_from_buildings(npc_id: StringName) -> void:
-	if _npc_detail_panel != null:
-		_npc_detail_panel.open_for_npc(npc_id, NPCSystem.get_npc_state(npc_id))
-	if _route_lines != null:
-		_route_lines.set_npc_filter(npc_id)
+	if _npcs_drawer != null:
+		_npcs_drawer.open_for_npc(npc_id)
 
 
 ## Installs an upgrade and refreshes the detail view.
@@ -1007,9 +1000,11 @@ func _on_building_deselected_routes(_building_id: String) -> void:
 		_route_lines.set_building_filter(&"")
 
 
-func _on_npc_panel_closed_routes() -> void:
+## Highlights the focused worker's transport routes on the map (or clears the filter when npc_id
+## is &"", i.e. back on the worker list / drawer closed).
+func _on_npc_focus_changed_routes(npc_id: StringName) -> void:
 	if _route_lines != null:
-		_route_lines.set_npc_filter(&"")
+		_route_lines.set_npc_filter(npc_id)
 
 
 func _update_energy_bar(current: int, max_energy: int) -> void:

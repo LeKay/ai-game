@@ -34,8 +34,16 @@ var _single_mode: bool = false
 func _ready() -> void:
 	layer = 12
 	add_to_group(&"perk_choice_panel")
+	# Lets an open EdgeDrawerController suppress its outside-click / ESC auto-close while this modal
+	# is up (e.g. the perk picker opened from the NPC drawer's detail view).
+	add_to_group(&"blocks_edge_drawer_autoclose")
 	_build_ui()
 	_root.visible = false
+
+
+## True while the picker is on screen — queried by EdgeDrawerController to suppress drawer auto-close.
+func is_showing() -> bool:
+	return _root != null and _root.visible
 
 
 ## Starts resolving all pending perk choices, chaining across every NPC until none remain.
