@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Post-commit hook: rewrites version.json's `commit` field with the actual
+# short hash of the commit just created (pre-commit only knows the parent
+# hash). Amends the current commit silently. Recursion-safe via an env-var
+# guard so the amend's own post-commit invocation is a no-op.
+
+set -e
+
+if [ -n "$VERSION_AMEND_RUNNING" ]; then
+  exit 0
+fi
+
+VERSION_FILE="version.json"
+[ -f "$VERSION_FILE" ] || exit 0
+
+COMMIT=$(git rev-parse --short HEAD)
+
+CURRENT=$(python3 -c "import json; print(json.load(open('$VERSION_FILE')).get('commit', ''))")
+if [ "$COMMIT" = "$CURRENT" ]; then
+  exit 0
+fi
+
+python3 - <<PYEOF
+import json
+with open("$VERSION_FILE", "r") as f:
+    d = json.load(f)
+d["commit"] = "$COMMIT"
+with open("$VERSION_FILE", "w") as f:
+    json.dump(d, f, indent=2)
+    f.write("\n")
+PYEOF
+
+# --no-verify skips pre-commit (which would re-write commit to the new parent
+# hash, undoing our work). Post-commit still fires but the guard above no-ops.
+export VERSION_AMEND_RUNNING=1
+git add "$VERSION_FILE"
+git commit --amend --no-edit --no-verify --allow-empty >/dev/null
