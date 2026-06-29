@@ -41,10 +41,9 @@ func _build_bbcode() -> String:
 	if files.is_empty():
 		return "[i]Keine Patchnotes gefunden in %s[/i]" % PATCHNOTES_DIR
 
-	# Newest first (filenames are version-ordered like v0.1.0.md, v0.2.0.md).
+	# Newest first — numeric/version sort so v0.1.132 comes before v0.1.38.
 	var sorted: Array = Array(files)
-	sorted.sort()
-	sorted.reverse()
+	sorted.sort_custom(_version_cmp_desc)
 
 	var parts: PackedStringArray = PackedStringArray()
 	for i in sorted.size():
@@ -71,6 +70,32 @@ func _list_patchnote_files() -> PackedStringArray:
 			out.append(name)
 		name = dir.get_next()
 	dir.list_dir_end()
+	return out
+
+
+## Descending version-aware comparator. Extracts integers from the filename
+## and compares them component-wise so "v0.1.132.md" sorts before "v0.1.38.md".
+func _version_cmp_desc(a: String, b: String) -> bool:
+	var av: PackedInt32Array = _version_parts(a)
+	var bv: PackedInt32Array = _version_parts(b)
+	var n: int = min(av.size(), bv.size())
+	for i in n:
+		if av[i] != bv[i]:
+			return av[i] > bv[i]
+	return av.size() > bv.size()
+
+
+func _version_parts(file_name: String) -> PackedInt32Array:
+	var out: PackedInt32Array = PackedInt32Array()
+	var current := ""
+	for ch in file_name:
+		if ch >= "0" and ch <= "9":
+			current += ch
+		elif current != "":
+			out.append(int(current))
+			current = ""
+	if current != "":
+		out.append(int(current))
 	return out
 
 
