@@ -53,6 +53,12 @@ theme = ExtResource("2_menu_button")
 disabled = true
 text = "Continue"
 
+[node name="Patchnotes" type="Button" parent="MenuButtons" unique_id=1577010001]
+unique_name_in_owner = true
+layout_mode = 2
+theme = ExtResource("2_menu_button")
+text = "Patchnotes"
+
 [node name="Settings" type="Button" parent="MenuButtons" unique_id=134704842]
 unique_name_in_owner = true
 layout_mode = 2

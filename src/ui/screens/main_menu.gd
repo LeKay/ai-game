@@ -22,6 +22,7 @@ extends CanvasLayer
 # ── Constants ────────────────────────────────────────────────────────────────
 
 const GAME_SCENE: String = "res://src/scenes/game.tscn"
+const PATCHNOTES_SCENE: String = "res://src/ui/screens/patchnotes_screen.tscn"
 const FADE_IN_DURATION: float = 0.3
 const FADE_OUT_DURATION: float = 0.3
 
@@ -39,6 +40,7 @@ signal game_exited()
 @onready var menu_container: VBoxContainer = %MenuButtons
 @onready var new_game_btn: Button = %NewGame
 @onready var continue_btn: Button = %Continue
+@onready var patchnotes_btn: Button = %Patchnotes
 @onready var settings_btn: Button = %Settings
 @onready var quit_btn: Button = %Quit
 @onready var loading_overlay: Panel = %LoadingOverlay
@@ -68,6 +70,7 @@ func _ready() -> void:
 	# Connect button signals
 	new_game_btn.pressed.connect(_on_new_game_pressed)
 	continue_btn.pressed.connect(_on_continue_pressed)
+	patchnotes_btn.pressed.connect(_on_patchnotes_pressed)
 	settings_btn.pressed.connect(_on_settings_pressed)
 	quit_btn.pressed.connect(_on_quit_pressed)
 	try_again_btn.pressed.connect(_on_try_again_pressed)
@@ -143,6 +146,18 @@ func _on_continue_pressed() -> void:
 		# WorldSaveManager not available — show error
 		_show_load_failed()
 		_is_transitioning = false
+
+
+## Patchnotes: open the patchnotes overlay.
+func _on_patchnotes_pressed() -> void:
+	if _is_transitioning:
+		return
+	var scene: PackedScene = load(PATCHNOTES_SCENE)
+	if scene == null:
+		push_error("[MainMenu] Failed to load patchnotes scene: " + PATCHNOTES_SCENE)
+		return
+	var overlay: Node = scene.instantiate()
+	add_child(overlay)
 
 
 ## Settings: no-op, disabled in VS (AC-5).
