@@ -48,7 +48,7 @@ const RECIPE_OUTPUT: Dictionary = {
 	&"axe":         {&"resource_id": &"axe",         &"quantity": 1},
 	&"pickaxe":     {&"resource_id": &"pickaxe",     &"quantity": 1},
 	&"knife":       {&"resource_id": &"knife",       &"quantity": 1},
-	&"spindle":     {&"resource_id": &"spindle",     &"quantity": 1},
+	&"spindle":     {&"resource_id": &"spindle",     &"quantity": 2},
 	&"rope":        {&"resource_id": &"rope",        &"quantity": 1},
 }
 
@@ -75,7 +75,24 @@ signal crafting_progress(recipe_id: StringName, progress: float)
 ## Emitted after a craft completes successfully.
 signal recipe_crafted(recipe_id: StringName, quantity: int)
 
+# ---- Constants --------------------------------------------------------------
+
+## Holder id used for the active craft's storage reservation. A single craft runs at
+## a time (guarded by _is_crafting), so one fixed holder is sufficient. Distinct from
+## any logistics route id, so a craft and a route can both hold space in the same
+## container without clobbering each other's reservation.
+const _CRAFT_HOLDER_ID: StringName = &"__crafting__"
+
+## Radius (in tiles) searched outward from the crafting building when the finished
+## item cannot be deposited and must be dropped on the map. Mirrors the logistics
+## rescue-dump search.
+const _DROP_SEARCH_RADIUS: int = 4
+
 # ---- State ------------------------------------------------------------------
+
+## WorldGrid node used for the map-drop fallback. Injected via set_grid_map() (same
+## wiring point as LogisticsSystem/NPCSystem in map_root). Null in headless unit tests.
+var _grid_map: Node = null
 
 var _is_crafting: bool        = false
 var _active_recipe: StringName = &""
@@ -118,6 +135,8 @@ func try_craft(recipe_id: StringName) -> int:
 	var cost: Dictionary   = RECIPE_COST.get(recipe_id, {})
 	var energy_cost: int   = RECIPE_ENERGY_COST.get(recipe_id, 0)
 	var output: Dictionary = RECIPE_OUTPUT.get(recipe_id, {})
+	var out_res: StringName = output.get(&"resource_id", &"")
+	var out_qty: int        = output.get(&"quantity", 1)
 
 	# 1. Resource check (skipped when the debug "ignore costs" cheat is active)
 	if not DebugSettings.ignore_costs:
@@ -131,9 +150,18 @@ func try_craft(recipe_id: StringName) -> int:
 		if player.get_current_energy() < energy_cost:
 			return CraftResult.INSUFFICIENT_ENERGY
 
-	# 3. Storage check — use selected crafting bench container, or auto-select first with space.
-	var target_id: StringName = _find_bench_container_with_space(1)
+	# 3. Storage check — use selected crafting bench container, or auto-select first with
+	#    room for the full output. The lookup is reservation-aware so space already promised
+	#    to an in-flight transport carrier does not count as free.
+	var target_id: StringName = _find_bench_container_with_space(out_qty)
 	if target_id == &"":
+		return CraftResult.NO_STORAGE
+
+	# 3a. Reserve that space for the whole craft duration. This is the same mechanism
+	#     transport routes use, so a route finishing mid-craft sees the space as taken and
+	#     cannot fill it — eliminating the race that made the finished item disappear.
+	#     reserve_space is the authoritative capacity check (the find above is advisory).
+	if not InventorySystem.reserve_space(target_id, _CRAFT_HOLDER_ID, out_res, out_qty):
 		return CraftResult.NO_STORAGE
 
 	# 4. Deduct resources + energy (skipped under the debug "ignore costs" cheat)
@@ -157,8 +185,8 @@ func try_craft(recipe_id: StringName) -> int:
 	_accumulated_ticks  = 0
 	_total_ticks        = RECIPE_TICKS.get(recipe_id, 60)
 	_pending_target_id  = target_id
-	_pending_output_res = output.get(&"resource_id", &"")
-	_pending_output_qty = output.get(&"quantity", 1)
+	_pending_output_res = out_res
+	_pending_output_qty = out_qty
 
 	crafting_started.emit(recipe_id, _total_ticks)
 	return CraftResult.SUCCESS
@@ -210,9 +238,21 @@ func _complete_craft() -> void:
 	_pending_target_id    = &""
 	_pending_output_res   = &""
 	_pending_output_qty   = 0
+	var building_id: String       = _crafting_building_id
 	_crafting_building_id = ""
 
-	InventorySystem.try_deposit(target_id, res_id, qty)
+	# Deposit against our own reservation (holder id), so the space we held for the whole
+	# craft is consumed atomically. Because routes treat that reservation as occupied, this
+	# fits even if a carrier finished a delivery mid-craft.
+	var result: InventoryContainer.DepositResult = InventorySystem.try_deposit(
+			target_id, res_id, qty, _CRAFT_HOLDER_ID)
+	if result != InventoryContainer.DepositResult.SUCCESS:
+		# Fallback: deposit failed despite the reservation (container removed mid-craft,
+		# capacity shrunk, slot-based first-fit edge). Release the now-unconsumed reservation
+		# and spawn the item on the map near the bench so it is never silently lost.
+		InventorySystem.release_reservation(target_id, _CRAFT_HOLDER_ID)
+		_spawn_output_on_map(building_id, res_id, qty)
+
 	recipe_crafted.emit(finished_recipe, qty)
 
 # ---- Crafting bench API -----------------------------------------------------
@@ -240,6 +280,13 @@ func _on_upgrade_removed(building_id: String, upgrade_id: StringName) -> void:
 		return
 	if selected_crafting_storage == building_id:
 		selected_crafting_storage = ""
+
+# ---- Grid injection (map-drop fallback) -------------------------------------
+
+## Injects the active WorldGrid so finished items can be dropped on the map when storage
+## is unavailable. Wired from map_root alongside LogisticsSystem.set_grid_map().
+func set_grid_map(grid: Node) -> void:
+	_grid_map = grid
 
 # ---- Helpers ----------------------------------------------------------------
 
@@ -269,10 +316,17 @@ func _consume_resource_any(resource_id: StringName, quantity: int) -> void:
 		remaining -= to_consume
 
 
+## Free space in a container, treating outstanding reservations (transport carriers,
+## other in-flight holders) as already occupied. Keeps craft target selection in sync
+## with the reservation a craft is about to place, so two systems can't both claim it.
+func _container_free_space(c: InventoryContainer) -> int:
+	var used: int = c.get_total_quantity() if c.quantity_based else c.get_occupied_count()
+	return c.capacity - used - c.get_reserved_total()
+
+
 func _find_container_with_space(space: int) -> StringName:
 	for container: InventoryContainer in InventorySystem.get_all_containers():
-		var remaining: int = container.capacity - (container.get_total_quantity() if container.quantity_based else container.get_occupied_count())
-		if remaining >= space:
+		if _container_free_space(container) >= space:
 			return container.container_id
 	return &""
 
@@ -289,10 +343,8 @@ func _find_bench_container_with_space(space: int) -> StringName:
 		var inst: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(selected_crafting_storage)
 		if inst != null and inst.assigned_container_id != &"":
 			var c: InventoryContainer = InventorySystem.get_container(inst.assigned_container_id)
-			if c != null:
-				var rem: int = c.capacity - (c.get_total_quantity() if c.quantity_based else c.get_occupied_count())
-				if rem >= space:
-					return c.container_id
+			if c != null and _container_free_space(c) >= space:
+				return c.container_id
 	# Fall back to first bench with space.
 	for bid: String in bench_buildings:
 		var inst: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(bid)
@@ -301,7 +353,60 @@ func _find_bench_container_with_space(space: int) -> StringName:
 		var c: InventoryContainer = InventorySystem.get_container(inst.assigned_container_id)
 		if c == null:
 			continue
-		var rem: int = c.capacity - (c.get_total_quantity() if c.quantity_based else c.get_occupied_count())
-		if rem >= space:
+		if _container_free_space(c) >= space:
 			return c.container_id
 	return &""
+
+
+# ---- Map-drop fallback ------------------------------------------------------
+
+## Drops `qty` units of `res_id` on the map near the crafting building when the finished
+## item could not be deposited. Searches outward in concentric rings (mirrors the logistics
+## rescue-dump) for tiles WorldGrid.add_resource_to_tile will accept. Items that find no
+## tile in range are lost (extremely cramped layouts) and a warning is pushed.
+func _spawn_output_on_map(building_id: String, res_id: StringName, qty: int) -> void:
+	if qty <= 0 or res_id == &"" or _grid_map == null:
+		push_warning("[CraftingRegistry] could not place %d×%s and no map drop possible" % [qty, res_id])
+		return
+	var drop_tile: Vector2i = _find_drop_tile_near(building_id)
+	if drop_tile == Vector2i(-1, -1):
+		push_warning("[CraftingRegistry] LOST %d×%s — no drop tile found near %s" % [qty, res_id, building_id])
+		return
+	var dropped: int = 0
+	for _i: int in range(qty):
+		if _grid_map.add_resource_to_tile(drop_tile, res_id, true):
+			dropped += 1
+	if dropped < qty:
+		push_warning("[CraftingRegistry] dropped %d/%d×%s at %s (rest lost)" % [dropped, qty, res_id, drop_tile])
+
+
+## Returns a tile near `building_id` where dropped output can be placed, or (-1,-1) if none
+## within _DROP_SEARCH_RADIUS. Searches ring by ring outward from the building's tile.
+func _find_drop_tile_near(building_id: String) -> Vector2i:
+	if _grid_map == null:
+		return Vector2i(-1, -1)
+	var origin: Vector2i = BuildingRegistry.get_building_tile(building_id)
+	if origin == Vector2i(-1, -1):
+		return Vector2i(-1, -1)
+	for radius: int in range(0, _DROP_SEARCH_RADIUS + 1):
+		for dy: int in range(-radius, radius + 1):
+			for dx: int in range(-radius, radius + 1):
+				# Only the outer ring of this radius (skip interior — already searched).
+				if radius > 0 and absi(dx) != radius and absi(dy) != radius:
+					continue
+				var t: Vector2i = origin + Vector2i(dx, dy)
+				if _can_drop_on_tile(t):
+					return t
+	return Vector2i(-1, -1)
+
+
+## True when `tile` is in-bounds, passable, and not occupied by a building — i.e. a tile
+## WorldGrid.add_resource_to_tile will actually accept.
+func _can_drop_on_tile(tile: Vector2i) -> bool:
+	if not _grid_map.is_in_bounds(tile):
+		return false
+	if not _grid_map.is_passable(tile):
+		return false
+	if _grid_map.has_method("get_building") and _grid_map.get_building(tile) != "":
+		return false
+	return true

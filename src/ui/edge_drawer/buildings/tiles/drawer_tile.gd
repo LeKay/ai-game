@@ -27,6 +27,7 @@ var _plus_label:     Label        ## "+" overlay
 var _remove_btn:     Button       ## small red × in top-right corner (hidden by default)
 
 var _state: TileState = TileState.NORMAL
+var _is_new: bool = false
 
 # Pending values stored when setters are called before _ready() / _build_layout().
 var _pending_texture: Texture2D = null
@@ -109,6 +110,13 @@ func set_state(state: TileState) -> void:
 	_state = state
 	_apply_style(state)
 	modulate.a = 0.4 if state == TileState.DISABLED else 1.0
+
+
+## Shows or hides a gold outline that persists across hover/exit redraws.
+## Used to mark building types that were recently unlocked.
+func set_new_highlight(enabled: bool) -> void:
+	_is_new = enabled
+	_apply_style(_state)
 
 
 ## Shows a construction-progress label (0.0–1.0). Pass -1.0 to hide it.
@@ -317,6 +325,12 @@ func _apply_style(state: TileState) -> void:
 			sb.bg_color = Color(COLOR_BG.r, COLOR_BG.g, COLOR_BG.b, 0.5)
 		_:
 			sb.bg_color = COLOR_BG
+	if _is_new:
+		sb.border_width_left   = 2
+		sb.border_width_right  = 2
+		sb.border_width_top    = 2
+		sb.border_width_bottom = 2
+		sb.border_color = Color(1.0, 0.75, 0.0, 1.0)
 	add_theme_stylebox_override("panel", sb)
 
 

@@ -81,8 +81,9 @@ Phased build (no GDD; catalog is the design source).
 	first when the food modifier is computed.
 
 **All 10 effect hooks wired** (#4 Werkstattoptimierung removed 2026-06-18 — see note below the
-table). Pending: full in-engine playtest verification (assign perks, supply goods, observe daily
-effects) and updating the unit tests (currently ignored per request).
+table). **Phase 5 (2026-07-01):** #12 Carrier calling added (`berufung_traeger` in PerkRegistry);
+uses `PROFESSION_CARRIER = -2` sentinel; Carrier offered in first-level-up draw alongside building
+professions; cart icon in PerkChoicePanel. Pending: full in-engine playtest verification.
 
 ## Accepted Perks
 
@@ -97,7 +98,8 @@ effects) and updating the unit tests (currently ignored per request).
 | 8 | Sparsam (Thrifty) | Building-bound. While the NPC is supplied, the bound building type runs **every 4th cycle with no input consumption** (≈ −25 % input demand). | Every **4th** cycle is input-free. | Per-building cycle counter; the 4th completed cycle skips input consumption. Bound-type pool restricted to **processing buildings that have inputs** (Sawmill, Tailor, Weaver, Tool Workshop). | Input/economy lever — eases upstream chains. Deterministic (counter, not chance). |
 | 9 | Zäh (Hardy) | While supplied with the bound good, the NPC's **underfed efficiency floor rises from 25 % to 50 %**. | `NUTRITION_UNFED_EFFICIENCY` **0.25 → 0.5** for this NPC. | Raise this NPC's unfed floor in the nutrition curve while supplied. | Resilience lever — cushions food shortfalls. Distinct from #1: Genügsam lowers *need*, Zäh raises the *floor*. |
 | 10 | Geräumig (Spacious) | Building-bound. While the NPC is supplied, the bound building type has **+50 % output buffer capacity** (e.g. 20 → 30). | `output_capacity` **×1.5** for that type. | Raise the building type's output buffer while supplied — it keeps producing longer before `OUTPUT_FULL` stalls it. | Stall-resilience lever — decouples production from pickup. Only matters when logistics is the bottleneck. |
-| 11 | Berufung (Calling / Profession) | **Permanently** sets the NPC's profession to a production building type (e.g. Holzfäller = Lumber Camp). While supplied with the bound good, **+50 % work-cycle XP** at that building type. | **×1.5** work XP at the profession type (good-gated). | Adds a permanent `profession` (building type) to the NPC; gates the building-bound effect perks (#6/#8/#10) to that type; multiplies work-cycle XP earned at that type by 1.5 at day-transition while supplied. | **Prerequisite** for building-bound perks. Good-bound, one per NPC, permanent. Stacks with #2/#7 per full-stacking rule. |
+| 11 | Berufung (Calling / Profession) | **Permanently** sets the NPC's profession to a production building type. While supplied with the bound good, **+25 % work-cycle XP** and **+10 % production speed** at that building type. | **×1.25** work XP (day-transition); **+10 %** to building efficiency multiplier (live, per tick). | Adds a permanent `profession` (building type); gates building-bound effect perks (#6/#8/#10); applies XP multiplier at day-transition; applies speed bonus via `EFFECT_CALLING_BUILDING_EFF` secondary effect → `_advance_production_cycle` multiplies computed efficiency by ×1.1 while supplied. | **Prerequisite** for building-bound perks. Good-bound, one per NPC, permanent. Stacks with #2/#7. Speed bonus stacks additively with further Callings on other NPCs. |
+| 12 | Carrier (Calling / Carrier) | **Permanently** sets the NPC's profession to Carrier (sentinel `PROFESSION_CARRIER = -2`). While supplied with the bound good, **+25 % delivery XP** and **+1 carrier capacity** per trip. | **×1.25** delivery XP multiplier at day-transition; **+1** to carrier capacity (stacks with Pack Mule #5). | Stores `PROFESSION_CARRIER` in `npc.profession`; day-transition XP flush applies ×1.25; `EFFECT_CARRIER_CAPACITY` secondary effect picked up by `_carrier_capacity()` in LogisticsSystem. Building-bound effect perks (#6/#8/#10) remain locked. Icon: cart. Offered alongside building professions in the first-level-up Calling draw. | Not building-bound. Good-bound, one per NPC, permanent. Stacks with #2/#5/#7. |
 
 > **#4 Werkstattoptimierung (Workshop Tuning) — REMOVED 2026-06-18.** It raised the
 > building efficiency cap from 1.0 to 1.2. The building cap was lifted globally on

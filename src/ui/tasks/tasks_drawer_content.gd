@@ -17,6 +17,8 @@ class_name TasksDrawerContent extends DrawerContentBase
 ## Emitted whenever the badge text / colour changes. EdgeDrawerController (or the
 ## wrapping TaskDialog) should connect this to controller.set_badge().
 signal badge_updated(text: String, color: Color)
+## Emitted when the player clicks a building-requirement tile to open the build picker.
+signal open_build_picker_requested(building_type: int)
 
 # --- Visual constants --------------------------------------------------------
 
@@ -299,9 +301,14 @@ func _build_building_tile(building_type: int, need: int) -> Control:
 
 	var tile := PanelContainer.new()
 	tile.custom_minimum_size = TILE_SIZE
-	tile.tooltip_text = "Build: %s" % BuildingRegistry.get_type_display_name(building_type)
+	tile.tooltip_text = "Build: %s — click to open build menu" % BuildingRegistry.get_type_display_name(building_type)
 	tile.add_theme_stylebox_override("panel", _flat(TILE_COLOR, 6, MET_COLOR if met else Color.TRANSPARENT))
 	tile.modulate = Color.WHITE if met else Color(1, 1, 1, 0.5)
+	tile.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	tile.gui_input.connect(func(event: InputEvent) -> void:
+		var mb := event as InputEventMouseButton
+		if mb != null and mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
+			open_build_picker_requested.emit(building_type))
 
 	var vbox := VBoxContainer.new()
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER

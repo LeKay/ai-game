@@ -32,7 +32,9 @@ func add_building(building_id: String, type: int, tile: Vector2i) -> void:
 	add_child(sprite)
 
 	var build_time: int = BuildingRegistry.BUILD_TIME.get(type, 0)
-	if build_time > 0 or BuildingRegistry.is_production_building(type):
+	var is_storage_type: bool = type == BuildingRegistry.BuildingType.STORAGE_BUILDING \
+			or type == BuildingRegistry.BuildingType.COLLECTION_POINT
+	if build_time > 0 or BuildingRegistry.is_production_building(type) or is_storage_type:
 		var indicator := BuildingStatusIndicator.new()
 		indicator.position = sprite.position + Vector2(tile_px * 0.32, tile_px * 0.32)
 		indicator.z_index = 3
@@ -102,6 +104,17 @@ func refresh(building_id: String) -> void:
 	if CraftingRegistry.is_crafting() and CraftingRegistry.get_crafting_building_id() == building_id:
 		indicator.set_progress(CraftingRegistry.get_crafting_progress())
 		indicator.show()
+		return
+
+	var is_storage_type: bool = instance.type == BuildingRegistry.BuildingType.STORAGE_BUILDING \
+			or instance.type == BuildingRegistry.BuildingType.COLLECTION_POINT
+	if is_storage_type:
+		var container: InventoryContainer = InventorySystem.get_container(instance.assigned_container_id)
+		if container != null and container.is_full():
+			indicator.set_full()
+			indicator.show()
+		else:
+			indicator.hide()
 		return
 
 	if not BuildingRegistry.is_production_building(instance.type):

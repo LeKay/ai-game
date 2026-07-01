@@ -577,6 +577,7 @@ func _connect_systems() -> void:
 	_transport_drawer.route_update_requested.connect(_on_transport_route_updated)
 	_transport_drawer.route_delete_requested.connect(_on_transport_route_deleted)
 	_transport_drawer.map_select_requested.connect(_on_map_select_requested)
+	_transport_drawer.carrier_hover_changed.connect(_on_npc_focus_changed_routes)
 	ProgressionSystem.node_unlocked.connect(func(node_id: StringName) -> void:
 		if node_id == &"shelter":
 			_set_drawers_visible(true))
@@ -596,6 +597,7 @@ func _connect_systems() -> void:
 	_buildings_drawer._content.route_update_requested.connect(_on_transport_route_updated)
 	_buildings_drawer._content.route_delete_requested.connect(_on_transport_route_deleted)
 	_buildings_drawer._content.map_select_requested.connect(_on_buildings_map_select_requested)
+	_buildings_drawer._content.carrier_hover_changed.connect(_on_npc_focus_changed_routes)
 
 	# Workers drawer: focus drives the map route-line filter (highlight the focused worker's routes).
 	# _route_lines is injected later by MapRoot, so the null check lives inside the handler.
@@ -606,6 +608,8 @@ func _connect_systems() -> void:
 	if _progression_screen != null:
 		_progression_screen.opened.connect(func() -> void: _set_drawers_visible(false))
 		_progression_screen.closed.connect(func() -> void: if _start_selected: _set_drawers_visible(true))
+	if _task_dialog != null:
+		_task_dialog._content.open_build_picker_requested.connect(_on_open_build_picker_requested)
 	WorldSaveManager.load_completed.connect(_on_save_load_completed)
 	OverworldSystem.start_selected.connect(_on_start_selected)
 
@@ -792,7 +796,9 @@ func _exit_map_select_mode() -> void:
 ## Pass building_id = &"" to cancel (clicked empty space).
 ## Handles both Transport Drawer map-select ("from"/"to") and Buildings Drawer
 ## map-select (step prefixed with "buildings:").
-func notify_building_selected_in_map_select(building_id: StringName) -> void:
+## [param tile] is required for demolish mode so path tiles can be removed
+## (building_id is empty for path tiles; the tile coord is needed to call PathSystem).
+func notify_building_selected_in_map_select(building_id: StringName, tile: Vector2i = Vector2i(-1, -1)) -> void:
 	if _map_select_step == "":
 		return
 	var full_step := _map_select_step
@@ -800,6 +806,8 @@ func notify_building_selected_in_map_select(building_id: StringName) -> void:
 	if full_step == "demolish":
 		if building_id != &"":
 			BuildingRegistry.demolish_building(building_id)
+		elif tile != Vector2i(-1, -1) and PathSystem.has_path(tile):
+			PathSystem.remove_path(tile)
 	elif full_step.begins_with("buildings:"):
 		var inner_step: String = full_step.substr(len("buildings:"))
 		if _buildings_drawer != null:
@@ -870,6 +878,23 @@ func open_building_detail(building_id: String) -> void:
 		_buildings_drawer.open_for_building(building_id)
 
 
+## Opens the NPC drawer for the workers of a residential house.
+## Falls back to building detail when the house has no workers yet.
+func open_house_detail(building_id: String) -> void:
+	var tile: Vector2i = BuildingRegistry.get_building_tile(building_id)
+	var npc_ids: Array[StringName] = NPCSystem.get_house_npcs(tile)
+	if npc_ids.is_empty():
+		open_building_detail(building_id)
+		return
+	if _buildings_drawer != null and _buildings_drawer.is_open():
+		_buildings_drawer.close()
+	if _npcs_drawer != null:
+		if npc_ids.size() == 1:
+			_npcs_drawer.open_for_npc(npc_ids[0])
+		else:
+			_npcs_drawer.open()
+
+
 ## Triggered by BuildingsDrawer when the player confirms an inline rename.
 func _on_building_demolish_requested(building_id: String) -> void:
 	BuildingRegistry.demolish_building(building_id)
@@ -916,7 +941,10 @@ func _on_npc_released(building_id: String, _npc_id: StringName) -> void:
 
 
 ## Opens the Workers drawer at the detail view for a worker tapped inside the Buildings Drawer.
+## Closes the Buildings Drawer first so it doesn't sit open behind the NPC view.
 func _on_npc_detail_requested_from_buildings(npc_id: StringName) -> void:
+	if _buildings_drawer != null:
+		_buildings_drawer.close()
 	if _npcs_drawer != null:
 		_npcs_drawer.open_for_npc(npc_id)
 
@@ -952,6 +980,13 @@ func _on_recipe_changed(building_id: String, recipe_id: StringName) -> void:
 
 func _on_production_speed_changed(building_id: String, target_efficiency: float) -> void:
 	BuildingRegistry.set_production_speed(building_id, target_efficiency)
+
+
+func _on_open_build_picker_requested(_building_type: int) -> void:
+	if _task_dialog != null:
+		_task_dialog.close()
+	if _buildings_drawer != null:
+		_buildings_drawer.open_build_picker()
 
 
 func _on_build_mode_requested(building_type: int) -> void:

@@ -36,6 +36,9 @@ var _quantity: int = 0
 ## Set to the tile being held for drag; null once mouse leaves the tile.
 ## DragController reads this to gate panel-drag batch collection.
 static var active_drag_source: ItemTile = null
+## True from press until mouse leaves the tile. Unlike active_drag_source, this is a
+## plain bool and survives the tile being queue_freed (e.g. last item taken from storage).
+static var tap_pending: bool = false
 
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -105,6 +108,7 @@ func update_quantity(quantity: int) -> void:
 
 func _on_pressed() -> void:
 	ItemTile.active_drag_source = self
+	ItemTile.tap_pending = true
 	_tile.mouse_exited.connect(_on_tile_mouse_exited, CONNECT_ONE_SHOT)
 	match _container_type:
 		"storage": storage_drag_started.emit(_resource_id, _container_id, _tile_pos)
@@ -113,5 +117,9 @@ func _on_pressed() -> void:
 
 
 func _on_tile_mouse_exited() -> void:
-	if ItemTile.active_drag_source == self:
-		ItemTile.active_drag_source = null
+	# Only cancel the tap when the mouse physically left — not when the tile is
+	# queue_freed (e.g. last item taken from storage removes the tile).
+	if not is_queued_for_deletion():
+		if ItemTile.active_drag_source == self:
+			ItemTile.active_drag_source = null
+		ItemTile.tap_pending = false

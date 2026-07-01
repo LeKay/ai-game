@@ -18,7 +18,12 @@ const EFFECT_XP_HOUSEMATE     := &"xp_housemate"       # +% XP for the housemate
 const EFFECT_INPUT_SKIP       := &"input_skip"         # every Nth cycle consumes no input (type)
 const EFFECT_UNFED_FLOOR      := &"unfed_floor"        # raise the unfed efficiency floor
 const EFFECT_OUTPUT_CAPACITY  := &"output_capacity"    # x output buffer capacity (building type)
-const EFFECT_PROFESSION_XP    := &"profession_xp"      # set profession + +% work XP at it
+const EFFECT_PROFESSION_XP        := &"profession_xp"           # set profession + +% work XP at it
+const EFFECT_CALLING_BUILDING_EFF := &"calling_building_eff"    # +% building production speed (Calling only)
+
+## Sentinel stored in NPCInstance.profession when the NPC chose the Carrier calling.
+## Lies below all BuildingType enum values so existing -1 (no profession) is unaffected.
+const PROFESSION_CARRIER: int = -2
 
 # ---- Building-type pools ------------------------------------------------------
 
@@ -86,9 +91,16 @@ const PERKS: Array[Dictionary] = [
 		"good_bound": true, "building_bound": true, "pool": POOL_PRODUCTION_ALL, "is_profession": false, "requires_profession": true, "required": 1,
 	},
 	{
-		"id": &"berufung", "name": "Calling", "effect": EFFECT_PROFESSION_XP, "magnitude": 0.5,
-		"desc": "Sets profession: +50% work XP at this building type.",
+		"id": &"berufung", "name": "Calling", "effect": EFFECT_PROFESSION_XP, "magnitude": 0.25,
+		"desc": "Sets profession: +25% work XP and +10% production speed at this building type.",
 		"good_bound": true, "building_bound": true, "pool": POOL_PRODUCTION_ALL, "is_profession": true, "requires_profession": false, "required": 1,
+		"secondary_effect": EFFECT_CALLING_BUILDING_EFF, "secondary_magnitude": 0.1,
+	},
+	{
+		"id": &"berufung_traeger", "name": "Carrier", "effect": EFFECT_PROFESSION_XP, "magnitude": 0.25,
+		"desc": "Sets profession: +25% delivery XP and +1 carrier capacity.",
+		"good_bound": true, "building_bound": false, "pool": &"", "is_profession": true, "requires_profession": false, "required": 1,
+		"secondary_effect": EFFECT_CARRIER_CAPACITY, "secondary_magnitude": 1.0,
 	},
 ]
 
@@ -131,6 +143,7 @@ static func unlocked_production_types() -> Array[int]:
 ## Display name for a production building type (uses real enum values, not hardcoded ints).
 static func building_type_name(t: int) -> String:
 	match t:
+		PROFESSION_CARRIER:                           return "Carrier"
 		BuildingRegistry.BuildingType.LUMBER_CAMP:   return "Lumber Camp"
 		BuildingRegistry.BuildingType.GATHERING_HUT:  return "Gathering Hut"
 		BuildingRegistry.BuildingType.STONE_MASON:    return "Stone Mason"
@@ -221,6 +234,8 @@ static func generate_choices(npc: Object, count: int = 3) -> Array:
 				building_type = pool[randi() % pool.size()]
 			else:
 				building_type = int(npc.profession)  # applies to the NPC's profession type
+		elif p["is_profession"]:
+			building_type = PROFESSION_CARRIER  # non-building-bound calling; sentinel for apply_perk_choice
 		cards.append({
 			&"perk_id": p["id"],
 			&"name": p["name"],
@@ -233,34 +248,78 @@ static func generate_choices(npc: Object, count: int = 3) -> Array:
 	return cards
 
 
-## Builds up to `count` Calling (profession) cards, each bound to a DISTINCT already-unlocked
-## production building. The bound good is drawn from the NPC's level-restricted pool
-## (LEVEL_PERK_GROUPS) — duplicates across cards are allowed. Empty if no production building is
-## unlocked yet. Used for the first level-up's forced profession choice.
+## Returns the BuildingType of the building the NPC is currently assigned to, or -1 if none.
+static func _npc_assigned_building_type(npc: Object) -> int:
+	if npc == null or str(npc.assigned_building_id) == "":
+		return -1
+	var inst: Object = BuildingRegistry.get_building_instance(str(npc.assigned_building_id))
+	return inst.type if inst != null else -1
+
+
+## True if `npc` currently has at least one active logistics route (i.e. works as a carrier).
+static func _npc_is_carrier(npc: Object) -> bool:
+	if npc == null:
+		return false
+	for route: Object in LogisticsSystem.get_active_routes():
+		if route.npc_id == npc.npc_id:
+			return true
+	return false
+
+
+## Builds up to `count` Calling (profession) cards. Carrier is included only when the NPC has
+## active logistics routes; otherwise only building professions are offered. Remaining slots after
+## a guaranteed Carrier card are filled with shuffled unlocked buildings. Empty if goods pool is empty.
+## Used for the first level-up's forced profession choice.
 static func _calling_cards(npc: Object, count: int) -> Array:
-	var def: Dictionary = get_def(&"berufung")
-	if def.is_empty():
+	var building_def: Dictionary = get_def(&"berufung")
+	var carrier_def: Dictionary  = get_def(&"berufung_traeger")
+	if building_def.is_empty():
 		return []
-	var pros: Array[int] = unlocked_production_types()
-	pros.shuffle()
 	var level: int = int(npc.level) if npc != null else 0
 	var goods: Array[StringName] = _goods_pool_for_level(level)
+	if goods.is_empty():
+		return []
+
+	# Guaranteed first slot: Carrier if the NPC has active routes, otherwise the NPC's assigned
+	# building type (if any and unlocked). Remaining slots are filled with shuffled other buildings.
+	var guaranteed_types: Array[int] = []
+	if not carrier_def.is_empty() and _npc_is_carrier(npc):
+		guaranteed_types.append(PROFESSION_CARRIER)
+	else:
+		var assigned_type: int = _npc_assigned_building_type(npc)
+		if assigned_type != -1 and unlocked_production_types().has(assigned_type):
+			guaranteed_types.append(assigned_type)
+
+	var used_types: Array[int] = guaranteed_types.duplicate()
 	var cards: Array = []
-	for t: int in pros:
-		if cards.size() >= count:
-			break
-		var good: StringName = &""
-		if def["good_bound"]:
-			if goods.is_empty():
-				break  # no eligible goods at all
-			good = goods[randi() % goods.size()]
+	for t: int in guaranteed_types:
+		var card_def: Dictionary = carrier_def if t == PROFESSION_CARRIER else building_def
 		cards.append({
-			&"perk_id": def["id"],
-			&"name": def["name"],
-			&"desc": def["desc"],
-			&"effect": def["effect"],
-			&"magnitude": def["magnitude"],
-			&"good": good,
+			&"perk_id":      card_def["id"],
+			&"name":         card_def["name"],
+			&"desc":         card_def["desc"],
+			&"effect":       card_def["effect"],
+			&"magnitude":    card_def["magnitude"],
+			&"good":         goods[randi() % goods.size()],
 			&"building_type": t,
 		})
+
+	var buildings: Array[int] = unlocked_production_types()
+	buildings.shuffle()
+	for t: int in buildings:
+		if cards.size() >= count:
+			break
+		if used_types.has(t):
+			continue  # already guaranteed — don't duplicate
+		cards.append({
+			&"perk_id":      building_def["id"],
+			&"name":         building_def["name"],
+			&"desc":         building_def["desc"],
+			&"effect":       building_def["effect"],
+			&"magnitude":    building_def["magnitude"],
+			&"good":         goods[randi() % goods.size()],
+			&"building_type": t,
+		})
+
+	cards.shuffle()  # mix guaranteed and random so position isn't predictable
 	return cards

@@ -675,7 +675,9 @@ func _ensure_resource_map() -> void:
 
 
 ## Resolves a single unlock entry to the resource ids it makes obtainable. Tools/items are
-## resources too (axe, spindle, cloth …), so manual/building recipes contribute their output.
+## resources too (axe, spindle, cloth …), so manual_recipe and building_recipe entries contribute
+## their output. "building" unlocks are intentionally excluded: they make a building constructable
+## but each recipe within it is gated by its own building_recipe node.
 func _resources_for_unlock(unlock: Dictionary, player: PlayerCharacter) -> Array[StringName]:
 	var out: Array[StringName] = []
 	match unlock["type"]:
@@ -691,13 +693,6 @@ func _resources_for_unlock(unlock: Dictionary, player: PlayerCharacter) -> Array
 			var rid: StringName = recipe_out.get(&"resource_id", &"")
 			if rid != &"":
 				out.append(rid)
-		"building":
-			var bt: int = _building_type_from_name(unlock["id"])
-			if bt >= 0:
-				for recipe: Dictionary in BuildingRegistry.RECIPES.get(bt, []):
-					for res_key: StringName in recipe.get("output", {}):
-						if not out.has(res_key):
-							out.append(res_key)
 		"building_recipe":
 			var parts: PackedStringArray = unlock["id"].split(":", false, 1)
 			if parts.size() == 2:

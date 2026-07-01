@@ -38,7 +38,7 @@ const WAITING_DESTINATION_RESCUE_TICKS: int = 100
 
 ## When true, route lifecycle, FSM transitions, and cargo movements are printed to the console.
 ## Off in unit tests by default — set via `_logistics.verbose_logging = true` to enable.
-var verbose_logging: bool = true
+var verbose_logging: bool = false
 
 # ---- Dependencies (injectable for tests) ------------------------------------
 

@@ -162,12 +162,12 @@ func get_icon_texture(id: StringName, fallback_radius_px: int) -> Texture2D:
 	return TextureFactory.circle(fallback_radius_px, color)
 
 
-## Returns all non-deprecated resource IDs in JSON insertion order.
+## Returns all non-deprecated, non-placeholder resource IDs in JSON insertion order.
 func get_all_ids() -> Array[StringName]:
 	var result: Array[StringName] = []
 	for id: StringName in _definitions.keys():
 		var def: _ResourceDefinition = _definitions[id]
-		if not def.deprecated:
+		if not def.deprecated and not def.placeholder:
 			result.append(id)
 	return result
 

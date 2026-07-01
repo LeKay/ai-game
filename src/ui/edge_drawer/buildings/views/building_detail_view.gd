@@ -50,6 +50,8 @@ signal route_update_requested(route_id: StringName, changes: Dictionary)
 signal route_delete_requested(route_id: StringName)
 ## Forwarded from TransportSection — player wants to pick a building via map-select.
 signal map_select_requested(step: String)
+## Forwarded from TransportSection — drives the map route-line filter during carrier selection.
+signal carrier_hover_changed(npc_id: StringName)
 ## Forwarded from UpgradesSection — player confirmed an upgrade install.
 ## Caller must deduct resources and then call BuildingRegistry.install_upgrade().
 signal upgrade_install_requested(building_id: String, upgrade_id: StringName)
@@ -97,6 +99,11 @@ var _progress_bar_fill: ColorRect  ## colored fill portion of the progress bar
 
 var _worker_tile_host: Control   ## container that holds the worker tile
 var _worker_tile:      DrawerTile
+## Signature of the inputs that determine the worker tile's appearance. The tile is only
+## torn down and rebuilt when this changes, so the per-tick refresh() during production does
+## not destroy the × remove button mid-hover/click (which made the × flicker and swallowed
+## the release click). Mirrors NpcGrid._last_signature.
+var _worker_tile_signature: String = ""
 
 var _picker_popup:    Control    ## inline free-NPC picker
 var _picker_title:    Label       ## title label inside _picker_popup
@@ -111,6 +118,8 @@ var _residents_section:   Control  ## residents grid — only visible for RESIDE
 
 var _crafting_btn_host: Control    ## container for crafting button — storage+bench only
 var _crafting_section:  Control    ## inline crafting view — replaces body sections when open
+var _recipe_btn_host:   Control    ## container for recipe button — production buildings with >1 recipe
+var _recipe_btn:        Button     ## the button inside _recipe_btn_host — for text updates
 var _crafting_grid:     CraftingGrid  ## recipe grid inside crafting section
 
 # ── State ─────────────────────────────────────────────────────────────────────
@@ -153,6 +162,9 @@ func _ready() -> void:
 	transport_sec.map_select_requested.connect(
 		func(step: String) -> void:
 			map_select_requested.emit(step))
+	transport_sec.carrier_hover_changed.connect(
+		func(npc_id: StringName) -> void:
+			carrier_hover_changed.emit(npc_id))
 	var upgrades_sec := UpgradesSection.new()
 	_upgrades_section = upgrades_sec
 	upgrades_sec.upgrade_install_requested.connect(
@@ -177,6 +189,8 @@ func _ready() -> void:
 	vbox.add_child(_crafting_btn_host)
 	_crafting_section = _build_crafting_section_view()
 	vbox.add_child(_crafting_section)
+	_recipe_btn_host = _build_recipe_btn_host()
+	vbox.add_child(_recipe_btn_host)
 
 	_picker_popup = _build_picker_popup()
 	add_child(_picker_popup)
@@ -205,6 +219,7 @@ func _input(event: InputEvent) -> void:
 ## Loads data for [param building_id] and rebuilds the header and production/inventory section.
 func setup(building_id: String) -> void:
 	_building_id = building_id
+	_worker_tile_signature = ""   # force a fresh worker tile for the new building
 	cancel_all_editors()
 	_rebuild_production_section()
 	if _transport_section is TransportSection:
@@ -293,6 +308,8 @@ func _rebuild_production_section() -> void:
 		sec.storage_drag_started.connect(func(r, c, t): storage_drag_started.emit(r, c, t))
 		sec.input_drag_started.connect(func(r, b, t): input_drag_started.emit(r, b, t))
 		sec.output_drag_started.connect(func(r, b, t): output_drag_started.emit(r, b, t))
+		sec.production_speed_changed.connect(func(bid: String, eff: float) -> void:
+			production_speed_changed.emit(bid, eff))
 		sec.setup(_building_id)
 	else:
 		_production_section = _make_section_stub("")
@@ -343,8 +360,7 @@ func refresh() -> void:
 	else:
 		# ── Efficiency ────────────────────────────────────────────────────────
 		_eff_label.text = "Eff: %d%%" % int(instance.get_effective_efficiency() * 100.0)  # TODO: localize
-		var _is_prod: bool = BuildingRegistry.is_production_building(instance.type)
-		_eff_gear_btn.visible = _is_prod and not _speed_editor.visible
+		_eff_gear_btn.visible = false
 		if _speed_editor.visible:
 			_speed_editor.update_max(instance.efficiency)
 		# ── Utilization ───────────────────────────────────────────────────────
@@ -408,9 +424,26 @@ func refresh() -> void:
 	var has_bench: bool = is_storage and BuildingRegistry.has_upgrade(_building_id, &"crafting_bench")
 	_crafting_btn_host.visible = has_bench and not _crafting_view_open
 
+	# ── Recipe button — visible for production buildings with multiple recipes ──
+	var all_recipes: Array = BuildingRegistry.RECIPES.get(instance.type, [])
+	var is_production: bool = BuildingRegistry.is_production_building(instance.type)
+	var picker_open: bool = is_production \
+			and _production_section is ProductionSection \
+			and (_production_section as ProductionSection).is_picker_open()
+	_recipe_btn_host.visible = is_production and all_recipes.size() > 1 \
+			and not _crafting_view_open and not _speed_editor.visible
+	if _recipe_btn != null:
+		_recipe_btn.text = "Close" if picker_open else "Recipes"  # TODO: localize
+
 	# When crafting view is open, keep all body sections hidden.
 	if _crafting_view_open:
 		_production_section.visible = false
+		_residents_section.visible = false
+		_transport_section.visible = false
+		_upgrades_section.visible = false
+
+	# When recipe picker is open, hide all sections except production (which contains the picker).
+	if picker_open:
 		_residents_section.visible = false
 		_transport_section.visible = false
 		_upgrades_section.visible = false
@@ -722,12 +755,26 @@ func _cancel_rename() -> void:
 
 ## Builds or rebuilds the worker tile inside [member _worker_tile_host].
 func _rebuild_worker_tile(instance: BuildingRegistry.BuildingInstance) -> void:
+	var assigned_id: StringName = instance.assigned_npc_id
+
+	# Skip the rebuild when nothing that affects the tile changed. refresh() runs every tick
+	# while production is active; tearing the tile down each tick destroyed the × remove button
+	# under the cursor — the × flickered and release clicks were swallowed mid-interaction.
+	var signature: String
+	if assigned_id != &"":
+		signature = "A:" + str(assigned_id) + "|" + NPCSystem.get_npc_display_name(assigned_id)
+	else:
+		signature = "F:" + ("0" if NPCSystem.get_available_npcs().is_empty() else "1")
+	var tile_valid: bool = _worker_tile != null and is_instance_valid(_worker_tile)
+	if tile_valid and signature == _worker_tile_signature:
+		return
+	_worker_tile_signature = signature
+
 	# Clear previous tile.
-	if _worker_tile != null and is_instance_valid(_worker_tile):
+	if tile_valid:
 		_worker_tile.queue_free()
 		_worker_tile = null
 
-	var assigned_id: StringName = instance.assigned_npc_id
 	var tile := DrawerTile.new()
 	_worker_tile = tile
 	tile.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1093,6 +1140,41 @@ func _build_crafting_btn() -> Control:
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.pressed.connect(_open_crafting_view)
 	pad.add_child(btn)
+	return host
+
+
+# ── Recipe button (bottom center, production buildings only) ─────────────────
+
+func _build_recipe_btn_host() -> Control:
+	var host := VBoxContainer.new()
+	host.name = "RecipeBtnHost"
+	host.add_theme_constant_override("separation", 0)
+	host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	host.visible = false
+
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.add_child(spacer)
+
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override("margin_left",   8)
+	pad.add_theme_constant_override("margin_right",  8)
+	pad.add_theme_constant_override("margin_top",    4)
+	pad.add_theme_constant_override("margin_bottom", 8)
+	host.add_child(pad)
+
+	var btn := Button.new()
+	btn.name = "RecipeBtn"
+	btn.text = "Recipes"  # TODO: localize
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.pressed.connect(func() -> void:
+		if _production_section is ProductionSection:
+			(_production_section as ProductionSection).toggle_picker()
+		refresh()
+	)
+	pad.add_child(btn)
+	_recipe_btn = btn
 	return host
 
 

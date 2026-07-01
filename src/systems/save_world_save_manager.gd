@@ -45,6 +45,12 @@ var _world_grid: WorldGrid = null
 var _player_character: PlayerCharacter = null
 ## Scene-level CameraController node — not an Autoload, registered by MapRoot after it is ready.
 var _camera_controller: CameraController = null
+## Scene-level nodes that hold items in transient (non-serialized) state — e.g. the
+## DragController's in-flight transports. Each must expose settle_in_flight_items(),
+## which is called before any WorldGrid serialization so mid-transport / mid-drag items
+## are first committed back into a serialized location (grid / container / buffer).
+## Register new transient item-holders here and they are covered automatically.
+var _item_settlers: Array[Node] = []
 
 ## Staged load — populated by load_game(), consumed by apply_pending_load().
 var _pending_load_data: Dictionary = {}
@@ -87,6 +93,23 @@ func register_camera_controller(cam: CameraController) -> void:
 	_camera_controller = cam
 
 
+## Register a node that settles its in-flight items before serialization.
+## The node must implement settle_in_flight_items(). Called by MapRoot for the
+## DragController; any future transient item-holder registers the same way.
+func register_item_settler(node: Node) -> void:
+	if node != null and not _item_settlers.has(node):
+		_item_settlers.append(node)
+
+
+## Commits every registered transient item-holder back into serialized storage.
+## Called before WorldGrid.serialize() in both disk saves and in-session map snapshots
+## so no item is lost while mid-transport or mid-drag.
+func _settle_in_flight_items() -> void:
+	for node: Node in _item_settlers:
+		if is_instance_valid(node) and node.has_method("settle_in_flight_items"):
+			node.settle_in_flight_items()
+
+
 ## Returns list of available (non-empty) save slot numbers.
 func get_available_slots() -> Array[int]:
 	var slots: Array[int] = []
@@ -124,6 +147,10 @@ func save_game(slot: int) -> bool:
 		return false
 
 	DirAccess.make_dir_absolute(SAVE_PATH)
+
+	# Commit any mid-transport / mid-drag items back into serialized storage first,
+	# so WorldGrid/InventorySystem capture them instead of dropping them.
+	_settle_in_flight_items()
 
 	var data := {"schema_version": SCHEMA_VERSION, "timestamp": int(Time.get_unix_time_from_system())}
 
@@ -234,6 +261,7 @@ func apply_pending_load() -> void:
 	# Flag stays true through deserialize so start-time listeners (e.g. DevStorageSetup,
 	# which reacts to building_placed) can detect a load-in-progress and skip their seeding.
 	_process_deserialize_order(data)
+	TickSystem.set_pause(true)
 	_has_pending_load = false
 	print("[WorldSaveManager] Applied pending load")
 	load_completed.emit()
@@ -296,6 +324,8 @@ func get_current_map_coord() -> Vector2i:
 func snapshot_current_map_state() -> void:
 	if _current_map_coord == Vector2i(-1, -1):
 		return
+	# Settle in-flight items so a tile-to-tile snapshot captures them (same gap as disk saves).
+	_settle_in_flight_items()
 	var snap: Dictionary = {}
 	if _world_grid != null:
 		snap["WorldGrid"] = _world_grid.serialize()

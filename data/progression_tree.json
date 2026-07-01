@@ -28,21 +28,31 @@
       "ring": 0,
       "prerequisites": [],
       "unlocks": [
-        { "type": "building", "id": "COLLECTION_POINT" }
+        {
+          "type": "building",
+          "id": "COLLECTION_POINT"
+        }
       ],
       "cost": null
     },
-
     {
       "node_id": "foraging",
       "display_name": "Foraging",
       "icon": "🍒",
       "branch": "food",
       "ring": 1,
-      "prerequisites": ["hearth"],
+      "prerequisites": [
+        "hearth"
+      ],
       "unlocks": [
-        { "type": "gather", "id": "PICK_BERRIES" },
-        { "type": "gather", "id": "CLEAR_BERRY" }
+        {
+          "type": "gather",
+          "id": "PICK_BERRIES"
+        },
+        {
+          "type": "gather",
+          "id": "CLEAR_BERRY"
+        }
       ],
       "cost": null
     },
@@ -52,11 +62,22 @@
       "icon": "🧺",
       "branch": "food",
       "ring": 2,
-      "prerequisites": ["foraging"],
-      "hidden_prerequisites": ["woodcutting", "stonecutting"],
+      "prerequisites": [
+        "foraging"
+      ],
+      "hidden_prerequisites": [
+        "woodcutting",
+        "stonecutting"
+      ],
       "unlocks": [
-        { "type": "building", "id": "GATHERING_HUT" },
-        { "type": "building_recipe", "id": "GATHERING_HUT:gather_berry" }
+        {
+          "type": "building",
+          "id": "GATHERING_HUT"
+        },
+        {
+          "type": "building_recipe",
+          "id": "GATHERING_HUT:gather_berry"
+        }
       ],
       "cost": null
     },
@@ -66,9 +87,14 @@
       "icon": "🏠",
       "branch": "food",
       "ring": 3,
-      "prerequisites": ["gathering_hut"],
+      "prerequisites": [
+        "gathering_hut"
+      ],
       "unlocks": [
-        { "type": "building", "id": "RESIDENTIAL_HOUSE" }
+        {
+          "type": "building",
+          "id": "RESIDENTIAL_HOUSE"
+        }
       ],
       "cost": null
     },
@@ -78,10 +104,18 @@
       "icon": "🛤️",
       "branch": "food",
       "ring": 4,
-      "prerequisites": ["shelter"],
+      "prerequisites": [
+        "shelter"
+      ],
       "unlocks": [
-        { "type": "building", "id": "ROAD" },
-        { "type": "gather", "id": "CONSTRUCT_PATH" }
+        {
+          "type": "building",
+          "id": "ROAD"
+        },
+        {
+          "type": "gather",
+          "id": "CONSTRUCT_PATH"
+        }
       ],
       "cost": null
     },
@@ -91,9 +125,15 @@
       "icon": "🌉",
       "branch": "food",
       "ring": 5,
-      "prerequisites": ["paving", "rope_weaving"],
+      "prerequisites": [
+        "paving",
+        "rope_weaving"
+      ],
       "unlocks": [
-        { "type": "building", "id": "BRIDGE" }
+        {
+          "type": "building",
+          "id": "BRIDGE"
+        }
       ],
       "cost": null
     },
@@ -103,12 +143,26 @@
       "icon": "🌾",
       "branch": "food",
       "ring": 4,
-      "prerequisites": ["shelter"],
+      "prerequisites": [
+        "shelter"
+      ],
       "unlocks": [
-        { "type": "building", "id": "FARM" },
-        { "type": "gather", "id": "PLANT_SEED" },
-        { "type": "gather", "id": "HARVEST_WHEAT" },
-        { "type": "gather", "id": "CLEAR_WHEAT" }
+        {
+          "type": "building",
+          "id": "FARM"
+        },
+        {
+          "type": "gather",
+          "id": "PLANT_SEED"
+        },
+        {
+          "type": "gather",
+          "id": "HARVEST_WHEAT"
+        },
+        {
+          "type": "gather",
+          "id": "CLEAR_WHEAT"
+        }
       ],
       "cost": null
     },
@@ -118,9 +172,18 @@
       "icon": "🌀",
       "branch": "food",
       "ring": 5,
-      "prerequisites": ["agriculture"],
+      "prerequisites": [
+        "agriculture"
+      ],
       "unlocks": [
-        { "type": "building", "id": "MILL" }
+        {
+          "type": "building",
+          "id": "MILL"
+        },
+        {
+          "type": "building_recipe",
+          "id": "MILL:grind"
+        }
       ],
       "cost": null
     },
@@ -130,9 +193,18 @@
       "icon": "🍞",
       "branch": "food",
       "ring": 6,
-      "prerequisites": ["milling"],
+      "prerequisites": [
+        "milling"
+      ],
       "unlocks": [
-        { "type": "building", "id": "BAKERY" }
+        {
+          "type": "building",
+          "id": "BAKERY"
+        },
+        {
+          "type": "building_recipe",
+          "id": "BAKERY:bake"
+        }
       ],
       "cost": null
     },
@@ -142,10 +214,18 @@
       "icon": "🏹",
       "branch": "food",
       "ring": 4,
-      "prerequisites": ["shelter"],
+      "prerequisites": [
+        "shelter"
+      ],
       "unlocks": [
-        { "type": "building", "id": "HUNTING_LODGE" },
-        { "type": "building_recipe", "id": "HUNTING_LODGE:hunt" }
+        {
+          "type": "building",
+          "id": "HUNTING_LODGE"
+        },
+        {
+          "type": "building_recipe",
+          "id": "HUNTING_LODGE:hunt"
+        }
       ],
       "cost": null
     },
@@ -155,23 +235,36 @@
       "icon": "🎯",
       "branch": "food",
       "ring": 5,
-      "prerequisites": ["hunting", "bowyer"],
+      "prerequisites": [
+        "hunting",
+        "bowyer"
+      ],
       "unlocks": [
-        { "type": "building_recipe", "id": "HUNTING_LODGE:hunt_with_bow" }
+        {
+          "type": "building_recipe",
+          "id": "HUNTING_LODGE:hunt_with_bow"
+        }
       ],
       "cost": null
     },
-
     {
       "node_id": "woodcutting",
       "display_name": "Woodcutting",
       "icon": "🌲",
       "branch": "materials",
       "ring": 2,
-      "prerequisites": ["foraging"],
+      "prerequisites": [
+        "foraging"
+      ],
       "unlocks": [
-        { "type": "gather", "id": "CHOP_TREE" },
-        { "type": "gather", "id": "CLEAR_TREE" }
+        {
+          "type": "gather",
+          "id": "CHOP_TREE"
+        },
+        {
+          "type": "gather",
+          "id": "CLEAR_TREE"
+        }
       ],
       "cost": null
     },
@@ -181,10 +274,18 @@
       "icon": "🌿",
       "branch": "materials",
       "ring": 2,
-      "prerequisites": ["foraging"],
+      "prerequisites": [
+        "foraging"
+      ],
       "unlocks": [
-        { "type": "gather", "id": "HARVEST_FIBER" },
-        { "type": "gather", "id": "CLEAR_GRASS" }
+        {
+          "type": "gather",
+          "id": "HARVEST_FIBER"
+        },
+        {
+          "type": "gather",
+          "id": "CLEAR_GRASS"
+        }
       ],
       "cost": null
     },
@@ -194,10 +295,18 @@
       "icon": "🪨",
       "branch": "materials",
       "ring": 3,
-      "prerequisites": ["woodcutting"],
+      "prerequisites": [
+        "woodcutting"
+      ],
       "unlocks": [
-        { "type": "gather", "id": "MINE_STONE" },
-        { "type": "gather", "id": "CLEAR_STONE" }
+        {
+          "type": "gather",
+          "id": "MINE_STONE"
+        },
+        {
+          "type": "gather",
+          "id": "CLEAR_STONE"
+        }
       ],
       "cost": null
     },
@@ -207,10 +316,17 @@
       "icon": "📦",
       "branch": "materials",
       "ring": 3,
-      "prerequisites": ["woodcutting"],
-      "hidden_prerequisites": ["stonecutting"],
+      "prerequisites": [
+        "woodcutting"
+      ],
+      "hidden_prerequisites": [
+        "stonecutting"
+      ],
       "unlocks": [
-        { "type": "building", "id": "STORAGE_BUILDING" }
+        {
+          "type": "building",
+          "id": "STORAGE_BUILDING"
+        }
       ],
       "cost": null
     },
@@ -220,10 +336,19 @@
       "icon": "🪵",
       "branch": "materials",
       "ring": 3,
-      "prerequisites": ["woodcutting", "shelter"],
+      "prerequisites": [
+        "woodcutting",
+        "shelter"
+      ],
       "unlocks": [
-        { "type": "building", "id": "LUMBER_CAMP" },
-        { "type": "building_recipe", "id": "LUMBER_CAMP:bare_hands" }
+        {
+          "type": "building",
+          "id": "LUMBER_CAMP"
+        },
+        {
+          "type": "building_recipe",
+          "id": "LUMBER_CAMP:bare_hands"
+        }
       ],
       "cost": null
     },
@@ -233,9 +358,15 @@
       "icon": "🪓",
       "branch": "materials",
       "ring": 4,
-      "prerequisites": ["forestry", "toolmaking"],
+      "prerequisites": [
+        "forestry",
+        "toolmaking"
+      ],
       "unlocks": [
-        { "type": "building_recipe", "id": "LUMBER_CAMP:with_tool" }
+        {
+          "type": "building_recipe",
+          "id": "LUMBER_CAMP:with_tool"
+        }
       ],
       "cost": null
     },
@@ -245,10 +376,19 @@
       "icon": "🧱",
       "branch": "materials",
       "ring": 3,
-      "prerequisites": ["stonecutting", "shelter"],
+      "prerequisites": [
+        "stonecutting",
+        "shelter"
+      ],
       "unlocks": [
-        { "type": "building", "id": "STONE_MASON" },
-        { "type": "building_recipe", "id": "STONE_MASON:bare_hands" }
+        {
+          "type": "building",
+          "id": "STONE_MASON"
+        },
+        {
+          "type": "building_recipe",
+          "id": "STONE_MASON:bare_hands"
+        }
       ],
       "cost": null
     },
@@ -258,9 +398,15 @@
       "icon": "⛏️",
       "branch": "materials",
       "ring": 4,
-      "prerequisites": ["masonry", "toolmaking"],
+      "prerequisites": [
+        "masonry",
+        "toolmaking"
+      ],
       "unlocks": [
-        { "type": "building_recipe", "id": "STONE_MASON:with_tool" }
+        {
+          "type": "building_recipe",
+          "id": "STONE_MASON:with_tool"
+        }
       ],
       "cost": null
     },
@@ -270,17 +416,46 @@
       "icon": "🔎",
       "branch": "materials",
       "ring": 5,
-      "prerequisites": ["tooled_quarrying"],
+      "prerequisites": [
+        "tooled_quarrying"
+      ],
       "unlocks": [
-        { "type": "search", "id": "SEARCH" },
-        { "type": "gather", "id": "MINE_CLAY" },
-        { "type": "gather", "id": "MINE_IRON" },
-        { "type": "gather", "id": "MINE_COPPER" },
-        { "type": "gather", "id": "MINE_TIN" },
-        { "type": "gather", "id": "MINE_SILVER" },
-        { "type": "gather", "id": "MINE_GOLD" },
-        { "type": "gather", "id": "MINE_GEMSTONE" },
-        { "type": "gather", "id": "MINE_AMBER" }
+        {
+          "type": "search",
+          "id": "SEARCH"
+        },
+        {
+          "type": "gather",
+          "id": "MINE_CLAY"
+        },
+        {
+          "type": "gather",
+          "id": "MINE_IRON"
+        },
+        {
+          "type": "gather",
+          "id": "MINE_COPPER"
+        },
+        {
+          "type": "gather",
+          "id": "MINE_TIN"
+        },
+        {
+          "type": "gather",
+          "id": "MINE_SILVER"
+        },
+        {
+          "type": "gather",
+          "id": "MINE_GOLD"
+        },
+        {
+          "type": "gather",
+          "id": "MINE_GEMSTONE"
+        },
+        {
+          "type": "gather",
+          "id": "MINE_AMBER"
+        }
       ],
       "cost": null
     },
@@ -290,9 +465,18 @@
       "icon": "🧱",
       "branch": "materials",
       "ring": 6,
-      "prerequisites": ["prospecting"],
+      "prerequisites": [
+        "prospecting"
+      ],
       "unlocks": [
-        { "type": "building", "id": "CLAY_PIT" }
+        {
+          "type": "building",
+          "id": "CLAY_PIT"
+        },
+        {
+          "type": "building_recipe",
+          "id": "CLAY_PIT:extract_clay"
+        }
       ],
       "cost": null
     },
@@ -302,10 +486,18 @@
       "icon": "🏺",
       "branch": "materials",
       "ring": 7,
-      "prerequisites": ["clay_extraction"],
+      "prerequisites": [
+        "clay_extraction"
+      ],
       "unlocks": [
-        { "type": "building", "id": "POTTERY_KILN" },
-        { "type": "building_recipe", "id": "POTTERY_KILN:bare_hands" }
+        {
+          "type": "building",
+          "id": "POTTERY_KILN"
+        },
+        {
+          "type": "building_recipe",
+          "id": "POTTERY_KILN:bare_hands"
+        }
       ],
       "cost": null
     },
@@ -315,9 +507,18 @@
       "icon": "🔥",
       "branch": "materials",
       "ring": 7,
-      "prerequisites": ["clay_extraction"],
+      "prerequisites": [
+        "clay_extraction"
+      ],
       "unlocks": [
-        { "type": "building", "id": "BRICK_KILN" }
+        {
+          "type": "building",
+          "id": "BRICK_KILN"
+        },
+        {
+          "type": "building_recipe",
+          "id": "BRICK_KILN:fire_bricks"
+        }
       ],
       "cost": null
     },
@@ -327,9 +528,15 @@
       "icon": "⛏️",
       "branch": "materials",
       "ring": 8,
-      "prerequisites": ["pottery", "toolmaking"],
+      "prerequisites": [
+        "pottery",
+        "toolmaking"
+      ],
       "unlocks": [
-        { "type": "building_recipe", "id": "POTTERY_KILN:with_tool" }
+        {
+          "type": "building_recipe",
+          "id": "POTTERY_KILN:with_tool"
+        }
       ],
       "cost": null
     },
@@ -339,9 +546,18 @@
       "icon": "⬛",
       "branch": "materials",
       "ring": 4,
-      "prerequisites": ["forestry"],
+      "prerequisites": [
+        "forestry"
+      ],
       "unlocks": [
-        { "type": "building", "id": "CHARCOAL_KILN" }
+        {
+          "type": "building",
+          "id": "CHARCOAL_KILN"
+        },
+        {
+          "type": "building_recipe",
+          "id": "CHARCOAL_KILN:burn_charcoal"
+        }
       ],
       "cost": null
     },
@@ -351,9 +567,15 @@
       "icon": "🔥",
       "branch": "materials",
       "ring": 8,
-      "prerequisites": ["charcoal_burning", "brickmaking"],
+      "prerequisites": [
+        "charcoal_burning",
+        "brickmaking"
+      ],
       "unlocks": [
-        { "type": "building_recipe", "id": "BRICK_KILN:fire_bricks_charcoal" }
+        {
+          "type": "building_recipe",
+          "id": "BRICK_KILN:fire_bricks_charcoal"
+        }
       ],
       "cost": null
     },
@@ -363,9 +585,19 @@
       "icon": "🪚",
       "branch": "materials",
       "ring": 5,
-      "prerequisites": ["forestry", "toolmaking"],
+      "prerequisites": [
+        "forestry",
+        "toolmaking"
+      ],
       "unlocks": [
-        { "type": "building", "id": "SAWMILL" }
+        {
+          "type": "building",
+          "id": "SAWMILL"
+        },
+        {
+          "type": "building_recipe",
+          "id": "SAWMILL:saw_planks"
+        }
       ],
       "cost": null
     },
@@ -375,10 +607,18 @@
       "icon": "🛢️",
       "branch": "materials",
       "ring": 6,
-      "prerequisites": ["sawmilling"],
+      "prerequisites": [
+        "sawmilling"
+      ],
       "unlocks": [
-        { "type": "building", "id": "COOPERAGE" },
-        { "type": "building_recipe", "id": "COOPERAGE:craft_barrels" }
+        {
+          "type": "building",
+          "id": "COOPERAGE"
+        },
+        {
+          "type": "building_recipe",
+          "id": "COOPERAGE:craft_barrels"
+        }
       ],
       "cost": null
     },
@@ -388,10 +628,18 @@
       "icon": "🛞",
       "branch": "materials",
       "ring": 5,
-      "prerequisites": ["forestry"],
+      "prerequisites": [
+        "forestry"
+      ],
       "unlocks": [
-        { "type": "building", "id": "WHEEL_MAKER" },
-        { "type": "building_recipe", "id": "WHEEL_MAKER:craft_wheels" }
+        {
+          "type": "building",
+          "id": "WHEEL_MAKER"
+        },
+        {
+          "type": "building_recipe",
+          "id": "WHEEL_MAKER:craft_wheels"
+        }
       ],
       "cost": null
     },
@@ -401,10 +649,19 @@
       "icon": "🛒",
       "branch": "materials",
       "ring": 7,
-      "prerequisites": ["wheel_making", "sawmilling"],
+      "prerequisites": [
+        "wheel_making",
+        "sawmilling"
+      ],
       "unlocks": [
-        { "type": "building", "id": "CART_WORKSHOP" },
-        { "type": "building_recipe", "id": "CART_WORKSHOP:assemble_cart" }
+        {
+          "type": "building",
+          "id": "CART_WORKSHOP"
+        },
+        {
+          "type": "building_recipe",
+          "id": "CART_WORKSHOP:assemble_cart"
+        }
       ],
       "cost": null
     },
@@ -414,10 +671,18 @@
       "icon": "🏪",
       "branch": "materials",
       "ring": 8,
-      "prerequisites": ["cart_workshop"],
+      "prerequisites": [
+        "cart_workshop"
+      ],
       "unlocks": [
-        { "type": "building", "id": "TRADING_POST" },
-        { "type": "building_recipe", "id": "TRADING_POST:dispatch_goods" }
+        {
+          "type": "building",
+          "id": "TRADING_POST"
+        },
+        {
+          "type": "building_recipe",
+          "id": "TRADING_POST:dispatch_goods"
+        }
       ],
       "cost": null
     },
@@ -427,10 +692,18 @@
       "icon": "🪑",
       "branch": "materials",
       "ring": 6,
-      "prerequisites": ["sawmilling"],
+      "prerequisites": [
+        "sawmilling"
+      ],
       "unlocks": [
-        { "type": "building", "id": "CARPENTER" },
-        { "type": "building_recipe", "id": "CARPENTER:bare_planks" }
+        {
+          "type": "building",
+          "id": "CARPENTER"
+        },
+        {
+          "type": "building_recipe",
+          "id": "CARPENTER:bare_planks"
+        }
       ],
       "cost": null
     },
@@ -440,38 +713,67 @@
       "icon": "🛋️",
       "branch": "materials",
       "ring": 7,
-      "prerequisites": ["carpenter", "tannery"],
+      "prerequisites": [
+        "carpenter",
+        "tannery"
+      ],
       "unlocks": [
-        { "type": "building_recipe", "id": "CARPENTER:with_leather" }
+        {
+          "type": "building_recipe",
+          "id": "CARPENTER:with_leather"
+        }
       ],
       "cost": null
     },
-
     {
       "node_id": "toolmaking",
       "display_name": "Toolmaking",
       "icon": "🔧",
       "branch": "crafting",
       "ring": 2,
-      "prerequisites": ["storage", "stonecutting"],
+      "prerequisites": [
+        "storage",
+        "stonecutting"
+      ],
+      "hidden_prerequisites": [
+        "forestry",
+        "masonry"
+      ],
       "unlocks": [
-        { "type": "manual_recipe", "id": "axe" },
-        { "type": "manual_recipe", "id": "pickaxe" },
-        { "type": "upgrade", "id": "crafting_bench" }
+        {
+          "type": "manual_recipe",
+          "id": "axe"
+        },
+        {
+          "type": "manual_recipe",
+          "id": "pickaxe"
+        },
+        {
+          "type": "upgrade",
+          "id": "crafting_bench"
+        }
       ],
       "cost": null
     },
-
     {
       "node_id": "knife",
       "display_name": "Toolmaking: Knife",
       "icon": "🔪",
       "branch": "crafting",
       "ring": 3,
-      "prerequisites": ["toolmaking"],
+      "prerequisites": [
+        "toolmaking",
+        "hunting"
+      ],
       "unlocks": [
-        { "type": "manual_recipe", "id": "knife" },
-        { "type": "building_recipe", "id": "TOOL_WORKSHOP:craft_knife" }
+        {
+          "type": "manual_recipe",
+          "id": "knife"
+        },
+        {
+          "type": "building_recipe",
+          "id": "TOOL_WORKSHOP:craft_knife"
+        }
       ],
       "cost": null
     },
@@ -481,9 +783,29 @@
       "icon": "🧷",
       "branch": "crafting",
       "ring": 5,
-      "prerequisites": ["toolmaking"],
+      "prerequisites": [
+        "toolmaking"
+      ],
+      "hidden_prerequisites": [
+        "weaving"
+      ],
       "unlocks": [
-        { "type": "manual_recipe", "id": "spindle" }
+        {
+          "type": "manual_recipe",
+          "id": "spindle"
+        },
+        {
+          "type": "building_recipe",
+          "id": "TOOL_WORKSHOP:craft_spindle"
+        },
+        {
+          "type": "building_recipe",
+          "id": "WEAVER:with_tool"
+        },
+        {
+          "type": "building_recipe",
+          "id": "TAILOR:with_tool"
+        }
       ],
       "cost": null
     },
@@ -493,9 +815,23 @@
       "icon": "🏭",
       "branch": "crafting",
       "ring": 4,
-      "prerequisites": ["toolmaking", "shelter"],
+      "prerequisites": [
+        "toolmaking",
+        "shelter"
+      ],
       "unlocks": [
-        { "type": "building", "id": "TOOL_WORKSHOP" }
+        {
+          "type": "building",
+          "id": "TOOL_WORKSHOP"
+        },
+        {
+          "type": "building_recipe",
+          "id": "TOOL_WORKSHOP:craft_axe"
+        },
+        {
+          "type": "building_recipe",
+          "id": "TOOL_WORKSHOP:craft_pickaxe"
+        }
       ],
       "cost": null
     },
@@ -505,23 +841,40 @@
       "icon": "🏹",
       "branch": "crafting",
       "ring": 6,
-      "prerequisites": ["rope_weaving"],
+      "prerequisites": [
+        "rope_weaving"
+      ],
       "unlocks": [
-        { "type": "building", "id": "BOWYERS_WORKSHOP" },
-        { "type": "building_recipe", "id": "BOWYERS_WORKSHOP:bow_with_rope" }
+        {
+          "type": "building",
+          "id": "BOWYERS_WORKSHOP"
+        },
+        {
+          "type": "building_recipe",
+          "id": "BOWYERS_WORKSHOP:bow_with_rope"
+        }
       ],
       "cost": null
     },
-
     {
       "node_id": "weaving",
       "display_name": "Weaving",
       "icon": "🕸️",
       "branch": "textiles",
       "ring": 4,
-      "prerequisites": ["fiber_harvesting", "shelter"],
+      "prerequisites": [
+        "fiber_harvesting",
+        "shelter"
+      ],
       "unlocks": [
-        { "type": "building", "id": "WEAVER" }
+        {
+          "type": "building",
+          "id": "WEAVER"
+        },
+        {
+          "type": "building_recipe",
+          "id": "WEAVER:bare_hands"
+        }
       ],
       "cost": null
     },
@@ -531,9 +884,18 @@
       "icon": "🧵",
       "branch": "textiles",
       "ring": 6,
-      "prerequisites": ["weaving"],
+      "prerequisites": [
+        "weaving"
+      ],
       "unlocks": [
-        { "type": "building", "id": "TAILOR" }
+        {
+          "type": "building",
+          "id": "TAILOR"
+        },
+        {
+          "type": "building_recipe",
+          "id": "TAILOR:bare_hands"
+        }
       ],
       "cost": null
     },
@@ -543,10 +905,24 @@
       "icon": "🪣",
       "branch": "textiles",
       "ring": 7,
-      "prerequisites": ["tailoring", "hunting", "knife"],
+      "prerequisites": [
+        "tailoring",
+        "hunting",
+        "knife"
+      ],
       "unlocks": [
-        { "type": "building", "id": "TANNERY" },
-        { "type": "building_recipe", "id": "TANNERY:bare_hands" }
+        {
+          "type": "building",
+          "id": "TANNERY"
+        },
+        {
+          "type": "building_recipe",
+          "id": "TANNERY:bare_hands"
+        },
+        {
+          "type": "building_recipe",
+          "id": "TAILOR:leather_garments"
+        }
       ],
       "cost": null
     },
@@ -556,23 +932,33 @@
       "icon": "🔪",
       "branch": "textiles",
       "ring": 8,
-      "prerequisites": ["tannery"],
+      "prerequisites": [
+        "tannery"
+      ],
       "unlocks": [
-        { "type": "building_recipe", "id": "TANNERY:with_knife" }
+        {
+          "type": "building_recipe",
+          "id": "TANNERY:with_knife"
+        }
       ],
       "cost": null
     },
-
     {
       "node_id": "npc_level_2",
       "display_name": "Leadership II",
       "icon": "⬆️",
       "branch": "leadership",
       "ring": 1,
-      "prerequisites": ["hearth", "shelter"],
+      "prerequisites": [
+        "hearth",
+        "shelter"
+      ],
       "requires_buildings": 3,
       "unlocks": [
-        { "type": "npc_level_cap", "id": "2" }
+        {
+          "type": "npc_level_cap",
+          "id": "2"
+        }
       ],
       "cost": null
     },
@@ -582,10 +968,15 @@
       "icon": "⬆️",
       "branch": "leadership",
       "ring": 2,
-      "prerequisites": ["npc_level_2"],
+      "prerequisites": [
+        "npc_level_2"
+      ],
       "requires_buildings": 6,
       "unlocks": [
-        { "type": "npc_level_cap", "id": "3" }
+        {
+          "type": "npc_level_cap",
+          "id": "3"
+        }
       ],
       "cost": null
     },
@@ -595,9 +986,14 @@
       "icon": "🕸️",
       "branch": "textiles",
       "ring": 5,
-      "prerequisites": ["weaving"],
+      "prerequisites": [
+        "weaving"
+      ],
       "unlocks": [
-        { "type": "building_recipe", "id": "WEAVER:craft_fishing_net" }
+        {
+          "type": "building_recipe",
+          "id": "WEAVER:craft_fishing_net"
+        }
       ],
       "cost": null
     },
@@ -607,40 +1003,70 @@
       "icon": "🎣",
       "branch": "food",
       "ring": 5,
-      "prerequisites": ["shelter", "net_weaving"],
+      "prerequisites": [
+        "shelter",
+        "net_weaving"
+      ],
       "unlocks": [
-        { "type": "building", "id": "FISHING_HUT" },
-        { "type": "building_recipe", "id": "FISHING_HUT:with_net" }
+        {
+          "type": "building",
+          "id": "FISHING_HUT"
+        },
+        {
+          "type": "building_recipe",
+          "id": "FISHING_HUT:with_net"
+        }
       ],
       "cost": null
     },
-
     {
       "node_id": "salt_works",
       "display_name": "Salt Works",
       "icon": "🧂",
       "branch": "materials",
       "ring": 6,
-      "prerequisites": ["prospecting"],
+      "prerequisites": [
+        "prospecting"
+      ],
       "unlocks": [
-        { "type": "building", "id": "SALT_WORKS" },
-        { "type": "building_recipe", "id": "SALT_WORKS:evaporate" }
+        {
+          "type": "building",
+          "id": "SALT_WORKS"
+        },
+        {
+          "type": "building_recipe",
+          "id": "SALT_WORKS:evaporate"
+        }
       ],
       "cost": null
     },
-
     {
       "node_id": "food_preservation",
       "display_name": "Food Preservation",
       "icon": "🥫",
       "branch": "food",
       "ring": 6,
-      "prerequisites": ["hunting", "fishing"],
-      "hidden_prerequisites": ["pottery", "salt_works"],
+      "prerequisites": [
+        "hunting",
+        "fishing"
+      ],
+      "hidden_prerequisites": [
+        "pottery",
+        "salt_works"
+      ],
       "unlocks": [
-        { "type": "building", "id": "PRESERVATION_HOUSE" },
-        { "type": "building_recipe", "id": "PRESERVATION_HOUSE:preserve_meat" },
-        { "type": "building_recipe", "id": "PRESERVATION_HOUSE:preserve_fish" }
+        {
+          "type": "building",
+          "id": "PRESERVATION_HOUSE"
+        },
+        {
+          "type": "building_recipe",
+          "id": "PRESERVATION_HOUSE:preserve_meat"
+        },
+        {
+          "type": "building_recipe",
+          "id": "PRESERVATION_HOUSE:preserve_fish"
+        }
       ],
       "cost": null
     },
@@ -650,10 +1076,19 @@
       "icon": "🪢",
       "branch": "textiles",
       "ring": 5,
-      "prerequisites": ["weaving", "spindle"],
+      "prerequisites": [
+        "weaving",
+        "spindle"
+      ],
       "unlocks": [
-        { "type": "manual_recipe", "id": "rope" },
-        { "type": "building_recipe", "id": "WEAVER:twist_rope" }
+        {
+          "type": "manual_recipe",
+          "id": "rope"
+        },
+        {
+          "type": "building_recipe",
+          "id": "WEAVER:twist_rope"
+        }
       ],
       "cost": null
     },
@@ -663,9 +1098,15 @@
       "icon": "🕸️",
       "branch": "textiles",
       "ring": 6,
-      "prerequisites": ["net_weaving", "rope_weaving"],
+      "prerequisites": [
+        "net_weaving",
+        "rope_weaving"
+      ],
       "unlocks": [
-        { "type": "building_recipe", "id": "WEAVER:craft_net_from_rope" }
+        {
+          "type": "building_recipe",
+          "id": "WEAVER:craft_net_from_rope"
+        }
       ],
       "cost": null
     }

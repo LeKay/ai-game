@@ -27,6 +27,13 @@ const EXCLUDED_TYPES: Array[int] = [
 
 var _flow: TileFlowContainer
 
+## Building types that are unlocked but haven't been seen in the picker yet.
+## Populated by _on_node_unlocked; cleared when the picker becomes visible.
+var _newly_unlocked: Dictionary = {}
+## All building types the picker has ever seen unlocked — used to diff against
+## so we only flag types that are genuinely new since last session.
+var _known_unlocked: Dictionary = {}
+
 
 const COLOR_ACCENT    := Color(0.30, 0.70, 1.00, 1.0)
 const COLOR_TEXT      := Color(0.85, 0.85, 0.85, 1.0)
@@ -110,6 +117,9 @@ func _ready() -> void:
 	_flow.size_flags_vertical   = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_flow)
 
+	_init_known_unlocked()
+	ProgressionSystem.node_unlocked.connect(_on_node_unlocked)
+
 
 func _notification(what: int) -> void:
 	match what:
@@ -117,17 +127,33 @@ func _notification(what: int) -> void:
 			if visible:
 				if not InventorySystem.storage_changed.is_connected(_on_storage_changed):
 					InventorySystem.storage_changed.connect(_on_storage_changed)
+				_newly_unlocked.clear()  # tiles built by refresh() before this fires already carry the badges
 			else:
 				if InventorySystem.storage_changed.is_connected(_on_storage_changed):
 					InventorySystem.storage_changed.disconnect(_on_storage_changed)
 		NOTIFICATION_EXIT_TREE:
 			if InventorySystem.storage_changed.is_connected(_on_storage_changed):
 				InventorySystem.storage_changed.disconnect(_on_storage_changed)
+			if ProgressionSystem.node_unlocked.is_connected(_on_node_unlocked):
+				ProgressionSystem.node_unlocked.disconnect(_on_node_unlocked)
 
 
 func _on_storage_changed(_container_id: StringName) -> void:
 	if visible:
 		refresh()
+
+
+func _init_known_unlocked() -> void:
+	for btype: int in BuildingRegistry.BUILDABLE_TYPES:
+		if ProgressionSystem.is_building_unlocked(btype):
+			_known_unlocked[btype] = true
+
+
+func _on_node_unlocked(_node_id: StringName) -> void:
+	for btype: int in BuildingRegistry.BUILDABLE_TYPES:
+		if ProgressionSystem.is_building_unlocked(btype) and not _known_unlocked.has(btype):
+			_newly_unlocked[btype] = true
+			_known_unlocked[btype] = true
 
 
 ## Rebuilds the tile grid from the current registry / progression state.
@@ -170,6 +196,9 @@ func _add_type_tile(btype: int) -> void:
 		tile.pressed.connect(func() -> void: building_type_selected.emit(btype))
 	else:
 		tile.set_state(DrawerTile.TileState.DISABLED)
+
+	if _newly_unlocked.has(btype):
+		tile.set_new_highlight(true)
 
 
 func _can_afford(cost: Dictionary) -> bool:
@@ -223,6 +252,8 @@ func _building_glyph(btype: int) -> String:
 
 
 func _add_path_tile() -> void:
+	if not ProgressionSystem.is_building_unlocked(BuildingRegistry.BuildingType.ROAD):
+		return
 	var tile := DrawerTile.new()
 	tile.name = "PathTile"
 	_flow.add_tile(tile)
@@ -236,6 +267,8 @@ func _add_path_tile() -> void:
 	tile.set_state(DrawerTile.TileState.NORMAL)
 	tile.pressed.connect(func() -> void:
 		building_type_selected.emit(BuildingRegistry.BuildingType.ROAD))
+	if _newly_unlocked.has(BuildingRegistry.BuildingType.ROAD):
+		tile.set_new_highlight(true)
 
 
 func _add_demolish_tile() -> void:

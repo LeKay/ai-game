@@ -65,7 +65,7 @@ func begin_for_npc(npc_id: StringName) -> void:
 	if npc == null:
 		_finish()
 		return
-	var cards: Array = PerkRegistry.generate_choices(npc, 3)
+	var cards: Array = NPCSystem.get_pending_perk_cards(npc_id)
 	if cards.is_empty():
 		# No valid cards (e.g. no perk-eligible goods yet) — clear the choice so it cannot soft-lock.
 		NPCSystem.skip_perk_choice(npc_id)
@@ -84,7 +84,7 @@ func _show_next() -> void:
 	if npc == null:
 		_finish()
 		return
-	var cards: Array = PerkRegistry.generate_choices(npc, 3)
+	var cards: Array = NPCSystem.get_pending_perk_cards(_current_npc)
 	if cards.is_empty():
 		# No valid cards (e.g. no perk-eligible goods yet) — skip so the gate cannot soft-lock.
 		NPCSystem.skip_perk_choice(_current_npc)
@@ -217,7 +217,10 @@ func _make_card(card: Dictionary) -> Control:
 		vbox.add_child(b_box)
 
 		var b_icon := TextureRect.new()
-		b_icon.texture = BuildingRegistry.get_building_texture(building_type)
+		if building_type == PerkRegistry.PROFESSION_CARRIER:
+			b_icon.texture = load("res://assets/ui/icons/resources/cart.png")
+		else:
+			b_icon.texture = BuildingRegistry.get_building_texture(building_type)
 		b_icon.custom_minimum_size = Vector2(64, 64)
 		b_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		b_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED

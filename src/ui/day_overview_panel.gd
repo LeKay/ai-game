@@ -225,6 +225,16 @@ func _make_npc_xp_row(entry: Dictionary) -> Control:
 	bar_outer.add_child(fill)
 
 	_animate_xp_row(fill, level_lbl, entry)
+
+	if int(entry[&"level_before"]) == 1 and bool(entry.get(&"leveled_up", false)):
+		var calling := _get_building_calling(npc_id)
+		if calling != "":
+			var calling_lbl := Label.new()
+			calling_lbl.text = "Calling: %s" % calling
+			calling_lbl.add_theme_font_size_override("font_size", 12)
+			calling_lbl.add_theme_color_override("font_color", Color("#D4A85C"))
+			row.add_child(calling_lbl)
+
 	return row
 
 
@@ -296,6 +306,16 @@ func _advance_day() -> void:
 	if hud != null:
 		hud.unlock_panels_after_day_transition()
 	TickSystem.set_pause(false)
+
+
+func _get_building_calling(npc_id: StringName) -> String:
+	var npc: NPCSystem.NPCInstance = NPCSystem.get_npc_instance(npc_id)
+	if npc == null or npc.assigned_building_id == &"":
+		return ""
+	var inst: Object = BuildingRegistry.get_building_instance(str(npc.assigned_building_id))
+	if inst == null:
+		return ""
+	return BuildingRegistry.BUILDING_JOB_NAMES.get(inst.type, "")
 
 
 func _on_next_day_pressed() -> void:

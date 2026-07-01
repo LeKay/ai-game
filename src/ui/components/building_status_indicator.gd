@@ -8,10 +8,11 @@ const _BG_COLOR: Color = Color(0.06, 0.06, 0.06, 0.88)
 const _IDLE_COLOR: Color = Color(0.95, 0.78, 0.12)
 const _WORKING_COLOR: Color = Color(0.18, 0.82, 0.28)
 const _CONSTRUCTION_COLOR: Color = Color(0.55, 0.78, 1.0)
+const _FULL_COLOR: Color = Color(0.90, 0.18, 0.10)
 const _BORDER_COLOR: Color = Color(0.0, 0.0, 0.0, 0.65)
 const _FAN_STEPS: int = 24
 
-enum _Mode { IDLE, WORKING, CONSTRUCTING }
+enum _Mode { IDLE, WORKING, CONSTRUCTING, FULL }
 
 var _progress: float = 0.0
 var _mode: _Mode = _Mode.IDLE
@@ -35,6 +36,12 @@ func set_construction_progress(progress: float) -> void:
 	queue_redraw()
 
 
+func set_full() -> void:
+	_mode = _Mode.FULL
+	_progress = 1.0
+	queue_redraw()
+
+
 func _draw() -> void:
 	draw_circle(Vector2.ZERO, float(_RADIUS), _BG_COLOR)
 
@@ -48,6 +55,8 @@ func _draw() -> void:
 			fill_color = _WORKING_COLOR
 		_Mode.CONSTRUCTING:
 			fill_color = _CONSTRUCTION_COLOR
+		_Mode.FULL:
+			fill_color = _FULL_COLOR
 
 	if _progress >= 1.0:
 		draw_circle(Vector2.ZERO, float(_RADIUS - 1), fill_color)

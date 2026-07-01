@@ -43,6 +43,8 @@ func _enter_tree() -> void:
 		_input_context = get_node_or_null("/root/InputContext")
 		if _input_context == null:
 			push_warning("CameraController: InputContext singleton not found")
+	if _input_context != null:
+		_input_context.context_changed.connect(_on_context_changed)
 	var dispatcher: Node = get_node_or_null("/root/InputDispatcher")
 	if dispatcher != null:
 		dispatcher.action_pressed.connect(_on_action_pressed)
@@ -53,6 +55,8 @@ func _exit_tree() -> void:
 	var vp := get_viewport()
 	if vp != null and vp.size_changed.is_connected(_on_viewport_size_changed):
 		vp.size_changed.disconnect(_on_viewport_size_changed)
+	if _input_context != null and _input_context.context_changed.is_connected(_on_context_changed):
+		_input_context.context_changed.disconnect(_on_context_changed)
 	var dispatcher: Node = get_node_or_null("/root/InputDispatcher")
 	if dispatcher != null:
 		if dispatcher.action_pressed.is_connected(_on_action_pressed):
@@ -243,6 +247,12 @@ func tile_to_screen(tile_pos: Vector2i) -> Vector2:
 
 func _on_viewport_size_changed() -> void:
 	_apply_boundary_clamp()
+
+
+func _on_context_changed(new_context: int) -> void:
+	if new_context != WORLD_ACTIVE_CONTEXT:
+		_held_directions.clear()
+		_middle_drag_active = false
 
 
 func _on_action_pressed(action: StringName) -> void:

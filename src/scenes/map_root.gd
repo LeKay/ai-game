@@ -70,6 +70,7 @@ func _ready() -> void:
 	_drag_controller.set_action(_action_feedback)
 	WorldSaveManager.register_world_grid(grid)
 	WorldSaveManager.register_player_character(_player)
+	WorldSaveManager.register_item_settler(_drag_controller)
 	var _cam := get_node_or_null("../CameraController") as CameraController
 	if _cam != null:
 		WorldSaveManager.register_camera_controller(_cam)
@@ -93,6 +94,7 @@ func _ready() -> void:
 	LogisticsSystem.set_grid_map(grid)
 	NPCSystem.set_grid_map(grid)
 	WildSystem.set_grid_map(grid)
+	CraftingRegistry.set_grid_map(grid)
 	WildSystem.wild_changed.connect(BuildingRegistry.refresh_wild_efficiency)
 	_player.seed_planted.connect(_on_seed_planted)
 	grid.terrain_growing_started.connect(_on_terrain_growing_started)

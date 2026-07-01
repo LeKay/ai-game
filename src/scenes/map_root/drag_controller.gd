@@ -516,20 +516,21 @@ func _finish_storage_drag() -> void:
 	_drag_count_label.visible = false
 
 	# Short click on a food item inside the panel → consume it (gain energy).
-	# "Short click" = mouse never left the tile (active_drag_source still set) and
-	# no batch-collect happened. Using mouse-on-tile as the signal avoids false
-	# positives from slow-release drags that happen to end inside the panel.
-	var is_tap: bool = batch_count == 1 and ItemTile.active_drag_source != null
-	if _is_mouse_over_building_panel() and is_tap and PlayerCharacter.is_food(res_id):
-		icon_node.queue_free()
-		if _root._player != null:
-			var energy := _root._player.consume_food(res_id)
-			if energy:
-				var mouse_world: Vector2 = get_global_mouse_position()
-				var energy_val: int = PlayerCharacter.food_energy_value(res_id)
-				_badges._spawn_pickup_float(mouse_world, "+%d ⚡" % energy_val)
-		get_viewport().set_input_as_handled()
-		return
+	# "Short click" = tap_pending survived to release (mouse never left the tile).
+	# tap_pending is a plain bool so it stays true even when the tile is queue_freed
+	# (e.g. last item taken from storage removes the tile mid-press).
+	var is_tap: bool = batch_count == 1 and ItemTile.tap_pending
+	ItemTile.tap_pending = false
+	if _is_mouse_over_building_panel() and is_tap and PlayerCharacter.is_food(res_id) \
+			and _root._player != null:
+		var energy := _root._player.consume_food(res_id)
+		if energy:
+			icon_node.queue_free()
+			_badges._spawn_pickup_float(get_global_mouse_position(),
+					"+%d ⚡" % PlayerCharacter.food_energy_value(res_id))
+			get_viewport().set_input_as_handled()
+			return
+		# Energy full → fall through: item gets deposited back to storage below
 
 	# Cancel if released inside the building detail panel — try to return to storage,
 	# fall back to dropping on the world if storage is now full.
@@ -713,6 +714,8 @@ func _try_deposit_to_building(target_tile: Vector2i, building_id: String) -> voi
 
 	# Pre-check: container must have space for at least 1 item.
 	if InventorySystem.get_occupied_slots(container_id) >= InventorySystem.get_capacity(container_id):
+		var target_center: Vector2 = (Vector2(target_tile) + Vector2(0.5, 0.5)) * WorldGrid.TILE_SIZE
+		_badges.show_float(target_center, "Storage full")
 		_snap_back_drag_icon()
 		_root._player.cancel_relocation()
 		_drag_icon = null
@@ -796,6 +799,75 @@ func _advance_pending_transports(delta: int) -> void:
 			pt.on_complete.call()
 	if _pending_transports.is_empty() and not _action.is_action_running():
 		TickSystem.set_pause(_was_paused_before_action)
+
+
+# ── Save settling ─────────────────────────────────────────────────────────────
+
+## Lands every in-flight or held item back into a serialized location (WorldGrid
+## resource layer, an InventorySystem container, or a building input/output buffer)
+## so a save taken mid-transport or mid-drag never loses items. Called by
+## WorldSaveManager before any WorldGrid serialization. The recovery moves the data
+## back into the existing single sources of truth, so any future resource type is
+## covered automatically — no per-item serialization is required.
+func settle_in_flight_items() -> void:
+	_settle_active_drag()
+	_settle_pending_transports()
+
+
+## Commits every pending manual transport immediately by running its on_complete,
+## which deposits the carried items into their destination (grid / container / buffer)
+## and frees the transient icon. Indicators and path overlays are cleaned up. Mirrors
+## the completion branch of _advance_pending_transports minus the cosmetic tween.
+func _settle_pending_transports() -> void:
+	if _pending_transports.is_empty():
+		return
+	var transports: Array = _pending_transports.duplicate()
+	_pending_transports.clear()
+	for pt: Dictionary in transports:
+		if is_instance_valid(pt.get("indicator")):
+			pt.indicator.queue_free()
+		TransportOverlay.free_overlay(pt.get("path_overlay", {}))
+		var on_complete: Variant = pt.get("on_complete")
+		if on_complete is Callable and (on_complete as Callable).is_valid():
+			(on_complete as Callable).call()
+	if not _action.is_action_running():
+		TickSystem.set_pause(_was_paused_before_action)
+
+
+## Returns the items held by an active (mouse-held) drag to their source so they are
+## serialized, then cancels the drag. A world drag's primary item never left the grid
+## (its badge is a live resource icon) so only the batch extras are restored; a panel
+## drag pulled its whole batch out of a container/buffer into a throwaway icon, which
+## is returned to that source and freed.
+func _settle_active_drag() -> void:
+	if _drag_icon == null:
+		return
+	if _drag_src_tile != Vector2i(-1, -1):
+		_restore_batch_extras()
+		_reset_drag_icon_visuals(_drag_icon)
+	else:
+		if _drag_from_container_id != &"":
+			InventorySystem.try_deposit(_drag_from_container_id, _drag_resource_id, _drag_collected_count)
+		elif _drag_from_input_building_id != "":
+			for _i in range(_drag_collected_count):
+				_root._registry.receive_input_from_world(_drag_from_input_building_id, _drag_resource_id, 1)
+		elif _drag_from_output_building_id != "":
+			_root._registry.receive_output_to_buffer(_drag_from_output_building_id, _drag_resource_id, _drag_collected_count)
+		if is_instance_valid(_drag_icon):
+			_drag_icon.queue_free()
+	if _root._player != null:
+		_root._player.cancel_relocation()
+	_drag_icon = null
+	_drag_icon_entry = {}
+	_drag_src_tile = Vector2i(-1, -1)
+	_drag_from_container_id = &""
+	_drag_resource_id = &""
+	_drag_from_building_tile = Vector2i(-1, -1)
+	_drag_from_input_building_id = ""
+	_drag_from_output_building_id = ""
+	_drag_collected_count = 1
+	if _drag_count_label != null:
+		_drag_count_label.visible = false
 
 
 # ── Drag overlay setup + resource badges ──────────────────────────────────────
@@ -950,7 +1022,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			var sel_building: String = ""
 			if sel_tile.x >= 0 and sel_tile.y >= 0 and sel_tile.x < WorldGrid.GRID_SIZE and sel_tile.y < WorldGrid.GRID_SIZE:
 				sel_building = _root.grid.get_building(sel_tile)
-			_root._hud.notify_building_selected_in_map_select(StringName(sel_building))
+			_root._hud.notify_building_selected_in_map_select(StringName(sel_building), sel_tile)
 			get_viewport().set_input_as_handled()
 			return
 

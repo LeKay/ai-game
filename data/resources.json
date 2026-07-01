@@ -2,1020 +2,1069 @@
   "version": 1,
   "last_updated": "2026-06-21",
   "resources": [
-	{
-	  "id": "wood",
-	  "display_name": "Wood",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 2.5,
-	  "base_value": 2,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/wood.png",
-	  "glyph": "🪵",
-	  "world_icon_path": "res://assets/ui/icons/resources/wood.png",
-	  "fallback_color": [
-		0.55,
-		0.28,
-		0.08
-	  ],
-	  "description": "Freshly chopped logs.",
-	  "tags": [
-		"burnable",
+    {
+      "id": "wood",
+      "display_name": "Wood",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 2.5,
+      "base_value": 2,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/wood.png",
+      "glyph": "🪵",
+      "world_icon_path": "res://assets/ui/icons/resources/wood.png",
+      "fallback_color": [
+        0.55,
+        0.28,
+        0.08
+      ],
+      "description": "Freshly chopped logs.",
+      "tags": [
+        "burnable",
         "construction_material"
-	  ]
-	},
-	{
-	  "id": "stone",
-	  "display_name": "Stone",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 3.0,
-	  "base_value": 1,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/stone.png",
-	  "glyph": "🪨",
-	  "world_icon_path": "res://assets/ui/icons/resources/stone.png",
-	  "fallback_color": [
-		0.62,
-		0.62,
-		0.62
-	  ],
-	  "description": "Solid chunks of rock.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "stone",
+      "display_name": "Stone",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 3.0,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/stone.png",
+      "glyph": "🪨",
+      "world_icon_path": "res://assets/ui/icons/resources/stone.png",
+      "fallback_color": [
+        0.62,
+        0.62,
+        0.62
+      ],
+      "description": "Solid chunks of rock.",
+      "tags": [
         "construction_material"
-	  ]
-	},
-	{
-	  "id": "fiber",
-	  "display_name": "Fiber",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 0.5,
-	  "base_value": 1,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/fiber.png",
-	  "glyph": "🌿",
-	  "world_icon_path": "res://assets/ui/icons/resources/fiber.png",
-	  "fallback_color": [
-		0.78,
-		0.88,
-		0.12
-	  ],
-	  "description": "Plant fibers useful for crafting.",
-	  "tags": []
-	},
-	{
-	  "id": "berry",
-	  "display_name": "Berry",
-	  "category": "consumable",
-	  "subcategory": "food",
-	  "stack_limit": 50,
-	  "weight": 0.1,
-	  "base_value": 1,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/berry.png",
-	  "glyph": "🫐",
-	  "world_icon_path": "res://assets/ui/icons/resources/berry.png",
-	  "fallback_color": [
-		0.9,
-		0.12,
-		0.22
-	  ],
-	  "description": "Wild berries. Edible and nutritious.",
-	  "nutrition": 1,
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "fiber",
+      "display_name": "Fiber",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 0.5,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/fiber.png",
+      "glyph": "🌿",
+      "world_icon_path": "res://assets/ui/icons/resources/fiber.png",
+      "fallback_color": [
+        0.78,
+        0.88,
+        0.12
+      ],
+      "description": "Plant fibers useful for crafting.",
+      "tags": [],
+      "placeholder": false
+    },
+    {
+      "id": "berry",
+      "display_name": "Berry",
+      "category": "consumable",
+      "subcategory": "food",
+      "stack_limit": 50,
+      "weight": 0.1,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/berry.png",
+      "glyph": "🫐",
+      "world_icon_path": "res://assets/ui/icons/resources/berry.png",
+      "fallback_color": [
+        0.9,
+        0.12,
+        0.22
+      ],
+      "description": "Wild berries. Edible and nutritious.",
+      "nutrition": 1,
+      "tags": [
         "food"
-	  ]
-	},
-	{
-	  "id": "bread",
-	  "display_name": "Bread",
-	  "category": "consumable",
-	  "subcategory": "food",
-	  "stack_limit": 50,
-	  "weight": 0.3,
-	  "base_value": 3,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/bread.png",
-	  "glyph": "🍞",
-	  "description": "Baked bread. Dense, efficient food.",
-	  "nutrition": 5,
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "bread",
+      "display_name": "Bread",
+      "category": "consumable",
+      "subcategory": "food",
+      "stack_limit": 50,
+      "weight": 0.3,
+      "base_value": 3,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/bread.png",
+      "glyph": "🍞",
+      "description": "Baked bread. Dense, efficient food.",
+      "nutrition": 5,
+      "tags": [
         "food"
-	  ]
-	},
-	{
-	  "id": "plank",
-	  "display_name": "Plank",
-	  "category": "production_good",
-	  "subcategory": "intermediate",
-	  "stack_limit": 99,
-	  "weight": 1.5,
-	  "base_value": 4,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/plank.png",
-	  "glyph": "🟫",
-	  "world_icon_path": "res://assets/ui/icons/resources/plank.png",
-	  "fallback_color": [
-		0.83,
-		0.66,
-		0.38
-	  ],
-	  "description": "Processed lumber, ready for construction.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "plank",
+      "display_name": "Plank",
+      "category": "production_good",
+      "subcategory": "intermediate",
+      "stack_limit": 99,
+      "weight": 1.5,
+      "base_value": 4,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/plank.png",
+      "glyph": "🟫",
+      "world_icon_path": "res://assets/ui/icons/resources/plank.png",
+      "fallback_color": [
+        0.83,
+        0.66,
+        0.38
+      ],
+      "description": "Processed lumber, ready for construction.",
+      "tags": [
         "construction_material"
-	  ]
-	},
-	{
-	  "id": "cloth",
-	  "display_name": "Cloth",
-	  "category": "production_good",
-	  "subcategory": "intermediate",
-	  "stack_limit": 99,
-	  "weight": 0.8,
-	  "base_value": 8,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/cloth.png",
-	  "glyph": "🧶",
-	  "description": "Woven textile, ready for further processing.",
-	  "tags": []
-	},
-	{
-	  "id": "clothing",
-	  "display_name": "Clothing",
-	  "perk_group": 1,
-	  "category": "production_good",
-	  "subcategory": "trade_good",
-	  "stack_limit": 50,
-	  "weight": 0.6,
-	  "base_value": 20,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/clothing.png",
-	  "glyph": "👘",
-	  "description": "Finished garments. A valuable trade commodity.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "cloth",
+      "display_name": "Cloth",
+      "category": "production_good",
+      "subcategory": "intermediate",
+      "stack_limit": 99,
+      "weight": 0.8,
+      "base_value": 8,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/cloth.png",
+      "glyph": "🧶",
+      "description": "Woven textile, ready for further processing.",
+      "tags": [],
+      "placeholder": false
+    },
+    {
+      "id": "clothing",
+      "display_name": "Clothing",
+      "perk_group": 1,
+      "category": "production_good",
+      "subcategory": "trade_good",
+      "stack_limit": 50,
+      "weight": 0.6,
+      "base_value": 20,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/clothing.png",
+      "glyph": "👘",
+      "description": "Finished garments. A valuable trade commodity.",
+      "tags": [
         "trade_good"
-	  ]
-	},
-	{
-	  "id": "axe",
-	  "display_name": "Axe",
-	  "category": "production_good",
-	  "subcategory": "tool",
-	  "stack_limit": 10,
-	  "weight": 2.0,
-	  "base_value": 25,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/axe.png",
-	  "glyph": "🪓",
-	  "description": "A sharp axe for felling trees and cutting wood.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "axe",
+      "display_name": "Axe",
+      "category": "production_good",
+      "subcategory": "tool",
+      "stack_limit": 10,
+      "weight": 2.0,
+      "base_value": 25,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/axe.png",
+      "glyph": "🪓",
+      "description": "A sharp axe for felling trees and cutting wood.",
+      "tags": [
         "tool"
-	  ]
-	},
-	{
-	  "id": "pickaxe",
-	  "display_name": "Pickaxe",
-	  "category": "production_good",
-	  "subcategory": "tool",
-	  "stack_limit": 10,
-	  "weight": 2.5,
-	  "base_value": 25,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/pickaxe.png",
-	  "glyph": "⛏️",
-	  "description": "A heavy pickaxe for breaking stone.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "pickaxe",
+      "display_name": "Pickaxe",
+      "category": "production_good",
+      "subcategory": "tool",
+      "stack_limit": 10,
+      "weight": 2.5,
+      "base_value": 25,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/pickaxe.png",
+      "glyph": "⛏️",
+      "description": "A heavy pickaxe for breaking stone.",
+      "tags": [
         "tool"
-	  ]
-	},
-	{
-	  "id": "spindle",
-	  "display_name": "Spindle",
-	  "category": "production_good",
-	  "subcategory": "tool",
-	  "stack_limit": 10,
-	  "weight": 1.0,
-	  "base_value": 20,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/spindle.png",
-	  "glyph": "🪡",
-	  "description": "A wooden spindle for spinning fiber into thread.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "spindle",
+      "display_name": "Spindle",
+      "category": "production_good",
+      "subcategory": "tool",
+      "stack_limit": 10,
+      "weight": 1.0,
+      "base_value": 20,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/spindle.png",
+      "glyph": "🪡",
+      "description": "A wooden spindle for spinning fiber into thread.",
+      "tags": [
         "tool"
-	  ]
-	},
-	{
-	  "id": "tree_seed",
-	  "display_name": "Tree Seed",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 20,
-	  "weight": 0.1,
-	  "base_value": 1,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/tree_seed.png",
-	  "glyph": "🌱",
-	  "world_icon_path": "res://assets/ui/icons/resources/tree_seed.png",
-	  "fallback_color": [
-		0.18,
-		0.54,
-		0.18
-	  ],
-	  "description": "A tree seed. Plant on empty ground to grow a new tree.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "tree_seed",
+      "display_name": "Tree Seed",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 20,
+      "weight": 0.1,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/tree_seed.png",
+      "glyph": "🌱",
+      "world_icon_path": "res://assets/ui/icons/resources/tree_seed.png",
+      "fallback_color": [
+        0.18,
+        0.54,
+        0.18
+      ],
+      "description": "A tree seed. Plant on empty ground to grow a new tree.",
+      "tags": [
         "plantable"
-	  ]
-	},
-	{
-	  "id": "grass_seed",
-	  "display_name": "Grass Seed",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 20,
-	  "weight": 0.1,
-	  "base_value": 1,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/grass_seed.png",
-	  "glyph": "🌾",
-	  "world_icon_path": "res://assets/ui/icons/resources/grass_seed.png",
-	  "fallback_color": [
-		0.65,
-		0.78,
-		0.22
-	  ],
-	  "description": "Grass seeds. Plant on empty ground to grow a fiber grass patch.",
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "grass_seed",
+      "display_name": "Grass Seed",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 20,
+      "weight": 0.1,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/grass_seed.png",
+      "glyph": "🌾",
+      "world_icon_path": "res://assets/ui/icons/resources/grass_seed.png",
+      "fallback_color": [
+        0.65,
+        0.78,
+        0.22
+      ],
+      "description": "Grass seeds. Plant on empty ground to grow a fiber grass patch.",
+      "tags": [
         "plantable"
-	  ]
-	},
-	{
-	  "id": "berry_seed",
-	  "display_name": "Berry Seed",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 20,
-	  "weight": 0.1,
-	  "base_value": 1,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/berry_seed.png",
-	  "glyph": "🍒",
-	  "world_icon_path": "res://assets/ui/icons/resources/berry_seed.png",
-	  "fallback_color": [
-		0.55,
-		0.15,
-		0.6
-	  ],
-	  "description": "Berry seeds. Plant on empty ground to grow a berry bush.",
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "berry_seed",
+      "display_name": "Berry Seed",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 20,
+      "weight": 0.1,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/berry_seed.png",
+      "glyph": "🍒",
+      "world_icon_path": "res://assets/ui/icons/resources/berry_seed.png",
+      "fallback_color": [
+        0.55,
+        0.15,
+        0.6
+      ],
+      "description": "Berry seeds. Plant on empty ground to grow a berry bush.",
+      "tags": [
         "plantable"
-	  ]
-	},
-	{
-	  "id": "clay",
-	  "display_name": "Clay",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 3.0,
-	  "base_value": 2,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/clay.png",
-	  "glyph": "🧱",
-	  "world_icon_path": "res://assets/ui/icons/resources/clay.png",
-	  "fallback_color": [
-		0.7,
-		0.45,
-		0.25
-	  ],
-	  "description": "A deposit of raw clay. Hidden at map generation — must be located by searching.",
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "clay",
+      "display_name": "Clay",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 3.0,
+      "base_value": 2,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/clay.png",
+      "glyph": "🧱",
+      "world_icon_path": "res://assets/ui/icons/resources/clay.png",
+      "fallback_color": [
+        0.7,
+        0.45,
+        0.25
+      ],
+      "description": "A deposit of raw clay. Hidden at map generation — must be located by searching.",
+      "tags": [
         "construction_material"
-	  ]
-	},
-	{
-	  "id": "iron",
-	  "display_name": "Iron Ore",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 4.0,
-	  "base_value": 6,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/iron.png",
-	  "glyph": "⛏️",
-	  "world_icon_path": "res://assets/ui/icons/resources/iron.png",
-	  "fallback_color": [
-		0.49,
-		0.32,
-		0.26
-	  ],
-	  "description": "Raw iron ore. Hidden at map generation — must be located by searching.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "iron",
+      "display_name": "Iron Ore",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 4.0,
+      "base_value": 6,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/iron.png",
+      "glyph": "⛏️",
+      "world_icon_path": "res://assets/ui/icons/resources/iron.png",
+      "fallback_color": [
+        0.49,
+        0.32,
+        0.26
+      ],
+      "description": "Raw iron ore. Hidden at map generation — must be located by searching.",
+      "tags": [
         "raw_material"
-	  ]
-	},
-	{
-	  "id": "copper",
-	  "display_name": "Copper Ore",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 4.0,
-	  "base_value": 7,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/copper.png",
-	  "glyph": "⛏️",
-	  "world_icon_path": "res://assets/ui/icons/resources/copper.png",
-	  "fallback_color": [
-		0.72,
-		0.45,
-		0.2
-	  ],
-	  "description": "Raw copper ore. Hidden at map generation — must be located by searching.",
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "copper",
+      "display_name": "Copper Ore",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 4.0,
+      "base_value": 7,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/copper.png",
+      "glyph": "⛏️",
+      "world_icon_path": "res://assets/ui/icons/resources/copper.png",
+      "fallback_color": [
+        0.72,
+        0.45,
+        0.2
+      ],
+      "description": "Raw copper ore. Hidden at map generation — must be located by searching.",
+      "tags": [
         "raw_material"
-	  ]
-	},
-	{
-	  "id": "tin",
-	  "display_name": "Tin Ore",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 4.0,
-	  "base_value": 7,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/tin.png",
-	  "glyph": "⛏️",
-	  "world_icon_path": "res://assets/ui/icons/resources/tin.png",
-	  "fallback_color": [
-		0.62,
-		0.64,
-		0.67
-	  ],
-	  "description": "Raw tin ore. Hidden at map generation — must be located by searching.",
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "tin",
+      "display_name": "Tin Ore",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 4.0,
+      "base_value": 7,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/tin.png",
+      "glyph": "⛏️",
+      "world_icon_path": "res://assets/ui/icons/resources/tin.png",
+      "fallback_color": [
+        0.62,
+        0.64,
+        0.67
+      ],
+      "description": "Raw tin ore. Hidden at map generation — must be located by searching.",
+      "tags": [
         "raw_material"
-	  ]
-	},
-	{
-	  "id": "silver",
-	  "display_name": "Silver Ore",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 4.0,
-	  "base_value": 24,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/silver.png",
-	  "glyph": "💎",
-	  "world_icon_path": "res://assets/ui/icons/resources/silver.png",
-	  "fallback_color": [
-		0.78,
-		0.8,
-		0.85
-	  ],
-	  "description": "Raw silver ore. Rare — hidden at map generation, must be located by searching.",
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "silver",
+      "display_name": "Silver Ore",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 4.0,
+      "base_value": 24,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/silver.png",
+      "glyph": "💎",
+      "world_icon_path": "res://assets/ui/icons/resources/silver.png",
+      "fallback_color": [
+        0.78,
+        0.8,
+        0.85
+      ],
+      "description": "Raw silver ore. Rare — hidden at map generation, must be located by searching.",
+      "tags": [
         "trade_good"
-	  ]
-	},
-	{
-	  "id": "gold",
-	  "display_name": "Gold Ore",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 4.0,
-	  "base_value": 48,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/gold.png",
-	  "glyph": "💰",
-	  "world_icon_path": "res://assets/ui/icons/resources/gold.png",
-	  "fallback_color": [
-		0.9,
-		0.75,
-		0.2
-	  ],
-	  "description": "Raw gold ore. Rare — hidden at map generation, must be located by searching.",
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "gold",
+      "display_name": "Gold Ore",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 4.0,
+      "base_value": 48,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/gold.png",
+      "glyph": "💰",
+      "world_icon_path": "res://assets/ui/icons/resources/gold.png",
+      "fallback_color": [
+        0.9,
+        0.75,
+        0.2
+      ],
+      "description": "Raw gold ore. Rare — hidden at map generation, must be located by searching.",
+      "tags": [
         "trade_good"
-	  ]
-	},
-	{
-	  "id": "gemstones",
-	  "display_name": "Gemstones",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 2.0,
-	  "base_value": 60,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/gemstones.png",
-	  "glyph": "💎",
-	  "world_icon_path": "res://assets/ui/icons/resources/gemstones.png",
-	  "fallback_color": [
-		0.4,
-		0.75,
-		0.78
-	  ],
-	  "description": "Uncut gemstones. Very rare — hidden at map generation, must be located by searching.",
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "gemstones",
+      "display_name": "Gemstones",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 2.0,
+      "base_value": 60,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/gemstones.png",
+      "glyph": "💎",
+      "world_icon_path": "res://assets/ui/icons/resources/gemstones.png",
+      "fallback_color": [
+        0.4,
+        0.75,
+        0.78
+      ],
+      "description": "Uncut gemstones. Very rare — hidden at map generation, must be located by searching.",
+      "tags": [
         "trade_good"
-	  ]
-	},
-	{
-	  "id": "wheat",
-	  "display_name": "Wheat",
-	  "category": "consumable",
-	  "subcategory": "food",
-	  "stack_limit": 50,
-	  "weight": 0.3,
-	  "base_value": 2,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/wheat.png",
-	  "glyph": "🌾",
-	  "world_icon_path": "res://assets/ui/icons/resources/wheat.png",
-	  "fallback_color": [
-		0.85,
-		0.72,
-		0.3
-	  ],
-	  "description": "Golden wheat. Grows only on land with wheat fertility.",
-	  "nutrition": 0.5,
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "wheat",
+      "display_name": "Wheat",
+      "category": "consumable",
+      "subcategory": "food",
+      "stack_limit": 50,
+      "weight": 0.3,
+      "base_value": 2,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/wheat.png",
+      "glyph": "🌾",
+      "world_icon_path": "res://assets/ui/icons/resources/wheat.png",
+      "fallback_color": [
+        0.85,
+        0.72,
+        0.3
+      ],
+      "description": "Golden wheat. Grows only on land with wheat fertility.",
+      "nutrition": 0.5,
+      "tags": [
         "food"
-	  ]
-	},
-	{
-	  "id": "wheat_seed",
-	  "display_name": "Wheat Seed",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 20,
-	  "weight": 0.1,
-	  "base_value": 1,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/wheat_seed.png",
-	  "glyph": "🌱",
-	  "world_icon_path": "res://assets/ui/icons/resources/wheat_seed.png",
-	  "fallback_color": [
-		0.8,
-		0.7,
-		0.35
-	  ],
-	  "description": "Wheat seeds. Plantable only on land with wheat fertility.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "wheat_seed",
+      "display_name": "Wheat Seed",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 20,
+      "weight": 0.1,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/wheat_seed.png",
+      "glyph": "🌱",
+      "world_icon_path": "res://assets/ui/icons/resources/wheat_seed.png",
+      "fallback_color": [
+        0.8,
+        0.7,
+        0.35
+      ],
+      "description": "Wheat seeds. Plantable only on land with wheat fertility.",
+      "tags": [
         "plantable"
-	  ]
-	},
-	{
-	  "id": "meat",
-	  "display_name": "Meat",
-	  "category": "consumable",
-	  "subcategory": "food",
-	  "stack_limit": 50,
-	  "weight": 0.5,
-	  "base_value": 4,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/meat.png",
-	  "glyph": "🍖",
-	  "description": "Fresh meat from a hunting lodge. Nutritious food.",
-	  "nutrition": 4,
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "meat",
+      "display_name": "Meat",
+      "category": "consumable",
+      "subcategory": "food",
+      "stack_limit": 50,
+      "weight": 0.5,
+      "base_value": 4,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/meat.png",
+      "glyph": "🍖",
+      "description": "Fresh meat from a hunting lodge. Nutritious food.",
+      "nutrition": 4,
+      "tags": [
         "food"
-	  ]
-	},
-	{
-	  "id": "hide",
-	  "display_name": "Hide",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 50,
-	  "weight": 1.0,
-	  "base_value": 5,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/hide.png",
-	  "glyph": "🟤",
-	  "world_icon_path": "res://assets/ui/icons/resources/hide.png",
-	  "fallback_color": [
-		0.55,
-		0.4,
-		0.25
-	  ],
-	  "description": "Raw animal hide from a hunting lodge. Can be processed into leather goods.",
-	  "tags": []
-	},
-	{
-	  "id": "flour",
-	  "display_name": "Flour",
-	  "category": "production_good",
-	  "subcategory": "intermediate",
-	  "stack_limit": 99,
-	  "weight": 0.5,
-	  "base_value": 4,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/flour.png",
-	  "glyph": "🫙",
-	  "description": "Ground wheat flour, ready for baking.",
-	  "tags": []
-	},
-	{
-	  "id": "pottery",
-	  "display_name": "Pottery",
-	  "perk_group": 2,
-	  "category": "production_good",
-	  "subcategory": "trade_good",
-	  "stack_limit": 50,
-	  "weight": 0.8,
-	  "base_value": 15,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/pottery.png",
-	  "glyph": "🏺",
-	  "description": "Fired clay vessels. Used by settlers as everyday household goods.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "hide",
+      "display_name": "Hide",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 50,
+      "weight": 1.0,
+      "base_value": 5,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/hide.png",
+      "glyph": "🟤",
+      "world_icon_path": "res://assets/ui/icons/resources/hide.png",
+      "fallback_color": [
+        0.55,
+        0.4,
+        0.25
+      ],
+      "description": "Raw animal hide from a hunting lodge. Can be processed into leather goods.",
+      "tags": [],
+      "placeholder": false
+    },
+    {
+      "id": "flour",
+      "display_name": "Flour",
+      "category": "production_good",
+      "subcategory": "intermediate",
+      "stack_limit": 99,
+      "weight": 0.5,
+      "base_value": 4,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/flour.png",
+      "glyph": "🫙",
+      "description": "Ground wheat flour, ready for baking.",
+      "tags": [],
+      "placeholder": false
+    },
+    {
+      "id": "pottery",
+      "display_name": "Pottery",
+      "perk_group": 2,
+      "category": "production_good",
+      "subcategory": "trade_good",
+      "stack_limit": 50,
+      "weight": 0.8,
+      "base_value": 15,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/pottery.png",
+      "glyph": "🏺",
+      "description": "Fired clay vessels. Used by settlers as everyday household goods.",
+      "tags": [
         "trade_good"
-	  ]
-	},
-	{
-	  "id": "knife",
-	  "display_name": "Knife",
-	  "category": "production_good",
-	  "subcategory": "tool",
-	  "stack_limit": 10,
-	  "weight": 0.8,
-	  "base_value": 15,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/knife.png",
-	  "glyph": "🔪",
-	  "description": "A sharp blade for processing hides in the tannery.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "knife",
+      "display_name": "Knife",
+      "category": "production_good",
+      "subcategory": "tool",
+      "stack_limit": 10,
+      "weight": 0.8,
+      "base_value": 15,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/knife.png",
+      "glyph": "🔪",
+      "description": "A sharp blade for processing hides in the tannery.",
+      "tags": [
         "tool"
-	  ]
-	},
-	{
-	  "id": "leather",
-	  "display_name": "Leather",
-	  "perk_group": 2,
-	  "category": "production_good",
-	  "subcategory": "intermediate",
-	  "stack_limit": 99,
-	  "weight": 1.2,
-	  "base_value": 10,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/leather.png",
-	  "glyph": "🟫",
-	  "description": "Tanned hide. Soft and durable, used to craft leather garments.",
-	  "tags": []
-	},
-	{
-	  "id": "furniture",
-	  "display_name": "Furniture",
-	  "perk_group": 2,
-	  "category": "production_good",
-	  "subcategory": "intermediate",
-	  "stack_limit": 20,
-	  "weight": 3.0,
-	  "base_value": 14,
-	  "max_charge": 100.0,
-	  "movement_cost": 6.0,
-	  "icon_path": "assets/ui/icons/resources/furniture.png",
-	  "glyph": "🪑",
-	  "description": "Crafted furniture for homes and settlements.",
-	  "tags": []
-	},
-	{
-	  "id": "hunting_bow",
-	  "display_name": "Hunting Bow",
-	  "category": "production_good",
-	  "subcategory": "tool",
-	  "stack_limit": 10,
-	  "weight": 1.5,
-	  "base_value": 20,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/hunting_bow.png",
-	  "glyph": "🏹",
-	  "description": "A simple wooden bow strung with plant fiber. Required by the Hunting Lodge for efficient hunts.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "leather",
+      "display_name": "Leather",
+      "perk_group": 2,
+      "category": "production_good",
+      "subcategory": "intermediate",
+      "stack_limit": 99,
+      "weight": 1.2,
+      "base_value": 10,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/leather.png",
+      "glyph": "🟫",
+      "description": "Tanned hide. Soft and durable, used to craft leather garments.",
+      "tags": [],
+      "placeholder": false
+    },
+    {
+      "id": "furniture",
+      "display_name": "Furniture",
+      "perk_group": 2,
+      "category": "production_good",
+      "subcategory": "intermediate",
+      "stack_limit": 20,
+      "weight": 3.0,
+      "base_value": 14,
+      "max_charge": 100.0,
+      "movement_cost": 6.0,
+      "icon_path": "assets/ui/icons/resources/furniture.png",
+      "glyph": "🪑",
+      "description": "Crafted furniture for homes and settlements.",
+      "tags": [],
+      "placeholder": false
+    },
+    {
+      "id": "hunting_bow",
+      "display_name": "Hunting Bow",
+      "category": "production_good",
+      "subcategory": "tool",
+      "stack_limit": 10,
+      "weight": 1.5,
+      "base_value": 20,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/hunting_bow.png",
+      "glyph": "🏹",
+      "description": "A simple wooden bow strung with plant fiber. Required by the Hunting Lodge for efficient hunts.",
+      "tags": [
         "tool"
-	  ]
-	},
-	{
-	  "id": "fishing_net",
-	  "display_name": "Fishing Net",
-	  "category": "production_good",
-	  "subcategory": "tool",
-	  "stack_limit": 10,
-	  "weight": 1.0,
-	  "base_value": 12,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/fishing_net.png",
-	  "glyph": "🕸️",
-	  "description": "A woven fiber net for catching fish. Required by the Fishing Hut for efficient catches.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "fishing_net",
+      "display_name": "Fishing Net",
+      "category": "production_good",
+      "subcategory": "tool",
+      "stack_limit": 10,
+      "weight": 1.0,
+      "base_value": 12,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/fishing_net.png",
+      "glyph": "🕸️",
+      "description": "A woven fiber net for catching fish. Required by the Fishing Hut for efficient catches.",
+      "tags": [
         "tool"
-	  ]
-	},
-	{
-	  "id": "fish",
-	  "display_name": "Fish",
-	  "category": "consumable",
-	  "subcategory": "food",
-	  "stack_limit": 50,
-	  "weight": 0.4,
-	  "base_value": 3,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/fish.png",
-	  "glyph": "🐟",
-	  "description": "Fresh fish from a nearby river or lake. Good mid-tier food.",
-	  "nutrition": 3,
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "fish",
+      "display_name": "Fish",
+      "category": "consumable",
+      "subcategory": "food",
+      "stack_limit": 50,
+      "weight": 0.4,
+      "base_value": 3,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/fish.png",
+      "glyph": "🐟",
+      "description": "Fresh fish from a nearby river or lake. Good mid-tier food.",
+      "nutrition": 3,
+      "tags": [
         "food"
-	  ]
-	},
-	{
-	  "id": "brick",
-	  "display_name": "Brick",
-	  "category": "production_good",
-	  "subcategory": "intermediate",
-	  "stack_limit": 99,
-	  "weight": 2.0,
-	  "base_value": 6,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/brick.png",
-	  "glyph": "🔥",
-	  "description": "Fired clay bricks. A durable construction material.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "brick",
+      "display_name": "Brick",
+      "category": "production_good",
+      "subcategory": "intermediate",
+      "stack_limit": 99,
+      "weight": 2.0,
+      "base_value": 6,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/brick.png",
+      "glyph": "🔥",
+      "description": "Fired clay bricks. A durable construction material.",
+      "tags": [
         "construction_material"
-	  ]
-	},
-	{
-	  "id": "charcoal",
-	  "display_name": "Charcoal",
-	  "category": "production_good",
-	  "subcategory": "intermediate",
-	  "stack_limit": 99,
-	  "weight": 1.0,
-	  "base_value": 6,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/charcoal.png",
-	  "glyph": "⬛",
-	  "description": "Slow-burned charcoal. Burns hotter than wood — essential fuel for advanced kilns.",
-	  "tags": [
-		"burnable",
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "charcoal",
+      "display_name": "Charcoal",
+      "category": "production_good",
+      "subcategory": "intermediate",
+      "stack_limit": 99,
+      "weight": 1.0,
+      "base_value": 6,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/charcoal.png",
+      "glyph": "⬛",
+      "description": "Slow-burned charcoal. Burns hotter than wood — essential fuel for advanced kilns.",
+      "tags": [
+        "burnable",
         "fuel"
-	  ]
-	},
-	{
-	  "id": "salt",
-	  "display_name": "Salt",
-	  "category": "production_good",
-	  "subcategory": "trade_good",
-	  "stack_limit": 99,
-	  "weight": 0.8,
-	  "base_value": 18,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/salt.png",
-	  "glyph": "🧂",
-	  "description": "Crystallised sea salt from coastal evaporation pans. A valuable trade good and food preservative.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "salt",
+      "display_name": "Salt",
+      "category": "production_good",
+      "subcategory": "trade_good",
+      "stack_limit": 99,
+      "weight": 0.8,
+      "base_value": 18,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/salt.png",
+      "glyph": "🧂",
+      "description": "Crystallised sea salt from coastal evaporation pans. A valuable trade good and food preservative.",
+      "tags": [
         "trade_good"
-	  ]
-	},
-	{
-	  "id": "preserved_food",
-	  "display_name": "Preserved Food",
-	  "category": "production_good",
-	  "subcategory": "trade_good",
-	  "stack_limit": 50,
-	  "weight": 0.5,
-	  "base_value": 35,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/preserved_food.png",
-	  "glyph": "🥫",
-	  "description": "Salted meat or fish sealed in pottery vessels. A premium trade commodity.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "preserved_food",
+      "display_name": "Preserved Food",
+      "category": "production_good",
+      "subcategory": "trade_good",
+      "stack_limit": 50,
+      "weight": 0.5,
+      "base_value": 35,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/preserved_food.png",
+      "glyph": "🥫",
+      "description": "Salted meat or fish sealed in pottery vessels. A premium trade commodity.",
+      "tags": [
         "trade_good"
-	  ]
-	},
-	{
-	  "id": "flax",
-	  "display_name": "Flax",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 0.4,
-	  "base_value": 3,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/flax.png",
-	  "glyph": "🌾",
-	  "world_icon_path": "res://assets/ui/icons/resources/flax.png",
-	  "fallback_color": [
-		0.62,
-		0.72,
-		0.86
-	  ],
-	  "description": "Harvested flax stalks. Grows on plains-rich land; spun into linen fibre.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "flax",
+      "display_name": "Flax",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 0.4,
+      "base_value": 3,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/flax.png",
+      "glyph": "🌾",
+      "world_icon_path": "res://assets/ui/icons/resources/flax.png",
+      "fallback_color": [
+        0.62,
+        0.72,
+        0.86
+      ],
+      "description": "Harvested flax stalks. Grows on plains-rich land; spun into linen fibre.",
+      "tags": [
         "raw_material"
-	  ]
-	},
-	{
-	  "id": "hops",
-	  "display_name": "Hops",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 0.3,
-	  "base_value": 4,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/hops.png",
-	  "glyph": "🌿",
-	  "world_icon_path": "res://assets/ui/icons/resources/hops.png",
-	  "fallback_color": [
-		0.56,
-		0.74,
-		0.36
-	  ],
-	  "description": "Green hop cones. Grows on plains-rich land; bittering agent for brewing.",
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "hops",
+      "display_name": "Hops",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 0.3,
+      "base_value": 4,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/hops.png",
+      "glyph": "🌿",
+      "world_icon_path": "res://assets/ui/icons/resources/hops.png",
+      "fallback_color": [
+        0.56,
+        0.74,
+        0.36
+      ],
+      "description": "Green hop cones. Grows on plains-rich land; bittering agent for brewing.",
+      "tags": [
         "raw_material"
-	  ]
-	},
-	{
-	  "id": "grapes",
-	  "display_name": "Grapes",
-	  "category": "consumable",
-	  "subcategory": "food",
-	  "stack_limit": 50,
-	  "weight": 0.5,
-	  "base_value": 4,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/grapes.png",
-	  "glyph": "🍇",
-	  "world_icon_path": "res://assets/ui/icons/resources/grapes.png",
-	  "fallback_color": [
-		0.42,
-		0.16,
-		0.42
-	  ],
-	  "description": "Ripe grape clusters. Grows on plains-rich land; pressed into wine.",
-	  "nutrition": 0.3,
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "grapes",
+      "display_name": "Grapes",
+      "category": "consumable",
+      "subcategory": "food",
+      "stack_limit": 50,
+      "weight": 0.5,
+      "base_value": 4,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/grapes.png",
+      "glyph": "🍇",
+      "world_icon_path": "res://assets/ui/icons/resources/grapes.png",
+      "fallback_color": [
+        0.42,
+        0.16,
+        0.42
+      ],
+      "description": "Ripe grape clusters. Grows on plains-rich land; pressed into wine.",
+      "nutrition": 0.3,
+      "tags": [
         "food"
-	  ]
-	},
-	{
-	  "id": "olives",
-	  "display_name": "Olives",
-	  "category": "consumable",
-	  "subcategory": "food",
-	  "stack_limit": 50,
-	  "weight": 0.5,
-	  "base_value": 5,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/olives.png",
-	  "glyph": "🫒",
-	  "world_icon_path": "res://assets/ui/icons/resources/olives.png",
-	  "fallback_color": [
-		0.36,
-		0.46,
-		0.24
-	  ],
-	  "description": "Olives from a grove tree. Grows on plains-rich land; pressed for oil.",
-	  "nutrition": 0.3,
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "olives",
+      "display_name": "Olives",
+      "category": "consumable",
+      "subcategory": "food",
+      "stack_limit": 50,
+      "weight": 0.5,
+      "base_value": 5,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/olives.png",
+      "glyph": "🫒",
+      "world_icon_path": "res://assets/ui/icons/resources/olives.png",
+      "fallback_color": [
+        0.36,
+        0.46,
+        0.24
+      ],
+      "description": "Olives from a grove tree. Grows on plains-rich land; pressed for oil.",
+      "nutrition": 0.3,
+      "tags": [
         "food"
-	  ]
-	},
-	{
-	  "id": "honey",
-	  "display_name": "Honey",
-	  "category": "consumable",
-	  "subcategory": "food",
-	  "stack_limit": 50,
-	  "weight": 0.6,
-	  "base_value": 6,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/honey.png",
-	  "glyph": "🍯",
-	  "world_icon_path": "res://assets/ui/icons/resources/honey.png",
-	  "fallback_color": [
-		0.96,
-		0.82,
-		0.28
-	  ],
-	  "description": "Honey gathered from wildflowers where bees forage. A sweet food and trade good.",
-	  "nutrition": 0.4,
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "honey",
+      "display_name": "Honey",
+      "category": "consumable",
+      "subcategory": "food",
+      "stack_limit": 50,
+      "weight": 0.6,
+      "base_value": 6,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/honey.png",
+      "glyph": "🍯",
+      "world_icon_path": "res://assets/ui/icons/resources/honey.png",
+      "fallback_color": [
+        0.96,
+        0.82,
+        0.28
+      ],
+      "description": "Honey gathered from wildflowers where bees forage. A sweet food and trade good.",
+      "nutrition": 0.4,
+      "tags": [
         "food"
-	  ]
-	},
-	{
-	  "id": "sand",
-	  "display_name": "Sand",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 2.0,
-	  "base_value": 1,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/sand.png",
-	  "glyph": "⏳",
-	  "world_icon_path": "res://assets/ui/icons/resources/sand.png",
-	  "fallback_color": [
-		0.9,
-		0.84,
-		0.62
-	  ],
-	  "description": "Fine beach sand gathered at the water's edge. Raw material for glass.",
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "sand",
+      "display_name": "Sand",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 2.0,
+      "base_value": 1,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/sand.png",
+      "glyph": "⏳",
+      "world_icon_path": "res://assets/ui/icons/resources/sand.png",
+      "fallback_color": [
+        0.9,
+        0.84,
+        0.62
+      ],
+      "description": "Fine beach sand gathered at the water's edge. Raw material for glass.",
+      "tags": [
         "raw_material"
-	  ]
-	},
-	{
-	  "id": "marble",
-	  "display_name": "Marble",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 5.0,
-	  "base_value": 10,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/marble.png",
-	  "glyph": "🏛️",
-	  "world_icon_path": "res://assets/ui/icons/resources/marble.png",
-	  "fallback_color": [
-		0.88,
-		0.88,
-		0.9
-	  ],
-	  "description": "Blocks of marble quarried from mountain outcrops. A premium building stone.",
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "marble",
+      "display_name": "Marble",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 5.0,
+      "base_value": 10,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/marble.png",
+      "glyph": "🏛️",
+      "world_icon_path": "res://assets/ui/icons/resources/marble.png",
+      "fallback_color": [
+        0.88,
+        0.88,
+        0.9
+      ],
+      "description": "Blocks of marble quarried from mountain outcrops. A premium building stone.",
+      "tags": [
         "construction_material"
-	  ]
-	},
-	{
-	  "id": "amber",
-	  "display_name": "Amber",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "stack_limit": 99,
-	  "weight": 0.5,
-	  "base_value": 20,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/amber.png",
-	  "glyph": "🟠",
-	  "world_icon_path": "res://assets/ui/icons/resources/amber.png",
-	  "fallback_color": [
-		0.86,
-		0.52,
-		0.16
-	  ],
-	  "description": "Fossilised amber. Hidden in coastal and forest land — must be located by searching.",
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "amber",
+      "display_name": "Amber",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "stack_limit": 99,
+      "weight": 0.5,
+      "base_value": 20,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/amber.png",
+      "glyph": "🟠",
+      "world_icon_path": "res://assets/ui/icons/resources/amber.png",
+      "fallback_color": [
+        0.86,
+        0.52,
+        0.16
+      ],
+      "description": "Fossilised amber. Hidden in coastal and forest land — must be located by searching.",
+      "tags": [
         "trade_good"
-	  ]
-	},
-	{
-	  "id": "rope",
-	  "display_name": "Rope",
-	  "category": "production_good",
-	  "subcategory": "intermediate",
-	  "stack_limit": 99,
-	  "weight": 0.8,
-	  "base_value": 8,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/rope.png",
-	  "glyph": "🪢",
-	  "description": "Twisted fiber rope. A versatile material used in construction, tools, and trade.",
-	  "tags": [
+      ],
+      "placeholder": true
+    },
+    {
+      "id": "rope",
+      "display_name": "Rope",
+      "category": "production_good",
+      "subcategory": "intermediate",
+      "stack_limit": 99,
+      "weight": 0.8,
+      "base_value": 8,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/rope.png",
+      "glyph": "🪢",
+      "description": "Twisted fiber rope. A versatile material used in construction, tools, and trade.",
+      "tags": [
         "trade_good"
-	  ]
-	},
-	{
-	  "id": "pearl",
-	  "display_name": "Pearl",
-	  "category": "production_good",
-	  "subcategory": "raw_material",
-	  "placeholder": true,
-	  "stack_limit": 99,
-	  "weight": 0.2,
-	  "base_value": 25,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/pearl.png",
-	  "glyph": "🦪",
-	  "world_icon_path": "res://assets/ui/icons/resources/pearl.png",
-	  "fallback_color": [
-		0.94,
-		0.92,
-		0.86
-	  ],
-	  "description": "Lustrous pearls found in coastal ocean shallows. A prized trade good.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "pearl",
+      "display_name": "Pearl",
+      "category": "production_good",
+      "subcategory": "raw_material",
+      "placeholder": true,
+      "stack_limit": 99,
+      "weight": 0.2,
+      "base_value": 25,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/pearl.png",
+      "glyph": "🦪",
+      "world_icon_path": "res://assets/ui/icons/resources/pearl.png",
+      "fallback_color": [
+        0.94,
+        0.92,
+        0.86
+      ],
+      "description": "Lustrous pearls found in coastal ocean shallows. A prized trade good.",
+      "tags": [
         "trade_good"
-	  ]
-	},
-	{
-	  "id": "barrel",
-	  "display_name": "Barrel",
-	  "category": "production_good",
-	  "subcategory": "trade_good",
-	  "stack_limit": 20,
-	  "weight": 3.0,
-	  "base_value": 18,
-	  "max_charge": 100.0,
-	  "movement_cost": 6.0,
-	  "icon_path": "assets/ui/icons/resources/barrel.png",
-	  "glyph": "🛢️",
-	  "description": "A sturdy wooden barrel crafted from planks. Used to transport goods at the trading post.",
-	  "tags": [
+      ]
+    },
+    {
+      "id": "barrel",
+      "display_name": "Barrel",
+      "category": "production_good",
+      "subcategory": "trade_good",
+      "stack_limit": 20,
+      "weight": 3.0,
+      "base_value": 18,
+      "max_charge": 100.0,
+      "movement_cost": 6.0,
+      "icon_path": "assets/ui/icons/resources/barrel.png",
+      "glyph": "🛢️",
+      "description": "A sturdy wooden barrel crafted from planks. Used to transport goods at the trading post.",
+      "tags": [
         "trade_good"
-	  ]
-	},
-	{
-	  "id": "wheel",
-	  "display_name": "Wheel",
-	  "category": "production_good",
-	  "subcategory": "trade_good",
-	  "stack_limit": 20,
-	  "weight": 2.0,
-	  "base_value": 12,
-	  "max_charge": 100.0,
-	  "movement_cost": 4.0,
-	  "icon_path": "assets/ui/icons/resources/wheel.png",
-	  "glyph": "🛞",
-	  "description": "A sturdy wooden wheel shaped from raw timber. Used in cart assembly and traded at the post.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "wheel",
+      "display_name": "Wheel",
+      "category": "production_good",
+      "subcategory": "trade_good",
+      "stack_limit": 20,
+      "weight": 2.0,
+      "base_value": 12,
+      "max_charge": 100.0,
+      "movement_cost": 4.0,
+      "icon_path": "assets/ui/icons/resources/wheel.png",
+      "glyph": "🛞",
+      "description": "A sturdy wooden wheel shaped from raw timber. Used in cart assembly and traded at the post.",
+      "tags": [
         "trade_good"
-	  ]
-	},
-	{
-	  "id": "cart",
-	  "display_name": "Cart",
-	  "category": "production_good",
-	  "subcategory": "trade_good",
-	  "stack_limit": 10,
-	  "weight": 5.0,
-	  "base_value": 22,
-	  "max_charge": 100.0,
-	  "movement_cost": 6.0,
-	  "icon_path": "assets/ui/icons/resources/cart.png",
-	  "glyph": "🛒",
-	  "description": "A wooden cart assembled from planks and wheels. A valuable trade good for the trading post.",
-	  "tags": [
+      ],
+      "placeholder": false
+    },
+    {
+      "id": "cart",
+      "display_name": "Cart",
+      "category": "production_good",
+      "subcategory": "trade_good",
+      "stack_limit": 10,
+      "weight": 5.0,
+      "base_value": 22,
+      "max_charge": 100.0,
+      "movement_cost": 6.0,
+      "icon_path": "assets/ui/icons/resources/cart.png",
+      "glyph": "🛒",
+      "description": "A wooden cart assembled from planks and wheels. A valuable trade good for the trading post.",
+      "tags": [
         "trade_good"
-	  ]
-	}
+      ],
+      "placeholder": false
+    }
   ]
 }

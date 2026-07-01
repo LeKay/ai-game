@@ -15,6 +15,8 @@ signal route_update_requested(route_id: StringName, changes: Dictionary)
 signal route_delete_requested(route_id: StringName)
 ## Forwarded from RouteEditorView — player wants to pick a building via map-select.
 signal map_select_requested(step: String)
+## Forwarded from RouteEditorView — drives the map route-line filter during carrier selection.
+signal carrier_hover_changed(npc_id: StringName)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -247,6 +249,9 @@ func _connect_editor_signals() -> void:
 	_editor_view.cancelled.connect(func() -> void: _close_editor())
 	_editor_view.map_select_requested.connect(
 		func(step: String) -> void: map_select_requested.emit(step)
+	)
+	_editor_view.carrier_hover_changed.connect(
+		func(npc_id: StringName) -> void: carrier_hover_changed.emit(npc_id)
 	)
 
 

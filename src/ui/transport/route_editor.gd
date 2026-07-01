@@ -59,6 +59,9 @@ signal cancel_requested()
 signal map_select_requested(step: String)
 ## Emitted when the player confirms deleting this (existing) route.
 signal delete_requested()
+## Emitted when the player hovers a carrier candidate (npc_id = &"" to clear).
+## Drives the map route-line filter so the candidate's routes light up on the map.
+signal carrier_hover_changed(npc_id: StringName)
 
 var _route: LogisticsRoute = null   # null = creating a new route
 var _locked := true
@@ -604,8 +607,13 @@ func _open_item_popup() -> void:
 		return
 	if _item_popup == null:
 		_item_popup = PopupPanel.new()
+		var scroll := ScrollContainer.new()
+		scroll.custom_minimum_size = Vector2(280, 260)
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 		_item_grid = ItemGrid.new()
-		_item_popup.add_child(_item_grid)
+		_item_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll.add_child(_item_grid)
+		_item_popup.add_child(scroll)
 		_item_grid.item_clicked.connect(_on_item_picked)
 		add_child(_item_popup)
 	_item_grid.populate(items)
@@ -627,16 +635,17 @@ func _open_npc_popup() -> void:
 	if _npc_popup == null:
 		_npc_popup = PopupPanel.new()
 		var scroll := ScrollContainer.new()
-		scroll.custom_minimum_size = Vector2(220, 140)
+		scroll.custom_minimum_size = Vector2(210, 140)
 		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 		_npc_list = VBoxContainer.new()
 		_npc_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_npc_list.add_theme_constant_override("separation", 4)
 		scroll.add_child(_npc_list)
 		_npc_popup.add_child(scroll)
+		_npc_popup.popup_hide.connect(func() -> void: carrier_hover_changed.emit(&""))
 		add_child(_npc_popup)
 	_refresh_npc_list()
-	_npc_popup.popup(_popup_rect(240))
+	_npc_popup.popup(_popup_rect(220))
 
 
 func _refresh_npc_list() -> void:
@@ -650,30 +659,25 @@ func _refresh_npc_list() -> void:
 		lbl.add_theme_color_override("font_color", MUTED_COLOR)
 		_npc_list.add_child(lbl)
 		return
-	var route_count: Dictionary = {}
-	for route: LogisticsRoute in LogisticsSystem.get_active_routes():
-		if route.npc_id != &"":
-			route_count[route.npc_id] = int(route_count.get(route.npc_id, 0)) + 1
 	for npc_id: StringName in candidates:
-		var btn := Button.new()
-		var n: int = int(route_count.get(npc_id, 0))
 		var npc: Object = NPCSystem.get_npc_instance(npc_id)
 		var lvl: int = npc.level if npc != null else 1
-		var label := "Lv %d  %s" % [lvl, NPCSystem.get_npc_display_name(npc_id)]
-		if n > 0:
-			label += "  (%d route%s)" % [n, "" if n == 1 else "s"]
-		btn.text = label
+		var btn := Button.new()
+		btn.text = "Lv %d  %s" % [lvl, NPCSystem.get_npc_display_name(npc_id)]
 		btn.focus_mode = Control.FOCUS_NONE
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.pressed.connect(_on_npc_picked.bind(npc_id))
+		btn.mouse_entered.connect(func() -> void: carrier_hover_changed.emit(npc_id))
 		_npc_list.add_child(btn)
 
 
 func _on_npc_picked(npc_id: StringName) -> void:
 	_npc = npc_id
+	carrier_hover_changed.emit(&"")
 	if _npc_popup != null:
 		_npc_popup.hide()
 	_refresh()
+
 
 
 ## Screen rect just below this card for a picker popup of the given width.
@@ -781,7 +785,8 @@ func _get_all_storage_possible_items(building_id: StringName) -> Array[Dictionar
 					stored[slot.resource_id] = stored.get(slot.resource_id, 0) + slot.quantity
 	var items: Array[Dictionary] = []
 	for res_id: StringName in ResourceRegistry.get_all_ids():
-		items.append({&"resource_id": res_id, &"quantity": int(stored.get(res_id, 0))})
+		if ProgressionSystem.is_resource_unlocked(res_id):
+			items.append({&"resource_id": res_id, &"quantity": int(stored.get(res_id, 0))})
 	return items
 
 

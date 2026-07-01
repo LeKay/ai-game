@@ -25,6 +25,8 @@ signal route_delete_requested(route_id: StringName)
 ## Emitted whenever the badge text / colour changes. EdgeDrawerController (or the wrapping
 ## TransportDrawer) should connect this to controller.set_badge().
 signal badge_updated(text: String, color: Color)
+## Forwarded from RouteEditor.carrier_hover_changed — drives the map route-line filter.
+signal carrier_hover_changed(npc_id: StringName)
 
 # --- Visual constants --------------------------------------------------------
 
@@ -40,6 +42,7 @@ const SHADOW_COLOR := Color(0.0, 0.0, 0.0, 0.35)
 
 var _route_list: VBoxContainer
 var _empty_label: Label
+var _scroll: ScrollContainer
 
 # --- Inline-edit state -------------------------------------------------------
 
@@ -181,6 +184,12 @@ func _start_new_route() -> void:
 	_new_prefill_from = &""
 	_new_prefill_to = &""
 	_rebuild()
+	_scroll_to_bottom.call_deferred()
+
+
+func _scroll_to_bottom() -> void:
+	if _scroll:
+		_scroll.scroll_vertical = _scroll.get_v_scroll_bar().max_value
 
 
 func _on_editor_edit(route_id: StringName) -> void:
@@ -265,6 +274,7 @@ func _rebuild() -> void:
 func _wire_editor(editor: RouteEditor, route: LogisticsRoute) -> void:
 	editor.map_select_requested.connect(_on_editor_map_select.bind(editor))
 	editor.cancel_requested.connect(_on_editor_cancel)
+	editor.carrier_hover_changed.connect(func(npc_id: StringName) -> void: carrier_hover_changed.emit(npc_id))
 	if route != null:
 		editor.edit_requested.connect(_on_editor_edit.bind(route.id))
 		editor.update_requested.connect(_on_editor_update)
@@ -322,16 +332,16 @@ func _build_panel() -> Control:
 
 	root.add_child(_build_header())
 
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 0)
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	root.add_child(scroll)
+	_scroll = ScrollContainer.new()
+	_scroll.custom_minimum_size = Vector2(0, 0)
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	root.add_child(_scroll)
 
 	_route_list = VBoxContainer.new()
 	_route_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_route_list.add_theme_constant_override("separation", 12)
-	scroll.add_child(_route_list)
+	_scroll.add_child(_route_list)
 
 	_empty_label = Label.new()
 	_empty_label.text = "No transport routes yet. Add one to move goods between buildings."

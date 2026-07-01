@@ -8,6 +8,8 @@ class_name ProductionSection extends VBoxContainer
 ## Emitted when the player taps the ⚙️ recipe-picker button.
 ## Kept for external listeners (e.g. BuildingDetailView) that want to know the picker opened.
 signal recipe_picker_requested()
+## Emitted when the player edits a rate field — callers should invoke BuildingRegistry.set_production_speed().
+signal production_speed_changed(building_id: String, target_efficiency: float)
 ## Emitted when the player confirms a recipe selection inside the inline picker.
 ## Callers should invoke BuildingRegistry.set_active_recipe() with the matching index.
 signal recipe_changed(building_id: String, recipe_id: StringName)
@@ -25,8 +27,8 @@ const COLOR_TEXT_DIM := Color(0.55, 0.55, 0.60, 1.0)
 
 # ── Node refs ─────────────────────────────────────────────────────────────────
 
-var _recipe_btn: Button
 var _section_label: Label
+var _settings_btn:  Button
 var _flow: TileFlowContainer
 ## Container wrapping the rate label + tile flow (hidden while picker is visible).
 var _body_container: VBoxContainer
@@ -36,13 +38,14 @@ var _recipe_picker_view: RecipePickerView
 # ── State ─────────────────────────────────────────────────────────────────────
 
 var _building_id: String = ""
+var _rate_editing: bool = false
 ## Cache of input ItemTiles keyed by resource_id for efficient refresh.
 var _input_tiles: Dictionary[StringName, ItemTile] = {}
 ## Cache of output ItemTiles keyed by resource_id for efficient refresh.
 var _output_tiles: Dictionary[StringName, ItemTile] = {}
-## Rate labels updated every refresh so they reflect the current effective efficiency.
-var _input_rate_labels:  Dictionary[StringName, Label] = {}
-var _output_rate_labels: Dictionary[StringName, Label] = {}
+## Rate edits updated every refresh (when not focused) to reflect the current effective efficiency.
+var _input_rate_labels:  Dictionary[StringName, LineEdit] = {}
+var _output_rate_labels: Dictionary[StringName, LineEdit] = {}
 ## Per-resource base quantities and recipe data needed to recompute rates in refresh().
 var _recipe_cycle_ticks: int = 0
 var _input_base_qty:  Dictionary[StringName, int] = {}
@@ -75,15 +78,17 @@ func _ready() -> void:
 	_section_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(_section_label)
 
-	_recipe_btn = Button.new()
-	_recipe_btn.name    = "RecipeBtn"
-	_recipe_btn.text    = "⚙"
-	_recipe_btn.flat    = true
-	_recipe_btn.tooltip_text = "Change recipe"  # TODO: localize
-	_recipe_btn.add_theme_font_size_override("font_size", 14)
-	_recipe_btn.visible = false
-	_recipe_btn.pressed.connect(_on_recipe_btn_pressed)
-	header.add_child(_recipe_btn)
+	_settings_btn = Button.new()
+	_settings_btn.name        = "SettingsBtn"
+	_settings_btn.text        = "⚙"
+	_settings_btn.flat        = true
+	_settings_btn.toggle_mode = true
+	_settings_btn.tooltip_text = "Edit production speed"  # TODO: localize
+	_settings_btn.add_theme_font_size_override("font_size", 14)
+	_settings_btn.add_theme_color_override("font_color", COLOR_TEXT_DIM)
+	_settings_btn.add_theme_color_override("font_pressed_color", COLOR_TEXT)
+	_settings_btn.toggled.connect(_on_settings_toggled)
+	header.add_child(_settings_btn)
 
 	# ── Body container (rate label + tile flow) ───────────────────────────────
 	# This container is hidden when the recipe picker is shown.
@@ -167,20 +172,20 @@ func refresh() -> void:
 		var qty: int = instance.buffered_output.get(res_id, 0)
 		_output_tiles[res_id].update_quantity(qty)
 
-	# ── Refresh rate labels (depend on effective efficiency which can change) ─
+	# ── Refresh rate edits (skip if the field is focused — user is typing) ───────
 	if _recipe_cycle_ticks > 0:
 		var tpd: float = float(TickSystem.TICKS_PER_DAY)
 		var eff: float = instance.get_effective_efficiency()
 		for res_id: StringName in _input_rate_labels:
-			var per_day: float = float(_input_base_qty.get(res_id, 1)) * eff * tpd / float(_recipe_cycle_ticks)
-			var lbl: Label = _input_rate_labels[res_id]
-			lbl.text = "~%d/day" % roundi(per_day)  # TODO: localize
-			lbl.tooltip_text = "%.2f/day" % per_day
+			var edit: LineEdit = _input_rate_labels[res_id]
+			if not edit.has_focus():
+				var per_day: float = float(_input_base_qty.get(res_id, 1)) * eff * tpd / float(_recipe_cycle_ticks)
+				edit.text = _format_rate(per_day)
 		for res_id: StringName in _output_rate_labels:
-			var per_day: float = float(_output_base_qty.get(res_id, 1)) * eff * tpd / float(_recipe_cycle_ticks)
-			var lbl: Label = _output_rate_labels[res_id]
-			lbl.text = "~%d/day" % roundi(per_day)  # TODO: localize
-			lbl.tooltip_text = "%.2f/day" % per_day
+			var edit: LineEdit = _output_rate_labels[res_id]
+			if not edit.has_focus():
+				var per_day: float = float(_output_base_qty.get(res_id, 1)) * eff * tpd / float(_recipe_cycle_ticks)
+				edit.text = _format_rate(per_day)
 
 
 
@@ -200,10 +205,6 @@ func _rebuild_tiles() -> void:
 			BuildingRegistry.get_building_instance(_building_id)
 	if instance == null:
 		return
-
-	# Show/hide recipe button.
-	var all_recipes: Array = BuildingRegistry.RECIPES.get(instance.type, [])
-	_recipe_btn.visible = all_recipes.size() > 1
 
 	var recipe: Dictionary = BuildingRegistry.get_active_recipe(instance)
 	if recipe.is_empty():
@@ -225,16 +226,26 @@ func _rebuild_tiles() -> void:
 		var wrapper := VBoxContainer.new()
 		wrapper.add_theme_constant_override("separation", 2)
 
-		var rate_lbl := Label.new()
-		rate_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		rate_lbl.add_theme_font_size_override("font_size", 9)
-		rate_lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
-		rate_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
+		var rate_edit := LineEdit.new()
+		rate_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		rate_edit.add_theme_font_size_override("font_size", 9)
+		rate_edit.custom_minimum_size = Vector2(0, 16)
+		rate_edit.tooltip_text = "Rate per day — edit to change speed"  # TODO: localize
+		rate_edit.editable = _rate_editing
 		if cycle_ticks > 0:
 			var per_day: float = float(spec_qty) * instance.get_effective_efficiency() * ticks_per_day / float(cycle_ticks)
-			rate_lbl.text = "~%d/day" % roundi(per_day)  # TODO: localize
-			rate_lbl.tooltip_text = "%.2f/day" % per_day
-		wrapper.add_child(rate_lbl)
+			rate_edit.text = _format_rate(per_day)
+		var captured_qty_in: int = spec_qty
+		rate_edit.text_submitted.connect(func(t: String) -> void:
+			if t.is_valid_float():
+				_apply_rate(t.to_float(), captured_qty_in)
+			rate_edit.release_focus()
+		)
+		rate_edit.focus_exited.connect(func() -> void:
+			if rate_edit.text.is_valid_float():
+				_apply_rate(rate_edit.text.to_float(), captured_qty_in)
+		)
+		wrapper.add_child(rate_edit)
 
 		var tile := ItemTile.new()
 		tile.input_drag_started.connect(_on_input_drag_started)
@@ -242,7 +253,7 @@ func _rebuild_tiles() -> void:
 		_flow.add_tile(wrapper)   # enters tree → _ready() fires before setup()
 		tile.setup(res_id, buf_qty, "input", _building_id, instance.tile)
 		_input_tiles[res_id] = tile
-		_input_rate_labels[res_id] = rate_lbl
+		_input_rate_labels[res_id] = rate_edit
 		_input_base_qty[res_id] = spec_qty
 
 	# ── Arrow separator (only when there are inputs) ──────────────────────────
@@ -263,17 +274,27 @@ func _rebuild_tiles() -> void:
 		var wrapper := VBoxContainer.new()
 		wrapper.add_theme_constant_override("separation", 2)
 
-		var rate_lbl := Label.new()
-		rate_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		rate_lbl.add_theme_font_size_override("font_size", 9)
-		rate_lbl.add_theme_color_override("font_color", COLOR_TEXT_DIM)
-		rate_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
+		var rate_edit := LineEdit.new()
+		rate_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		rate_edit.add_theme_font_size_override("font_size", 9)
+		rate_edit.custom_minimum_size = Vector2(0, 16)
+		rate_edit.tooltip_text = "Rate per day — edit to change speed"  # TODO: localize
+		rate_edit.editable = _rate_editing
 		if cycle_ticks > 0:
 			var per_day: float = (float(base_qty) * instance.get_effective_efficiency()) \
 					* ticks_per_day / float(cycle_ticks)
-			rate_lbl.text = "~%d/day" % roundi(per_day)  # TODO: localize
-			rate_lbl.tooltip_text = "%.2f/day" % per_day
-		wrapper.add_child(rate_lbl)
+			rate_edit.text = _format_rate(per_day)
+		var captured_qty_out: int = base_qty
+		rate_edit.text_submitted.connect(func(t: String) -> void:
+			if t.is_valid_float():
+				_apply_rate(t.to_float(), captured_qty_out)
+			rate_edit.release_focus()
+		)
+		rate_edit.focus_exited.connect(func() -> void:
+			if rate_edit.text.is_valid_float():
+				_apply_rate(rate_edit.text.to_float(), captured_qty_out)
+		)
+		wrapper.add_child(rate_edit)
 
 		var tile := ItemTile.new()
 		tile.output_drag_started.connect(_on_output_drag_started)
@@ -281,15 +302,44 @@ func _rebuild_tiles() -> void:
 		_flow.add_tile(wrapper)   # enters tree → _ready() fires before setup()
 		tile.setup(res_id, buf_qty, "output", _building_id, instance.tile)
 		_output_tiles[res_id] = tile
-		_output_rate_labels[res_id] = rate_lbl
+		_output_rate_labels[res_id] = rate_edit
 		_output_base_qty[res_id] = base_qty
 
 
 
+# ── Rate editing ─────────────────────────────────────────────────────────────
+
+func _on_settings_toggled(pressed: bool) -> void:
+	_rate_editing = pressed
+	for key: StringName in _input_rate_labels:
+		_input_rate_labels[key].editable = pressed
+	for key: StringName in _output_rate_labels:
+		_output_rate_labels[key].editable = pressed
+	refresh()
+
+
+func _format_rate(per_day: float) -> String:
+	return "%.2f" % per_day if _rate_editing else "%.2f/day" % per_day
+
+## Converts a desired [param rate_per_day] (for [param base_qty] units/cycle) into an efficiency
+## value, clamps it to [0, building max], and emits [signal production_speed_changed].
+func _apply_rate(rate_per_day: float, base_qty: int) -> void:
+	if _recipe_cycle_ticks <= 0 or base_qty <= 0:
+		return
+	var tpd: float = float(TickSystem.TICKS_PER_DAY)
+	if tpd <= 0.0:
+		return
+	var target_eff: float = rate_per_day * float(_recipe_cycle_ticks) / (float(base_qty) * tpd)
+	var instance: BuildingRegistry.BuildingInstance = BuildingRegistry.get_building_instance(_building_id)
+	if instance != null:
+		target_eff = clampf(target_eff, 0.0, instance.efficiency)
+	production_speed_changed.emit(_building_id, target_eff)
+
+
 # ── Picker sub-state ──────────────────────────────────────────────────────────
 
-## Called when the ⚙️/✕ button is pressed — toggles the picker open/closed.
-func _on_recipe_btn_pressed() -> void:
+## Toggles the recipe picker open/closed. Called by BuildingDetailView's bottom Recipe button.
+func toggle_picker() -> void:
 	if _recipe_picker_view.visible:
 		_hide_picker()
 	else:
@@ -302,7 +352,6 @@ func _show_picker() -> void:
 	_recipe_picker_view.setup(_building_id)
 	_body_container.visible     = false
 	_recipe_picker_view.visible = true
-	_recipe_btn.text = "✕"
 	_section_label.text = "Recipes"  # TODO: localize
 
 
@@ -310,8 +359,12 @@ func _show_picker() -> void:
 func _hide_picker() -> void:
 	_recipe_picker_view.visible = false
 	_body_container.visible     = true
-	_recipe_btn.text = "⚙"
 	_section_label.text = "Production"  # TODO: localize
+
+
+## Returns true while the inline recipe picker is visible.
+func is_picker_open() -> bool:
+	return _recipe_picker_view != null and _recipe_picker_view.visible
 
 
 ## Closes the recipe picker without confirming a selection. No-op if not open.

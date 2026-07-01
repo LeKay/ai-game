@@ -17,6 +17,8 @@ signal route_delete_requested(route_id: StringName)
 signal cancelled()
 ## Forwarded from RouteEditor.map_select_requested — player wants to pick a building on the map.
 signal map_select_requested(step: String)
+## Forwarded from RouteEditor.carrier_hover_changed — drives the map route-line filter.
+signal carrier_hover_changed(npc_id: StringName)
 
 # ── Node refs ─────────────────────────────────────────────────────────────────
 
@@ -88,6 +90,7 @@ func _connect_editor_signals() -> void:
 	)
 	_editor.cancel_requested.connect(func() -> void: cancelled.emit())
 	_editor.map_select_requested.connect(func(step: String) -> void: map_select_requested.emit(step))
+	_editor.carrier_hover_changed.connect(func(npc_id: StringName) -> void: carrier_hover_changed.emit(npc_id))
 	_editor.edit_requested.connect(
 		func() -> void:
 			# edit_requested on a locked card means "switch this card to editing mode".

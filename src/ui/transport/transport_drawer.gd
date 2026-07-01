@@ -24,6 +24,8 @@ signal route_update_requested(route_id: StringName, changes: Dictionary)
 signal map_select_requested(step: String)
 ## Emitted when the player confirms deleting an existing route (HUD performs the LogisticsSystem write).
 signal route_delete_requested(route_id: StringName)
+## Forwarded from RouteEditor.carrier_hover_changed — drives the map route-line filter.
+signal carrier_hover_changed(npc_id: StringName)
 
 
 func _ready() -> void:
@@ -63,6 +65,9 @@ func _ready() -> void:
 	_content.map_select_requested.connect(
 		func(step: String) -> void:
 			map_select_requested.emit(step))
+	_content.carrier_hover_changed.connect(
+		func(npc_id: StringName) -> void:
+			carrier_hover_changed.emit(npc_id))
 
 
 # --- Public API (hud.gd interface — do not change signatures) ----------------

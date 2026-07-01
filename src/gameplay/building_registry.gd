@@ -26,7 +26,7 @@ enum BuildingType {
 	FARM,                ## harvests Wheat; efficiency scales with adjacent WHEAT terrain
 	MILL,                ## processes Wheat → Flour; built-in millstone
 	BAKERY,              ## processes Flour → Bread; built-in oven
-	CLAY_PIT,            ## extracts Clay from adjacent CLAY terrain; uses Pickaxe
+	CLAY_PIT,            ## extracts Clay; placed directly on CLAY terrain; uses Pickaxe
 	POTTERY_KILN,        ## fires Clay → Pottery vessels; with_tool uses Pickaxe
 	TANNERY,             ## processes Hide → Leather; with_knife uses Knife
 	BOWYERS_WORKSHOP,    ## crafts Hunting Bow from Wood + Fiber; supplies Hunting Lodge
@@ -432,7 +432,7 @@ const RECIPES: Dictionary = {
 			"id": &"with_tool",
 			"label": "With Tool",
 			"inputs": [{"resource_id": &"axe", "quantity": 1}],
-			"output": {&"wood": 5},
+			"output": {&"wood": 10},
 			"output_capacity": 20,
 			"input_capacity": 5,
 			"base_cycle_ticks": 250,
@@ -454,7 +454,7 @@ const RECIPES: Dictionary = {
 			"id": &"with_tool",
 			"label": "With Tool",
 			"inputs": [{"resource_id": &"pickaxe", "quantity": 1}],
-			"output": {&"stone": 5},
+			"output": {&"stone": 11},
 			"output_capacity": 20,
 			"input_capacity": 5,
 			"base_cycle_ticks": 250,
@@ -527,7 +527,7 @@ const RECIPES: Dictionary = {
 				{"resource_id": &"wood",  "quantity": 2},
 				{"resource_id": &"fiber", "quantity": 2},
 			],
-			"output": {&"spindle": 1},
+			"output": {&"spindle": 2},
 			"output_capacity": 10,
 			"input_capacity": 10,
 			"base_cycle_ticks": 375,
@@ -844,7 +844,7 @@ const RECIPES: Dictionary = {
 			"output": {&"fish": 5},
 			"output_capacity": 20,
 			"input_capacity": 5,
-			"base_cycle_ticks": 250,
+			"base_cycle_ticks": 500,
 			"npc_required": true,
 		},
 	],
@@ -1003,7 +1003,6 @@ const ADJACENCY_REQUIREMENTS: Dictionary = {
 	## adjacent forest must contain wild — enforced in _check_adjacency via WildSystem.
 	BuildingType.HUNTING_LODGE:  [WorldGrid.TileType.TREE],
 	BuildingType.FARM:           [WorldGrid.TileType.WHEAT],
-	BuildingType.CLAY_PIT:       [WorldGrid.TileType.CLAY],
 	BuildingType.FISHING_HUT:    [WorldGrid.TileType.WATER],
 	BuildingType.CHARCOAL_KILN:  [WorldGrid.TileType.WATER],
 	BuildingType.SALT_WORKS:     [WorldGrid.TileType.COAST],
@@ -1219,18 +1218,22 @@ func initiate_build(building_type: int, tile: Vector2i) -> int:
 	return PlacementResult.SUCCESS
 
 
-## Grid placement validity, routed by domain: the Bridge is the only water-placed building
-## (terrain MUST be WATER); every other type uses the standard land validation (terrain EMPTY).
+## Grid placement validity, routed by domain: Bridge goes on WATER, Clay Pit on CLAY,
+## every other type uses standard land validation (terrain EMPTY).
 func _validate_grid_placement(tile: Vector2i, building_type: int) -> int:
 	if building_type == BuildingType.BRIDGE:
 		return _grid.validate_water_placement(tile)
+	if building_type == BuildingType.CLAY_PIT:
+		return _grid.validate_clay_placement(tile)
 	return _grid.validate_placement(tile, building_type)
 
 
-## Commits a building to the grid layer, routing the Bridge onto its water-placement path.
+## Commits a building to the grid layer, routing Bridge/Clay Pit onto their terrain paths.
 func _place_building_on_grid(building_type: int, tile: Vector2i, building_id: String) -> int:
 	if building_type == BuildingType.BRIDGE:
 		return _grid.place_building_on_water(tile, building_id)
+	if building_type == BuildingType.CLAY_PIT:
+		return _grid.place_building_on_clay(tile, building_id)
 	return _grid.place_building(tile, building_id)
 
 
@@ -1748,8 +1751,13 @@ func _advance_production_cycle(instance: BuildingInstance, delta: int) -> void:
 	# one). base / efficiency: eff 1.0 → base, eff 0.5 → 2× base, eff 0.25 → 4× base.
 	var _active_recipe: Dictionary = get_active_recipe(instance)
 	if not _active_recipe.is_empty():
+		var eff: float = instance.get_effective_efficiency()
+		# Calling perk (#11): +10% production speed for the profession building type while supplied.
+		var calling_bonus: float = _perk_building_bonus(instance.type, PerkRegistry.EFFECT_CALLING_BUILDING_EFF)
+		if calling_bonus > 0.0:
+			eff *= (1.0 + calling_bonus)
 		instance.production_cycle_duration = EfficiencyFormulas.calculate_effective_cycle_ticks(
-				_active_recipe.get("base_cycle_ticks", 0), instance.get_effective_efficiency())
+				_active_recipe.get("base_cycle_ticks", 0), eff)
 	if instance.production_cycle_ticks < instance.production_cycle_duration:
 		return
 	# Cycle complete — deposit output to buffer.
@@ -1809,7 +1817,8 @@ func _check_bridge_connects(tile: Vector2i) -> int:
 	return PlacementResult.BLOCKED_BY_ADJACENCY
 
 
-## Validates resource and energy affordability for building_type. No side effects.
+## Validates resource affordability for building_type. No side effects.
+## Energy is consumed during construction, not at placement.
 func _check_resource_and_energy(building_type: int) -> int:
 	if DebugSettings.ignore_costs:
 		return PlacementResult.SUCCESS
@@ -1817,23 +1826,13 @@ func _check_resource_and_energy(building_type: int) -> int:
 	for resource_id: StringName in cost:
 		if _get_total_resource(resource_id) < cost[resource_id]:
 			return PlacementResult.INSUFFICIENT_RESOURCES
-	var energy_cost: int = BUILD_ENERGY.get(building_type, 0)
-	if energy_cost > 0:
-		if _player_character == null:
-			push_warning("BuildingRegistry: PlayerCharacter dependency not set — call init_dependencies() first")
-			return PlacementResult.BLOCKED_BY_BOUNDS
-		if _player_character.get_current_energy() < energy_cost:
-			return PlacementResult.INSUFFICIENT_ENERGY
 	return PlacementResult.SUCCESS
 
 
-## Deducts energy and resource costs for a confirmed build.
+## Deducts resource costs for a confirmed build. Energy is consumed during construction.
 func _deduct_build_cost(building_type: int) -> void:
 	if DebugSettings.ignore_costs:
 		return
-	var energy_cost: int = _calc_energy_cost(building_type)
-	if _player_character != null and energy_cost > 0:
-		_player_character.consume_energy(energy_cost)
 	var cost: Dictionary = get_effective_build_cost(building_type)
 	for resource_id: StringName in cost:
 		_consume_resource_any(resource_id, cost[resource_id])

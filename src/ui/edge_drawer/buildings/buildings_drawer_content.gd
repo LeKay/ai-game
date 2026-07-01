@@ -37,6 +37,8 @@ signal route_update_requested(route_id: StringName, changes: Dictionary)
 signal route_delete_requested(route_id: StringName)
 ## Forwarded from BuildingDetailView — map-select pick for route editor.
 signal map_select_requested(step: String)
+## Forwarded from BuildingDetailView — drives the map route-line filter during carrier selection.
+signal carrier_hover_changed(npc_id: StringName)
 ## Forwarded from BuildingDetailView — upgrade install confirmed.
 signal upgrade_install_requested(building_id: String, upgrade_id: StringName)
 ## Forwarded from BuildingDetailView — player saved a production speed change.
@@ -89,6 +91,9 @@ func _ready() -> void:
 	_detail_view.map_select_requested.connect(
 		func(step: String) -> void:
 			map_select_requested.emit(step))
+	_detail_view.carrier_hover_changed.connect(
+		func(npc_id: StringName) -> void:
+			carrier_hover_changed.emit(npc_id))
 	_detail_view.upgrade_install_requested.connect(
 		func(bid: String, uid: StringName) -> void:
 			upgrade_install_requested.emit(bid, uid))

@@ -55,7 +55,7 @@ enum TerrainProfile { PLAINS, FOREST, MOUNTAIN }
 ## PLAINS uses stone_hi = 1.01 so the peak branch is unreachable — byte-identical to the
 ## original thresholds (0.15 / 0.30 / 0.55 / 0.75, else STONE).
 const _ELEV_BANDS: Dictionary = {
-	TerrainProfile.PLAINS:   [0.15, 0.33, 0.55, 0.68, 1.01],  # veg_lo 0.30→0.33 widens BERRY/GRASS band
+	TerrainProfile.PLAINS:   [0.15, 0.33, 0.58, 0.68, 1.01],  # veg_lo 0.33 widens BERRY/GRASS; empty_hi 0.55→0.58 trims TREE (~25%→~17%) so plains read open, not wooded
 	TerrainProfile.FOREST:   [0.15, 0.33, 0.45, 0.82, 1.01],
 	TerrainProfile.MOUNTAIN: [0.12, 0.26, 0.45, 0.48, 0.85],  # narrow TREE band (mountains shouldn't be forests)
 }
@@ -1290,6 +1290,28 @@ func validate_water_placement(tile: Vector2i) -> PlacementResult:
 ## Use for the Bridge BuildingType; demolish clears it back to impassable water.
 func place_building_on_water(tile: Vector2i, building_id: String) -> PlacementResult:
 	var result: PlacementResult = validate_water_placement(tile)
+	if result != PlacementResult.SUCCESS:
+		return result
+	_buildings[tile.x][tile.y] = building_id
+	terrain_changed.emit(tile, BUILDING_LAYER)
+	return PlacementResult.SUCCESS
+
+
+## Validates placement of the Clay Pit on a CLAY tile without mutating state.
+## The tile MUST be CLAY and free of any existing building.
+func validate_clay_placement(tile: Vector2i) -> PlacementResult:
+	if not is_in_bounds(tile):
+		return PlacementResult.BLOCKED_BY_BOUNDS
+	if _terrain[tile.x][tile.y] != TileType.CLAY:
+		return PlacementResult.BLOCKED_BY_IMPASSABLE
+	if _buildings[tile.x][tile.y] != null:
+		return PlacementResult.BLOCKED_BY_BUILDING
+	return PlacementResult.SUCCESS
+
+
+## Places the Clay Pit on a CLAY tile. Terrain stays CLAY; the building layer marks it occupied.
+func place_building_on_clay(tile: Vector2i, building_id: String) -> PlacementResult:
+	var result: PlacementResult = validate_clay_placement(tile)
 	if result != PlacementResult.SUCCESS:
 		return result
 	_buildings[tile.x][tile.y] = building_id

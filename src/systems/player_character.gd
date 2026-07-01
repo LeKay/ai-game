@@ -1122,19 +1122,32 @@ func deserialize(data: Dictionary) -> void:
 	var active: Dictionary = data.get("active_action", {})
 	if active.get("state", ActionSlot.State.FREE) == ActionSlot.State.WORKING:
 		var action_type: int = active.get("action_type", -1)
-		var config: ManualActionConfig = _action_configs.get(action_type, null)
-		if action_type != -1 and config != null:
+		if action_type == ManualActionType.CONSTRUCT_BUILDING or action_type == ManualActionType.CONSTRUCT_PATH:
+			# Construction actions have no ManualActionConfig — restore them directly.
+			# Energy was already spent when the action was first started; don't re-deduct.
 			_action_slot.state = ActionSlot.State.WORKING
 			_action_slot.action_type = action_type
-			_action_slot.config = config
+			_action_slot.config = null
 			_action_slot.accumulated_ticks = active.get("accumulated_ticks", 0)
-			_action_slot.total_ticks = active.get("total_ticks", config.tick_cost)
-			_action_slot.effective_output = active.get("effective_output", config.base_output)
+			_action_slot.total_ticks = active.get("total_ticks", 0)
+			_action_slot.effective_output = 0
 			_active_tile = Vector2i(active.get("tile_x", -1), active.get("tile_y", -1))
 			_active_building_id = active.get("building_id", "")
-			_active_upgrade_id = StringName(active.get("upgrade_id", ""))
-			_active_seed_type = StringName(active.get("seed_type", ""))
 			action_started.emit.call_deferred(action_type, _action_slot.total_ticks, _active_tile)
+		else:
+			var config: ManualActionConfig = _action_configs.get(action_type, null)
+			if action_type != -1 and config != null:
+				_action_slot.state = ActionSlot.State.WORKING
+				_action_slot.action_type = action_type
+				_action_slot.config = config
+				_action_slot.accumulated_ticks = active.get("accumulated_ticks", 0)
+				_action_slot.total_ticks = active.get("total_ticks", config.tick_cost)
+				_action_slot.effective_output = active.get("effective_output", config.base_output)
+				_active_tile = Vector2i(active.get("tile_x", -1), active.get("tile_y", -1))
+				_active_building_id = active.get("building_id", "")
+				_active_upgrade_id = StringName(active.get("upgrade_id", ""))
+				_active_seed_type = StringName(active.get("seed_type", ""))
+				action_started.emit.call_deferred(action_type, _action_slot.total_ticks, _active_tile)
 
 	for entry_data: Dictionary in data.get("action_queue", []):
 		var entry_type: int = entry_data.get("type", -1)

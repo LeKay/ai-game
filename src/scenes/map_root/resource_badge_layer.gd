@@ -13,6 +13,9 @@ var _root: MapRoot
 ## Persistent parent for all auto-spawned badges (initial map load + later reconciliation
 ## via terrain_changed). Drag-spawned badges still parent to _root with their own animation.
 var _badge_container: Node2D = null
+## CanvasLayer above all UI panels (layer 200) for pickup-float labels. follow_viewport_enabled
+## keeps world-space positions working so no coordinate conversion is needed.
+var _float_canvas: CanvasLayer = null
 
 ## One entry per spawned resource icon: {node, tile, resource_idx, resource_id, base_pos, phase}.
 var _resource_icons: Array = []
@@ -20,6 +23,10 @@ var _resource_icons: Array = []
 
 func setup(root: MapRoot) -> void:
 	_root = root
+	_float_canvas = CanvasLayer.new()
+	_float_canvas.layer = 200
+	_float_canvas.follow_viewport_enabled = true
+	_root.add_child(_float_canvas)
 
 
 ## Spawns individual icon nodes for every resource instance at map load. Also subscribes
@@ -151,6 +158,11 @@ func _hit_test_resource_icon(world_pos: Vector2) -> Dictionary:
 	return best
 
 
+## Public entry point for arbitrary floating labels (e.g. "Storage full").
+func show_float(world_pos: Vector2, text: String) -> void:
+	_spawn_pickup_float(world_pos, text)
+
+
 ## Spawns a floating "+N resource" label that drifts up and fades out.
 func _spawn_pickup_float(world_pos: Vector2, text: String) -> void:
 	var label := Label.new()
@@ -160,7 +172,7 @@ func _spawn_pickup_float(world_pos: Vector2, text: String) -> void:
 	label.add_theme_color_override("font_color", Color(0.94, 0.93, 0.9, 1))
 	label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.9))
 	label.add_theme_constant_override("outline_size", 4)
-	add_child(label)
+	_float_canvas.add_child(label)
 	var tween := create_tween()
 	tween.set_parallel(true)
 	tween.tween_property(label, "position:y", label.position.y - 52.0, 1.4)

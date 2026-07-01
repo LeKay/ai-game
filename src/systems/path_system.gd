@@ -183,21 +183,31 @@ func _notify_cardinal_neighbors(tile: Vector2i) -> void:
 
 # ── Save / Load ────────────────────────────────────────────────────────────────
 
-## Serializes all placed path tiles as an array of {x, y} dictionaries.
+## Serializes placed and under-construction path tiles.
+## Completed tiles have no "constructing" key; in-progress tiles carry "constructing": true.
 func serialize() -> Array:
 	var result: Array = []
 	for tile: Vector2i in _paths:
 		result.append({"x": tile.x, "y": tile.y})
+	for tile: Vector2i in _constructing:
+		result.append({"x": tile.x, "y": tile.y, "constructing": true})
 	return result
 
 
 ## Restores path tiles from a serialized snapshot.
 ## Repopulates the full path set first, then emits path_placed for each tile so the
 ## renderer can spawn sprites with bitmasks that already see every neighbor.
+## Under-construction tiles are restored separately and emit path_construction_started.
 func deserialize(snapshots: Array) -> void:
 	_paths.clear()
+	_constructing.clear()
 	for snap: Dictionary in snapshots:
 		var tile := Vector2i(int(snap.get("x", 0)), int(snap.get("y", 0)))
-		_paths[tile] = true
+		if snap.get("constructing", false):
+			_constructing[tile] = 0
+		else:
+			_paths[tile] = true
 	for tile: Vector2i in _paths:
 		path_placed.emit(tile)
+	for tile: Vector2i in _constructing:
+		path_construction_started.emit(tile)

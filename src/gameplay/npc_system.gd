@@ -77,6 +77,10 @@ class NPCInstance:
 	var perks: Array = []
 	## Unresolved level-up perk choices, presented in the Day Overview before the next day starts.
 	var pending_perk_choices: int = 0
+	## Pre-rolled card sets — one Array[Dictionary] per pending choice, generated once at level-up
+	## so closing the picker cannot reroll them. Not serialized as raw StringNames; use the
+	## helper in NPCSystem. Falls back to live generation if empty (old save files).
+	var pending_perk_cards: Array = []
 	## Perk instances whose bound good was supplied this day (transient — recomputed each day_transition).
 	## Only these grant their effect today. Not serialized.
 	var active_perks: Array = []
@@ -352,7 +356,9 @@ func get_npc_job_name(npc_id: StringName) -> String:
 	for route: LogisticsRoute in LogisticsSystem.get_active_routes():
 		if route.npc_id == npc_id:
 			return "Carrier"
-	if npc.profession != -1:
+	if npc.profession == PerkRegistry.PROFESSION_CARRIER:
+		return "Carrier"
+	elif npc.profession != -1:
 		return BuildingRegistry.BUILDING_JOB_NAMES.get(npc.profession, "Worker")
 	return "Unemployed"
 
@@ -392,7 +398,10 @@ func grant_xp(npc_id: StringName, amount: int) -> void:
 			ExperienceFormulas.xp_span_of_level(npc.level))
 	if npc.level > old_level:
 		# Each level gained queues one perk choice, resolved via the ⬆️ button (Perk System).
-		npc.pending_perk_choices += (npc.level - old_level)
+		var levels_gained: int = npc.level - old_level
+		npc.pending_perk_choices += levels_gained
+		for _i: int in levels_gained:
+			npc.pending_perk_cards.append(PerkRegistry.generate_choices(npc, 3))
 		npc_leveled_up.emit(npc_id, npc.level)
 
 
@@ -419,6 +428,7 @@ func level_up(npc_id: StringName) -> bool:
 	var npc: NPCInstance = all_npcs.get(npc_id)
 	npc.level += 1
 	npc.pending_perk_choices += 1
+	npc.pending_perk_cards.append(PerkRegistry.generate_choices(npc, 3))
 	npc_leveled_up.emit(npc_id, npc.level)
 	return true
 
@@ -443,6 +453,8 @@ func apply_perk_choice(npc_id: StringName, card: Dictionary) -> void:
 	if def.get("is_profession", false):
 		npc.profession = int(card.get(&"building_type", -1))
 	npc.pending_perk_choices -= 1
+	if not npc.pending_perk_cards.is_empty():
+		npc.pending_perk_cards.pop_front()
 	npc_perk_chosen.emit(npc_id, perk_id)
 
 
@@ -452,6 +464,22 @@ func skip_perk_choice(npc_id: StringName) -> void:
 	var npc: NPCInstance = all_npcs.get(npc_id)
 	if npc != null and npc.pending_perk_choices > 0:
 		npc.pending_perk_choices -= 1
+		if not npc.pending_perk_cards.is_empty():
+			npc.pending_perk_cards.pop_front()
+
+
+## Pre-rolled cards for the NPC's next pending perk choice, or [] if none / unknown.
+## Falls back to live generation when the cache is empty (e.g. old save files).
+func get_pending_perk_cards(npc_id: StringName) -> Array:
+	var npc: NPCInstance = all_npcs.get(npc_id)
+	if npc == null or npc.pending_perk_choices <= 0:
+		return []
+	if not npc.pending_perk_cards.is_empty():
+		return npc.pending_perk_cards[0]
+	# Fallback for old saves: generate live and cache so subsequent opens are stable.
+	var cards: Array = PerkRegistry.generate_choices(npc, 3)
+	npc.pending_perk_cards.append(cards)
+	return cards
 
 
 ## Unresolved perk choices owed by a single NPC (drives the per-NPC ⬆️ button in the Day Overview
@@ -642,36 +670,45 @@ func _effective_xp_multiplier(npc: NPCInstance) -> float:
 
 
 ## Sum of magnitudes of this NPC's active perks with the given effect (0.0 if none / unknown NPC).
+## Checks both primary ("effect"/"magnitude") and optional secondary ("secondary_effect"/"secondary_magnitude").
 func npc_perk_bonus(npc_id: StringName, effect: StringName) -> float:
 	var npc: NPCInstance = all_npcs.get(npc_id)
 	if npc == null:
 		return 0.0
 	var total: float = 0.0
 	for perk: Dictionary in npc.active_perks:
-		if PerkRegistry.get_def(perk.get(&"perk_id", &"")).get("effect", &"") == effect:
-			total += float(PerkRegistry.get_def(perk.get(&"perk_id", &"")).get("magnitude", 0.0))
+		var def: Dictionary = PerkRegistry.get_def(perk.get(&"perk_id", &""))
+		if def.get("effect", &"") == effect:
+			total += float(def.get("magnitude", 0.0))
+		if def.get("secondary_effect", &"") == effect:
+			total += float(def.get("secondary_magnitude", 0.0))
 	return total
 
 
 ## Sum of magnitudes of all active perks (across every NPC) that are bound to `building_type`
-## and have the given effect. Used by building-bound effects (output bonus, caps, etc.).
+## and have the given effect. Checks primary and secondary effect fields.
 func building_perk_bonus(building_type: int, effect: StringName) -> float:
 	var total: float = 0.0
 	for npc: NPCInstance in all_npcs.values():
 		for perk: Dictionary in npc.active_perks:
 			if int(perk.get(&"building_type", -1)) != building_type:
 				continue
-			if PerkRegistry.get_def(perk.get(&"perk_id", &"")).get("effect", &"") == effect:
-				total += float(PerkRegistry.get_def(perk.get(&"perk_id", &"")).get("magnitude", 0.0))
+			var def: Dictionary = PerkRegistry.get_def(perk.get(&"perk_id", &""))
+			if def.get("effect", &"") == effect:
+				total += float(def.get("magnitude", 0.0))
+			if def.get("secondary_effect", &"") == effect:
+				total += float(def.get("secondary_magnitude", 0.0))
 	return total
 
 
-## True if any active perk bound to `building_type` has the given effect (e.g. input-skip).
+## True if any active perk bound to `building_type` has the given effect (primary or secondary).
 func building_has_active_perk(building_type: int, effect: StringName) -> bool:
 	for npc: NPCInstance in all_npcs.values():
 		for perk: Dictionary in npc.active_perks:
-			if int(perk.get(&"building_type", -1)) == building_type \
-					and PerkRegistry.get_def(perk.get(&"perk_id", &"")).get("effect", &"") == effect:
+			if int(perk.get(&"building_type", -1)) != building_type:
+				continue
+			var def: Dictionary = PerkRegistry.get_def(perk.get(&"perk_id", &""))
+			if def.get("effect", &"") == effect or def.get("secondary_effect", &"") == effect:
 				return true
 	return false
 
@@ -1096,6 +1133,7 @@ func _serialize_npc(npc: NPCInstance) -> Dictionary:
 		"pending_xp": npc.pending_xp,
 		"profession": npc.profession,
 		"pending_perk_choices": npc.pending_perk_choices,
+		"pending_perk_cards": npc.pending_perk_cards,
 		"perks": _serialize_perks(npc.perks),
 	}
 
@@ -1130,6 +1168,7 @@ func _deserialize_npc(data: Dictionary) -> NPCInstance:
 	npc.pending_xp = int(data.get("pending_xp", 0))
 	npc.profession = int(data.get("profession", -1))
 	npc.pending_perk_choices = int(data.get("pending_perk_choices", 0))
+	npc.pending_perk_cards = data.get("pending_perk_cards", [])
 	npc.perks = _deserialize_perks(data.get("perks", []))
 	return npc
 

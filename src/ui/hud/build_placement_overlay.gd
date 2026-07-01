@@ -21,6 +21,7 @@ var _is_demolish_mode: bool = false
 var _ghost: TextureRect
 var _label: Label
 var _hint_rects: Array[ColorRect] = []
+var _demolish_rect: ColorRect
 
 
 func _ready() -> void:
@@ -55,6 +56,12 @@ func _build_ghost() -> void:
 		add_child(hr)
 		_hint_rects.append(hr)
 
+	_demolish_rect = ColorRect.new()
+	_demolish_rect.name         = "DemolishRect"
+	_demolish_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_demolish_rect.visible      = false
+	add_child(_demolish_rect)
+
 
 ## Activates ghost placement for the given building type.
 func start_placement(building_type: int) -> void:
@@ -69,12 +76,13 @@ func start_placement(building_type: int) -> void:
 
 ## Activates demolish mode. Hover shows red highlight over buildings; click demolishes.
 func start_demolish_mode() -> void:
-	_active           = true
-	_is_demolish_mode = true
-	_is_path_mode     = false
-	_building_type    = BuildingGrid.DEMOLISH_SENTINEL
-	_ghost.texture    = null
-	visible           = true
+	_active               = true
+	_is_demolish_mode     = true
+	_is_path_mode         = false
+	_building_type        = BuildingGrid.DEMOLISH_SENTINEL
+	_ghost.texture        = null
+	_demolish_rect.visible = true
+	visible               = true
 
 
 ## Activates path placement mode. Stays active until ESC or right-click.
@@ -87,11 +95,12 @@ func start_path_placement() -> void:
 
 
 func _cancel() -> void:
-	_active           = false
-	_is_path_mode     = false
-	_is_demolish_mode = false
-	_building_type    = -1
-	visible           = false
+	_active                = false
+	_is_path_mode          = false
+	_is_demolish_mode      = false
+	_building_type         = -1
+	_demolish_rect.visible = false
+	visible                = false
 
 
 func _process(_delta: float) -> void:
@@ -116,16 +125,13 @@ func _process(_delta: float) -> void:
 		return
 
 	var result := BuildingRegistry.check_build_conditions(_building_type, tile)
-	var placeable: bool = result == BuildingRegistry.PlacementResult.SUCCESS \
-			or result == BuildingRegistry.PlacementResult.INSUFFICIENT_ENERGY
+	var placeable: bool = result == BuildingRegistry.PlacementResult.SUCCESS
 	_ghost.modulate = COLOR_VALID if placeable else COLOR_INVALID
 	match result:
 		BuildingRegistry.PlacementResult.SUCCESS:
 			_label.text = "Click to place"
 		BuildingRegistry.PlacementResult.INSUFFICIENT_RESOURCES:
 			_label.text = "Not enough resources"
-		BuildingRegistry.PlacementResult.INSUFFICIENT_ENERGY:
-			_label.text = "Click to place (needs construction work)"
 		BuildingRegistry.PlacementResult.BLOCKED_BY_ADJACENCY:
 			_label.text = _adjacency_hint_label(_building_type)
 		BuildingRegistry.PlacementResult.LOCKED:
@@ -139,11 +145,13 @@ func _process(_delta: float) -> void:
 func _process_demolish_ghost(tile: Vector2i) -> void:
 	var building_id := _building_id_at_tile(tile)
 	var has_path    := PathSystem.has_path(tile)
+	_demolish_rect.position = _ghost.position
+	_demolish_rect.size     = _ghost.size
 	if building_id != "" or has_path:
-		_ghost.modulate = COLOR_INVALID
+		_demolish_rect.color = Color(1.0, 0.25, 0.25, 0.55)
 		_label.text = "Click to demolish — ESC to stop"
 	else:
-		_ghost.modulate = Color(0.5, 0.5, 0.5, 0.4)
+		_demolish_rect.color = Color(0.5, 0.5, 0.5, 0.25)
 		_label.text = "Nothing here — ESC to stop"
 	for hr: ColorRect in _hint_rects:
 		hr.visible = false
@@ -245,14 +253,21 @@ func _unhandled_input(event: InputEvent) -> void:
 				PathSystem.remove_path(tile)
 			# Stay in demolish mode for continuous demolishing.
 		elif _is_path_mode:
-			PathSystem.initiate_path(tile)
+			if PathSystem.initiate_path(tile):
+				var pc := _get_player_character()
+				if pc != null:
+					pc.try_start_action(PlayerCharacter.ManualActionType.CONSTRUCT_PATH, tile)
 			# Stay in path mode for continuous painting.
 		else:
 			var place_result := BuildingRegistry.check_build_conditions(_building_type, tile)
-			if place_result == BuildingRegistry.PlacementResult.SUCCESS \
-					or place_result == BuildingRegistry.PlacementResult.INSUFFICIENT_ENERGY:
-				BuildingRegistry.initiate_build(_building_type, tile)
+			if place_result == BuildingRegistry.PlacementResult.SUCCESS:
+				var placed_type: int = _building_type
+				BuildingRegistry.initiate_build(placed_type, tile)
 				_cancel()
+				if BuildingRegistry.BUILD_TIME.get(placed_type, 0) > 0:
+					var pc := _get_player_character()
+					if pc != null:
+						pc.try_start_action(PlayerCharacter.ManualActionType.CONSTRUCT_BUILDING, tile)
 		get_viewport().set_input_as_handled()
 
 
@@ -295,6 +310,13 @@ func _can_demolish(building_id: String) -> bool:
 			continue
 		free_slots += NPCSystem.NPC_CAPACITY_PER_HOUSE - NPCSystem.get_house_npc_count(b.tile)
 	return free_slots >= residents
+
+
+func _get_player_character() -> Node:
+	var nodes := get_tree().get_nodes_in_group(&"player_character")
+	if nodes.is_empty():
+		return null
+	return nodes[0]
 
 
 ## Shows a red error toast via the HUD.
